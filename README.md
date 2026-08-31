@@ -37,6 +37,12 @@
 - 自动语音转写、AI 分析和复杂音频剪辑。
 - 多种录音格式与用户可调的高级编码参数。
 
+## 设计文档
+
+- [MVP 功能列表](docs/product/feature-list.md)
+- [MVP 用户流程](docs/product/user-flows.md)
+- [录音生命周期](docs/architecture/recording-lifecycle.md)
+
 ## 开源许可
 
 许可证尚未确定。发布公开版本前将补充适合本项目的开源许可证文件。
