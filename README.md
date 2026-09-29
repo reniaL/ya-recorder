@@ -41,6 +41,7 @@
 
 - [MVP 功能列表](docs/product/feature-list.md)
 - [MVP 用户流程](docs/product/user-flows.md)
+- [UI 交互设计](docs/product/ui-interaction-design.md)
 - [录音生命周期](docs/architecture/recording-lifecycle.md)
 
 ## 开源许可
