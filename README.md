@@ -40,6 +40,7 @@
 ## 设计文档
 
 - [MVP 功能列表](docs/product/feature-list.md)
+- [开发进度](docs/development-progress.md)
 - [MVP 用户流程](docs/product/user-flows.md)
 - [UI 交互设计](docs/product/ui-interaction-design.md)
 - [录音生命周期](docs/architecture/recording-lifecycle.md)
