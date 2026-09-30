@@ -7,7 +7,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
@@ -65,6 +67,7 @@ class RecordingPlatformBridge(
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "requestMicrophonePermission" -> requestMicrophonePermission(result)
+            "openAppSettings" -> openAppSettings(result)
             "getStatus" -> result.success(RecordingService.currentStatus())
             "start" -> sendRecordingCommand(RecordingService.ACTION_START, result)
             "pause" -> sendRecordingCommand(RecordingService.ACTION_PAUSE, result)
@@ -123,6 +126,18 @@ class RecordingPlatformBridge(
             arrayOf(Manifest.permission.RECORD_AUDIO),
             MICROPHONE_PERMISSION_REQUEST_CODE,
         )
+    }
+
+    private fun openAppSettings(result: MethodChannel.Result) {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", activity.packageName, null)
+            }
+            activity.startActivity(intent)
+            result.success(null)
+        } catch (error: Exception) {
+            result.error("app-settings-unavailable", error.message, null)
+        }
     }
 
     private fun sendRecordingCommand(action: String, result: MethodChannel.Result) {

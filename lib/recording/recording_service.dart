@@ -138,6 +138,8 @@ class RecordingService {
         false;
   }
 
+  Future<void> openAppSettings() => _sendCommand('openAppSettings');
+
   Future<RecordingSessionStatus> getStatus() async {
     final response = await _commands.invokeMethod<Object?>('getStatus');
     if (response is! Map) {
