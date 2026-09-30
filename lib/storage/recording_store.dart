@@ -3,6 +3,11 @@ import 'package:sqflite/sqflite.dart' as sqflite;
 import 'models/recording.dart';
 import 'models/recording_folder.dart';
 
+enum FolderDeletionAction {
+  moveRecordingsToAll,
+  moveRecordingsToRecentlyDeleted,
+}
+
 class RecordingStore {
   RecordingStore({
     required this.databasePath,
@@ -62,6 +67,75 @@ class RecordingStore {
       orderBy: 'name COLLATE NOCASE ASC, id ASC',
     );
     return rows.map(RecordingFolder.fromDatabaseMap).toList();
+  }
+
+  Future<void> renameFolder({
+    required String folderId,
+    required String name,
+  }) async {
+    _requireNonEmpty(folderId, 'folderId');
+    final normalizedName = name.trim();
+    _requireNonEmpty(normalizedName, 'name');
+    final database = await _openDatabase();
+    final updatedCount = await database.update(
+      'folders',
+      {'name': normalizedName},
+      where: 'id = ?',
+      whereArgs: [folderId],
+    );
+    _requireSingleFolder(updatedCount, folderId);
+  }
+
+  Future<void> deleteFolder({
+    required String folderId,
+    FolderDeletionAction? action,
+    DateTime? deletedAt,
+  }) async {
+    _requireNonEmpty(folderId, 'folderId');
+    final database = await _openDatabase();
+    await database.transaction((transaction) async {
+      final activeRecordings = await transaction.query(
+        'recordings',
+        columns: ['id'],
+        where: 'folder_id = ? AND deleted_at IS NULL',
+        whereArgs: [folderId],
+        limit: 1,
+      );
+      if (activeRecordings.isNotEmpty) {
+        if (action == null) {
+          throw StateError(
+            'An action is required before deleting a non-empty folder.',
+          );
+        }
+        switch (action) {
+          case FolderDeletionAction.moveRecordingsToAll:
+            await transaction.update(
+              'recordings',
+              {'folder_id': null},
+              where: 'folder_id = ? AND deleted_at IS NULL',
+              whereArgs: [folderId],
+            );
+          case FolderDeletionAction.moveRecordingsToRecentlyDeleted:
+            await transaction.update(
+              'recordings',
+              {
+                'deleted_at': (deletedAt ?? DateTime.now())
+                    .toUtc()
+                    .millisecondsSinceEpoch,
+              },
+              where: 'folder_id = ? AND deleted_at IS NULL',
+              whereArgs: [folderId],
+            );
+        }
+      }
+
+      final deletedCount = await transaction.delete(
+        'folders',
+        where: 'id = ?',
+        whereArgs: [folderId],
+      );
+      _requireSingleFolder(deletedCount, folderId);
+    });
   }
 
   Future<void> saveRecording(Recording recording) async {
@@ -202,12 +276,14 @@ class RecordingStore {
     );
     _openingDatabase = opening;
 
-    return opening.then((database) {
-      _database = database;
-      return database;
-    }).whenComplete(() {
-      _openingDatabase = null;
-    });
+    return opening
+        .then((database) {
+          _database = database;
+          return database;
+        })
+        .whenComplete(() {
+          _openingDatabase = null;
+        });
   }
 
   static Future<void> _createSchema(sqflite.Database database) async {
@@ -298,6 +374,12 @@ class RecordingStore {
   static void _requireSingleUpdatedRow(int affectedRows, String recordingId) {
     if (affectedRows != 1) {
       throw StateError('Active recording $recordingId was not found.');
+    }
+  }
+
+  static void _requireSingleFolder(int affectedRows, String folderId) {
+    if (affectedRows != 1) {
+      throw StateError('Folder $folderId was not found.');
     }
   }
 }

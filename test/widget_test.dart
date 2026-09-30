@@ -335,6 +335,60 @@ void main() {
     expect(find.text('Interview'), findsNothing);
   });
 
+  testWidgets(
+    'renames and deletes a non-empty folder after choosing a disposition',
+    (WidgetTester tester) async {
+      final recordingStore = _RecordingStoreSpy()
+        ..folders = [
+          RecordingFolder(
+            id: 'folder-project',
+            name: 'Project',
+            createdAt: DateTime.utc(2026, 9, 30),
+          ),
+        ]
+        ..recordings = [
+          Recording(
+            id: 'recording-1',
+            title: 'Project update',
+            filePath: '/private/recording-1.m4a',
+            createdAt: DateTime.utc(2026, 9, 30),
+            duration: const Duration(seconds: 30),
+            fileSizeBytes: 1024,
+            folderId: 'folder-project',
+          ),
+        ];
+      await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('文件夹管理'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('folderActions-folder-project')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('重命名'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('renameFolderNameField')),
+        '  Work  ',
+      );
+      await tester.tap(find.text('保存'));
+      await tester.pumpAndSettle();
+      expect(recordingStore.folders.single.name, 'Work');
+
+      await tester.tap(find.byKey(const Key('folderActions-folder-project')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('删除文件夹'));
+      await tester.pumpAndSettle();
+      expect(find.text('处理文件夹中的录音'), findsOneWidget);
+      await tester.tap(find.text('移至全部录音'));
+      await tester.pumpAndSettle();
+
+      expect(recordingStore.folders, isEmpty);
+      expect(recordingStore.recordings.single.folderId, isNull);
+    },
+  );
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -506,6 +560,71 @@ class _RecordingStoreSpy extends RecordingStore {
         else
           recording,
     ];
+  }
+
+  @override
+  Future<void> renameFolder({
+    required String folderId,
+    required String name,
+  }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty ||
+        folders.any(
+          (folder) =>
+              folder.id != folderId &&
+              folder.name.toLowerCase() == normalizedName.toLowerCase(),
+        )) {
+      throw StateError('Folder name must be unique.');
+    }
+    folders = [
+      for (final folder in folders)
+        if (folder.id == folderId)
+          RecordingFolder(
+            id: folder.id,
+            name: normalizedName,
+            createdAt: folder.createdAt,
+          )
+        else
+          folder,
+    ];
+  }
+
+  @override
+  Future<void> deleteFolder({
+    required String folderId,
+    FolderDeletionAction? action,
+    DateTime? deletedAt,
+  }) async {
+    final activeRecordings = recordings
+        .where(
+          (recording) => recording.folderId == folderId && !recording.isDeleted,
+        )
+        .toList();
+    if (activeRecordings.isNotEmpty && action == null) {
+      throw StateError('A disposition is required.');
+    }
+    final now = (deletedAt ?? DateTime.now()).toUtc();
+    recordings = [
+      for (final recording in recordings)
+        if (recording.folderId == folderId && !recording.isDeleted)
+          Recording(
+            id: recording.id,
+            title: recording.title,
+            filePath: recording.filePath,
+            createdAt: recording.createdAt,
+            duration: recording.duration,
+            fileSizeBytes: recording.fileSizeBytes,
+            folderId: null,
+            deletedAt:
+                action == FolderDeletionAction.moveRecordingsToRecentlyDeleted
+                ? now
+                : recording.deletedAt,
+            wasInterrupted: recording.wasInterrupted,
+          )
+        else
+          recording,
+    ];
+    folders = folders.where((folder) => folder.id != folderId).toList();
   }
 
   @override

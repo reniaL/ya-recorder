@@ -183,6 +183,59 @@ void main() {
         expect((await store.listRecordings()).single.folderId, isNull);
       },
     );
+
+    test(
+      'renames and deletes folders with an explicit recording disposition',
+      () async {
+        final createdAt = DateTime.utc(2026, 9, 29, 8);
+        await store.createFolder(
+          id: 'folder-project',
+          name: 'Project',
+          createdAt: createdAt,
+        );
+        await store.saveRecording(
+          Recording(
+            id: 'recording-1',
+            title: 'Project update',
+            filePath: '/private/recording-1.m4a',
+            createdAt: createdAt,
+            duration: const Duration(seconds: 12),
+            fileSizeBytes: 512,
+            folderId: 'folder-project',
+          ),
+        );
+
+        await store.renameFolder(folderId: 'folder-project', name: '  Work  ');
+        expect((await store.listFolders()).single.name, 'Work');
+        expect((await store.listFolders()).single.createdAt, createdAt);
+        await expectLater(
+          store.deleteFolder(folderId: 'folder-project'),
+          throwsStateError,
+        );
+
+        await store.deleteFolder(
+          folderId: 'folder-project',
+          action: FolderDeletionAction.moveRecordingsToAll,
+        );
+        expect(await store.listFolders(), isEmpty);
+        expect((await store.listRecordings()).single.folderId, isNull);
+
+        await store.createFolder(id: 'folder-delete', name: 'Delete');
+        await store.moveRecording(
+          recordingId: 'recording-1',
+          folderId: 'folder-delete',
+        );
+        await store.deleteFolder(
+          folderId: 'folder-delete',
+          action: FolderDeletionAction.moveRecordingsToRecentlyDeleted,
+          deletedAt: createdAt.add(const Duration(days: 1)),
+        );
+        expect(await store.listRecordings(), isEmpty);
+        final deleted = (await store.listRecentlyDeleted()).single;
+        expect(deleted.folderId, isNull);
+        expect(deleted.deletedAt, createdAt.add(const Duration(days: 1)));
+      },
+    );
   });
 
   test(

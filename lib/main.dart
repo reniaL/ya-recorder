@@ -337,6 +337,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       MaterialPageRoute(
         builder: (context) => _FolderManagementPage(
           listFolders: () async => (await _getRecordingStore()).listFolders(),
+          listRecordings: (folderId) async =>
+              (await _getRecordingStore()).listRecordings(folderId: folderId),
           createFolder: (name) async {
             final store = await _getRecordingStore();
             return store.createFolder(
@@ -344,9 +346,40 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
               name: name,
             );
           },
+          renameFolder: (folderId, name) async {
+            await (await _getRecordingStore()).renameFolder(
+              folderId: folderId,
+              name: name,
+            );
+          },
+          deleteFolder: (folderId, action) async {
+            await (await _getRecordingStore()).deleteFolder(
+              folderId: folderId,
+              action: action,
+            );
+          },
         ),
       ),
     );
+    if (!mounted) {
+      return;
+    }
+    try {
+      final folders = await (await _getRecordingStore()).listFolders();
+      if (!mounted) {
+        return;
+      }
+      if (_selectedFolderId != null &&
+          !folders.any((folder) => folder.id == _selectedFolderId)) {
+        setState(() {
+          _selectedFolderId = null;
+          _selectedFolderName = null;
+        });
+      }
+      await _loadRecordings();
+    } catch (_) {
+      _setLibraryError('无法刷新文件夹。');
+    }
   }
 
   void _handlePlaybackStatus(PlaybackStatus status) {
@@ -1230,11 +1263,18 @@ class _RenameRecordingDialogState extends State<_RenameRecordingDialog> {
 class _FolderManagementPage extends StatefulWidget {
   const _FolderManagementPage({
     required this.listFolders,
+    required this.listRecordings,
     required this.createFolder,
+    required this.renameFolder,
+    required this.deleteFolder,
   });
 
   final Future<List<RecordingFolder>> Function() listFolders;
+  final Future<List<Recording>> Function(String folderId) listRecordings;
   final Future<RecordingFolder> Function(String name) createFolder;
+  final Future<void> Function(String folderId, String name) renameFolder;
+  final Future<void> Function(String folderId, FolderDeletionAction? action)
+  deleteFolder;
 
   @override
   State<_FolderManagementPage> createState() => _FolderManagementPageState();
@@ -1273,6 +1313,81 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
     }
   }
 
+  Future<void> _renameFolder(RecordingFolder folder) async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameFolderDialog(initialName: folder.name),
+    );
+    final normalizedName = name?.trim();
+    if (normalizedName == null || normalizedName.isEmpty || !mounted) {
+      return;
+    }
+
+    try {
+      await widget.renameFolder(folder.id, normalizedName);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = null;
+        _folders = widget.listFolders();
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = '无法重命名文件夹。名称不能为空且必须唯一。';
+      });
+    }
+  }
+
+  Future<void> _deleteFolder(RecordingFolder folder) async {
+    try {
+      final recordings = await widget.listRecordings(folder.id);
+      if (!mounted) {
+        return;
+      }
+      FolderDeletionAction? action;
+      if (recordings.isEmpty) {
+        action = await showDialog<FolderDeletionAction?>(
+          context: context,
+          builder: (context) => _DeleteEmptyFolderDialog(folder: folder),
+        );
+      } else {
+        action = await showDialog<FolderDeletionAction?>(
+          context: context,
+          builder: (context) => _DeleteNonEmptyFolderDialog(folder: folder),
+        );
+      }
+      if (!mounted || (action == null && recordings.isNotEmpty)) {
+        return;
+      }
+      if (recordings.isEmpty) {
+        final confirmed = action == FolderDeletionAction.moveRecordingsToAll;
+        if (!confirmed) {
+          return;
+        }
+      }
+
+      await widget.deleteFolder(folder.id, action);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = null;
+        _folders = widget.listFolders();
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = '无法删除文件夹。';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1304,10 +1419,34 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                     ? const Center(child: Text('还没有文件夹。'))
                     : ListView.builder(
                         itemCount: folders.length,
-                        itemBuilder: (context, index) => ListTile(
-                          leading: const Icon(Icons.folder_outlined),
-                          title: Text(folders[index].name),
-                        ),
+                        itemBuilder: (context, index) {
+                          final folder = folders[index];
+                          return ListTile(
+                            leading: const Icon(Icons.folder_outlined),
+                            title: Text(folder.name),
+                            trailing: PopupMenuButton<String>(
+                              key: Key('folderActions-${folder.id}'),
+                              tooltip: '文件夹操作',
+                              onSelected: (action) {
+                                if (action == 'rename') {
+                                  _renameFolder(folder);
+                                } else if (action == 'delete') {
+                                  _deleteFolder(folder);
+                                }
+                              },
+                              itemBuilder: (context) => const [
+                                PopupMenuItem(
+                                  value: 'rename',
+                                  child: Text('重命名'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text('删除文件夹'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
                       ),
               ),
             ],
@@ -1361,6 +1500,110 @@ class _CreateFolderDialogState extends State<_CreateFolderDialog> {
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text),
           child: const Text('创建'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RenameFolderDialog extends StatefulWidget {
+  const _RenameFolderDialog({required this.initialName});
+
+  final String initialName;
+
+  @override
+  State<_RenameFolderDialog> createState() => _RenameFolderDialogState();
+}
+
+class _RenameFolderDialogState extends State<_RenameFolderDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialName,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('重命名文件夹'),
+      content: TextField(
+        key: const Key('renameFolderNameField'),
+        controller: _controller,
+        autofocus: true,
+        maxLength: 120,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) => Navigator.pop(context, value),
+        decoration: const InputDecoration(labelText: '文件夹名称'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteEmptyFolderDialog extends StatelessWidget {
+  const _DeleteEmptyFolderDialog({required this.folder});
+
+  final RecordingFolder folder;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('删除文件夹？'),
+      content: Text('“${folder.name}”为空文件夹，删除后无法恢复。'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () =>
+              Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
+          child: const Text('删除文件夹'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DeleteNonEmptyFolderDialog extends StatelessWidget {
+  const _DeleteNonEmptyFolderDialog({required this.folder});
+
+  final RecordingFolder folder;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('处理文件夹中的录音'),
+      content: Text('“${folder.name}”中仍有录音。删除前请选择这些录音的去向。'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        OutlinedButton(
+          onPressed: () =>
+              Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
+          child: const Text('移至全部录音'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(
+            context,
+            FolderDeletionAction.moveRecordingsToRecentlyDeleted,
+          ),
+          child: const Text('移入最近删除'),
         ),
       ],
     );
