@@ -1,0 +1,199 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
+
+enum RecordingLifecycleState {
+  idle,
+  preparing,
+  recording,
+  paused,
+  stopping,
+  discarding,
+  failed,
+}
+
+class RecordingSessionStatus {
+  const RecordingSessionStatus({
+    required this.state,
+    required this.elapsed,
+    required this.canResume,
+    this.sessionId,
+  });
+
+  final RecordingLifecycleState state;
+  final Duration elapsed;
+  final bool canResume;
+  final String? sessionId;
+
+  factory RecordingSessionStatus.fromMap(Map<Object?, Object?> map) {
+    return RecordingSessionStatus(
+      state: _parseState(map['state']),
+      elapsed: Duration(milliseconds: _readInt(map, 'elapsedMs')),
+      canResume: _readBool(map, 'canResume'),
+      sessionId: map['sessionId'] as String?,
+    );
+  }
+}
+
+class SavedNativeRecording {
+  const SavedNativeRecording({
+    required this.id,
+    required this.filePath,
+    required this.createdAt,
+    required this.duration,
+    required this.fileSizeBytes,
+    required this.wasInterrupted,
+  });
+
+  final String id;
+  final String filePath;
+  final DateTime createdAt;
+  final Duration duration;
+  final int fileSizeBytes;
+  final bool wasInterrupted;
+
+  factory SavedNativeRecording.fromMap(Map<Object?, Object?> map) {
+    return SavedNativeRecording(
+      id: _readString(map, 'id'),
+      filePath: _readString(map, 'filePath'),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        _readInt(map, 'createdAtMs'),
+        isUtc: true,
+      ),
+      duration: Duration(milliseconds: _readInt(map, 'durationMs')),
+      fileSizeBytes: _readInt(map, 'fileSizeBytes'),
+      wasInterrupted: _readBool(map, 'wasInterrupted'),
+    );
+  }
+}
+
+sealed class RecordingEvent {
+  const RecordingEvent();
+
+  factory RecordingEvent.fromMap(Map<Object?, Object?> map) {
+    switch (_readString(map, 'type')) {
+      case 'state':
+        return RecordingStateChanged(RecordingSessionStatus.fromMap(map));
+      case 'saved':
+        final recording = map['recording'];
+        if (recording is! Map) {
+          throw const FormatException('Saved event is missing its recording.');
+        }
+        return RecordingSaved(
+          SavedNativeRecording.fromMap(Map<Object?, Object?>.from(recording)),
+        );
+      case 'error':
+        return RecordingFailed(
+          code: _readString(map, 'code'),
+          message: _readString(map, 'message'),
+        );
+      default:
+        throw FormatException('Unknown recording event: ${map['type']}');
+    }
+  }
+}
+
+class RecordingStateChanged extends RecordingEvent {
+  const RecordingStateChanged(this.status);
+
+  final RecordingSessionStatus status;
+}
+
+class RecordingSaved extends RecordingEvent {
+  const RecordingSaved(this.recording);
+
+  final SavedNativeRecording recording;
+}
+
+class RecordingFailed extends RecordingEvent {
+  const RecordingFailed({required this.code, required this.message});
+
+  final String code;
+  final String message;
+}
+
+class RecordingService {
+  RecordingService({MethodChannel? commands, EventChannel? events})
+    : _commands = commands ?? const MethodChannel(_commandChannelName),
+      _events = events ?? const EventChannel(_eventChannelName);
+
+  static const _commandChannelName =
+      'io.github.renial.ya_recorder/recording_commands';
+  static const _eventChannelName =
+      'io.github.renial.ya_recorder/recording_events';
+
+  final MethodChannel _commands;
+  final EventChannel _events;
+
+  Stream<RecordingEvent> get events =>
+      _events.receiveBroadcastStream().map((Object? rawEvent) {
+        if (rawEvent is! Map) {
+          throw const FormatException('Recording event must be a map.');
+        }
+        return RecordingEvent.fromMap(Map<Object?, Object?>.from(rawEvent));
+      });
+
+  Future<bool> requestMicrophonePermission() async {
+    return await _commands.invokeMethod<bool>('requestMicrophonePermission') ??
+        false;
+  }
+
+  Future<RecordingSessionStatus> getStatus() async {
+    final response = await _commands.invokeMethod<Object?>('getStatus');
+    if (response is! Map) {
+      throw const FormatException('Recording status must be a map.');
+    }
+    return RecordingSessionStatus.fromMap(Map<Object?, Object?>.from(response));
+  }
+
+  Future<void> start() => _sendCommand('start');
+
+  Future<void> pause() => _sendCommand('pause');
+
+  Future<void> resume() => _sendCommand('resume');
+
+  Future<void> stop() => _sendCommand('stop');
+
+  Future<void> cancel() => _sendCommand('cancel');
+
+  Future<void> _sendCommand(String command) async {
+    await _commands.invokeMethod<void>(command);
+  }
+}
+
+RecordingLifecycleState _parseState(Object? value) {
+  if (value is! String) {
+    throw const FormatException('Recording state must be a string.');
+  }
+
+  for (final state in RecordingLifecycleState.values) {
+    if (state.name == value) {
+      return state;
+    }
+  }
+  throw FormatException('Unknown recording state: $value');
+}
+
+int _readInt(Map<Object?, Object?> map, String key) {
+  final value = map[key];
+  if (value is int) {
+    return value;
+  }
+  throw FormatException('$key must be an integer.');
+}
+
+bool _readBool(Map<Object?, Object?> map, String key) {
+  final value = map[key];
+  if (value is bool) {
+    return value;
+  }
+  throw FormatException('$key must be a boolean.');
+}
+
+String _readString(Map<Object?, Object?> map, String key) {
+  final value = map[key];
+  if (value is String && value.isNotEmpty) {
+    return value;
+  }
+  throw FormatException('$key must be a non-empty string.');
+}

@@ -1,0 +1,4 @@
+<resources>
+    <string name="recording_notification_channel_name">Recording</string>
+    <string name="recording_notification_title">Recording in progress</string>
+</resources>
