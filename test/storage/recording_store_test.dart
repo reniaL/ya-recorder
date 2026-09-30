@@ -16,7 +16,9 @@ void main() {
     late RecordingStore store;
 
     setUp(() async {
-      temporaryDirectory = await Directory.systemTemp.createTemp('ya-recorder-');
+      temporaryDirectory = await Directory.systemTemp.createTemp(
+        'ya-recorder-',
+      );
       databasePath = path.join(temporaryDirectory.path, 'index.db');
       store = RecordingStore(
         databasePath: databasePath,
@@ -30,63 +32,66 @@ void main() {
       await temporaryDirectory.delete(recursive: true);
     });
 
-    test('persists folders, active recordings, and recently deleted recordings', () async {
-      final createdAt = DateTime.utc(2026, 9, 29, 8);
-      await store.createFolder(
-        id: 'folder-interviews',
-        name: 'Interviews',
-        createdAt: createdAt,
-      );
-      await store.saveRecording(
-        Recording(
-          id: 'recording-active',
-          title: 'Planning session',
-          filePath: '/private/recording-active.m4a',
+    test(
+      'persists folders, active recordings, and recently deleted recordings',
+      () async {
+        final createdAt = DateTime.utc(2026, 9, 29, 8);
+        await store.createFolder(
+          id: 'folder-interviews',
+          name: 'Interviews',
           createdAt: createdAt,
-          duration: const Duration(minutes: 5),
-          fileSizeBytes: 1024,
+        );
+        await store.saveRecording(
+          Recording(
+            id: 'recording-active',
+            title: 'Planning session',
+            filePath: '/private/recording-active.m4a',
+            createdAt: createdAt,
+            duration: const Duration(minutes: 5),
+            fileSizeBytes: 1024,
+            folderId: 'folder-interviews',
+          ),
+        );
+        await store.saveRecording(
+          Recording(
+            id: 'recording-deleted',
+            title: 'Discarded take',
+            filePath: '/private/recording-deleted.m4a',
+            createdAt: createdAt.add(const Duration(minutes: 1)),
+            duration: const Duration(seconds: 12),
+            fileSizeBytes: 512,
+            folderId: 'folder-interviews',
+            wasInterrupted: true,
+          ),
+        );
+        await store.softDeleteRecording(
+          recordingId: 'recording-deleted',
+          deletedAt: createdAt.add(const Duration(days: 1)),
+        );
+
+        await store.close();
+        store = RecordingStore(
+          databasePath: databasePath,
+          databaseFactory: databaseFactoryFfi,
+        );
+        await store.open();
+
+        final folders = await store.listFolders();
+        final activeRecordings = await store.listRecordings(
           folderId: 'folder-interviews',
-        ),
-      );
-      await store.saveRecording(
-        Recording(
-          id: 'recording-deleted',
-          title: 'Discarded take',
-          filePath: '/private/recording-deleted.m4a',
-          createdAt: createdAt.add(const Duration(minutes: 1)),
-          duration: const Duration(seconds: 12),
-          fileSizeBytes: 512,
-          folderId: 'folder-interviews',
-          wasInterrupted: true,
-        ),
-      );
-      await store.softDeleteRecording(
-        recordingId: 'recording-deleted',
-        deletedAt: createdAt.add(const Duration(days: 1)),
-      );
+        );
+        final recentlyDeleted = await store.listRecentlyDeleted();
 
-      await store.close();
-      store = RecordingStore(
-        databasePath: databasePath,
-        databaseFactory: databaseFactoryFfi,
-      );
-      await store.open();
-
-      final folders = await store.listFolders();
-      final activeRecordings = await store.listRecordings(
-        folderId: 'folder-interviews',
-      );
-      final recentlyDeleted = await store.listRecentlyDeleted();
-
-      expect(folders.single.name, 'Interviews');
-      expect(activeRecordings.single.id, 'recording-active');
-      expect(recentlyDeleted.single.id, 'recording-deleted');
-      expect(recentlyDeleted.single.wasInterrupted, isTrue);
-      expect(
-        recentlyDeleted.single.deletedAt,
-        createdAt.add(const Duration(days: 1)),
-      );
-    });
+        expect(folders.single.name, 'Interviews');
+        expect(activeRecordings.single.id, 'recording-active');
+        expect(recentlyDeleted.single.id, 'recording-deleted');
+        expect(recentlyDeleted.single.wasInterrupted, isTrue);
+        expect(
+          recentlyDeleted.single.deletedAt,
+          createdAt.add(const Duration(days: 1)),
+        );
+      },
+    );
 
     test('rejects recording data that references a missing folder', () async {
       final recording = Recording(
@@ -101,6 +106,23 @@ void main() {
 
       await expectLater(store.saveRecording(recording), throwsStateError);
     });
+
+    test(
+      'requires a non-empty, case-insensitively unique folder name',
+      () async {
+        await expectLater(
+          store.createFolder(id: 'folder-empty', name: '   '),
+          throwsArgumentError,
+        );
+        await store.createFolder(id: 'folder-work', name: '  Work  ');
+        await expectLater(
+          store.createFolder(id: 'folder-work-copy', name: 'work'),
+          throwsA(isA<DatabaseException>()),
+        );
+
+        expect((await store.listFolders()).single.name, 'Work');
+      },
+    );
 
     test('renames an active recording without changing its metadata', () async {
       final createdAt = DateTime.utc(2026, 9, 29, 8);
@@ -129,31 +151,39 @@ void main() {
     });
   });
 
-  test('AppStoragePaths separates completed and temporary recordings', () async {
-    final temporaryDirectory = await Directory.systemTemp.createTemp('ya-recorder-');
-    addTearDown(() => temporaryDirectory.delete(recursive: true));
+  test(
+    'AppStoragePaths separates completed and temporary recordings',
+    () async {
+      final temporaryDirectory = await Directory.systemTemp.createTemp(
+        'ya-recorder-',
+      );
+      addTearDown(() => temporaryDirectory.delete(recursive: true));
 
-    final paths = AppStoragePaths(temporaryDirectory);
-    await paths.ensureDirectories();
+      final paths = AppStoragePaths(temporaryDirectory);
+      await paths.ensureDirectories();
 
-    expect(await paths.recordingsDirectory.exists(), isTrue);
-    expect(await paths.recoveryDirectory.exists(), isTrue);
-    expect(
-      paths.completedRecordingFile('recording-1').path,
-      path.join(
-        temporaryDirectory.path,
-        'recordings',
-        'recording-recording-1.m4a',
-      ),
-    );
-    expect(
-      paths.temporaryRecordingFile('recording-1').path,
-      path.join(
-        temporaryDirectory.path,
-        'recovery',
-        'recording-recording-1.m4a.part',
-      ),
-    );
-    expect(() => paths.completedRecordingFile('../recording'), throwsArgumentError);
-  });
+      expect(await paths.recordingsDirectory.exists(), isTrue);
+      expect(await paths.recoveryDirectory.exists(), isTrue);
+      expect(
+        paths.completedRecordingFile('recording-1').path,
+        path.join(
+          temporaryDirectory.path,
+          'recordings',
+          'recording-recording-1.m4a',
+        ),
+      );
+      expect(
+        paths.temporaryRecordingFile('recording-1').path,
+        path.join(
+          temporaryDirectory.path,
+          'recovery',
+          'recording-recording-1.m4a.part',
+        ),
+      );
+      expect(
+        () => paths.completedRecordingFile('../recording'),
+        throwsArgumentError,
+      );
+    },
+  );
 }

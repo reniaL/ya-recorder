@@ -8,6 +8,7 @@ import 'package:ya_recorder/main.dart';
 import 'package:ya_recorder/playback/audio_playback_service.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
+import 'package:ya_recorder/storage/models/recording_folder.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
 
 void main() {
@@ -160,10 +161,7 @@ void main() {
     addTearDown(playbackService.dispose);
 
     await tester.pumpWidget(
-      MyApp(
-        recordingStore: recordingStore,
-        playbackService: playbackService,
-      ),
+      MyApp(recordingStore: recordingStore, playbackService: playbackService),
     );
     await tester.pumpAndSettle();
 
@@ -199,8 +197,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('会议记录'), findsOneWidget);
-    expect(recordingStore.recordings.single.filePath, '/private/recording-1.m4a');
+    expect(
+      recordingStore.recordings.single.filePath,
+      '/private/recording-1.m4a',
+    );
   });
+
+  testWidgets(
+    'creates a uniquely named logical folder from folder management',
+    (WidgetTester tester) async {
+      final recordingStore = _RecordingStoreSpy();
+      await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('文件夹管理'));
+      await tester.pumpAndSettle();
+      expect(find.text('文件夹管理'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('createFolderButton')));
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('folderNameField')),
+        '  Interviews  ',
+      );
+      await tester.tap(find.text('创建'));
+      await tester.pumpAndSettle();
+
+      expect(recordingStore.folders.single.name, 'Interviews');
+      expect(find.text('Interviews'), findsOneWidget);
+    },
+  );
 
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
@@ -312,6 +340,32 @@ class _RecordingStoreSpy extends RecordingStore {
 
   Recording? savedRecording;
   List<Recording> recordings = const [];
+  List<RecordingFolder> folders = const [];
+
+  @override
+  Future<RecordingFolder> createFolder({
+    required String id,
+    required String name,
+    DateTime? createdAt,
+  }) async {
+    final normalizedName = name.trim();
+    if (normalizedName.isEmpty ||
+        folders.any(
+          (folder) => folder.name.toLowerCase() == normalizedName.toLowerCase(),
+        )) {
+      throw StateError('Folder name must be unique.');
+    }
+    final folder = RecordingFolder(
+      id: id,
+      name: normalizedName,
+      createdAt: createdAt ?? DateTime.now().toUtc(),
+    );
+    folders = [...folders, folder];
+    return folder;
+  }
+
+  @override
+  Future<List<RecordingFolder>> listFolders() async => folders;
 
   @override
   Future<List<Recording>> listRecordings({String? folderId}) async {

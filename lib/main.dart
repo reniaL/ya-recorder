@@ -7,6 +7,7 @@ import 'playback/audio_playback_service.dart';
 import 'recording/recording_service.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
+import 'storage/models/recording_folder.dart';
 import 'storage/recording_store.dart';
 
 void main() {
@@ -164,9 +165,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   Future<void> _renameRecording(Recording recording) async {
     final title = await showDialog<String>(
       context: context,
-      builder: (context) => _RenameRecordingDialog(
-        initialTitle: recording.title,
-      ),
+      builder: (context) =>
+          _RenameRecordingDialog(initialTitle: recording.title),
     );
 
     final normalizedTitle = title?.trim();
@@ -194,6 +194,23 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
         });
       }
     }
+  }
+
+  Future<void> _openFolderManagement() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (context) => _FolderManagementPage(
+          listFolders: () async => (await _getRecordingStore()).listFolders(),
+          createFolder: (name) async {
+            final store = await _getRecordingStore();
+            return store.createFolder(
+              id: 'folder-${DateTime.now().microsecondsSinceEpoch}',
+              name: name,
+            );
+          },
+        ),
+      ),
+    );
   }
 
   void _handlePlaybackStatus(PlaybackStatus status) {
@@ -534,6 +551,24 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
         title: const Text('全部录音'),
         centerTitle: false,
         backgroundColor: Colors.transparent,
+        actions: [
+          PopupMenuButton<String>(
+            key: const Key('manageFoldersMenu'),
+            tooltip: '更多',
+            onSelected: (action) {
+              if (action == 'folders') {
+                _openFolderManagement();
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                key: Key('manageFoldersItem'),
+                value: 'folders',
+                child: Text('文件夹管理'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -720,7 +755,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
         ? total
         : _playbackStatus.position;
     final isPlaying = _playbackStatus.state == PlaybackState.playing;
-    final canSeek = _playbackStatus.state != PlaybackState.loading &&
+    final canSeek =
+        _playbackStatus.state != PlaybackState.loading &&
         _playbackStatus.state != PlaybackState.failed;
     final colorScheme = Theme.of(context).colorScheme;
 
@@ -748,10 +784,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                       label: '播放进度',
                       child: Slider(
                         value: position.inMilliseconds.toDouble(),
-                        max: (total.inMilliseconds > 0
-                                ? total.inMilliseconds
-                                : 1)
-                            .toDouble(),
+                        max:
+                            (total.inMilliseconds > 0
+                                    ? total.inMilliseconds
+                                    : 1)
+                                .toDouble(),
                         onChanged: canSeek
                             ? (value) => _playbackService.seek(
                                 Duration(milliseconds: value.round()),
@@ -1040,6 +1077,146 @@ class _RenameRecordingDialogState extends State<_RenameRecordingDialog> {
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text),
           child: const Text('保存'),
+        ),
+      ],
+    );
+  }
+}
+
+class _FolderManagementPage extends StatefulWidget {
+  const _FolderManagementPage({
+    required this.listFolders,
+    required this.createFolder,
+  });
+
+  final Future<List<RecordingFolder>> Function() listFolders;
+  final Future<RecordingFolder> Function(String name) createFolder;
+
+  @override
+  State<_FolderManagementPage> createState() => _FolderManagementPageState();
+}
+
+class _FolderManagementPageState extends State<_FolderManagementPage> {
+  late Future<List<RecordingFolder>> _folders = widget.listFolders();
+  String? _errorMessage;
+
+  Future<void> _createFolder() async {
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => const _CreateFolderDialog(),
+    );
+    final normalizedName = name?.trim();
+    if (normalizedName == null || normalizedName.isEmpty || !mounted) {
+      return;
+    }
+
+    try {
+      await widget.createFolder(normalizedName);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = null;
+        _folders = widget.listFolders();
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = '无法创建文件夹。名称不能为空且必须唯一。';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('文件夹管理')),
+      body: FutureBuilder<List<RecordingFolder>>(
+        future: _folders,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return const Center(child: Text('无法读取文件夹。'));
+          }
+          final folders = snapshot.data ?? const <RecordingFolder>[];
+          return Column(
+            children: [
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: folders.isEmpty
+                    ? const Center(child: Text('还没有文件夹。'))
+                    : ListView.builder(
+                        itemCount: folders.length,
+                        itemBuilder: (context, index) => ListTile(
+                          leading: const Icon(Icons.folder_outlined),
+                          title: Text(folders[index].name),
+                        ),
+                      ),
+              ),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        key: const Key('createFolderButton'),
+        onPressed: _createFolder,
+        icon: const Icon(Icons.create_new_folder_outlined),
+        label: const Text('创建文件夹'),
+      ),
+    );
+  }
+}
+
+class _CreateFolderDialog extends StatefulWidget {
+  const _CreateFolderDialog();
+
+  @override
+  State<_CreateFolderDialog> createState() => _CreateFolderDialogState();
+}
+
+class _CreateFolderDialogState extends State<_CreateFolderDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('创建文件夹'),
+      content: TextField(
+        key: const Key('folderNameField'),
+        controller: _controller,
+        autofocus: true,
+        maxLength: 120,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) => Navigator.pop(context, value),
+        decoration: const InputDecoration(labelText: '文件夹名称'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('创建'),
         ),
       ],
     );
