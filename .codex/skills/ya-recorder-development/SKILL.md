@@ -20,7 +20,7 @@ Use this skill for work in the 丫丫录音 repository. Treat the product docume
    - `docs/development-progress.md`
 3. Inspect the relevant implementation and tests. Reconcile differences explicitly: implementation alone is not proof that an item meets its acceptance criteria.
 
-Use an item explicitly selected by the user when one is given. Otherwise select the next dependency-ready MVP item from the recommended order in `docs/development-progress.md`. Keep a turn focused on one cohesive item; do not expand into adjacent features merely because they share code.
+Use an item explicitly selected by the user when one is given. Otherwise select the next dependency-ready MVP item from the recommended order in `docs/development-progress.md` that still requires implementation work. Skip items whose implementation is complete and whose only remaining condition is Android device verification; do not use such items as the turn's work item solely to repeat automated checks or report the absent device. Keep a turn focused on one cohesive item; do not expand into adjacent features merely because they share code.
 
 ## Implement and verify
 
