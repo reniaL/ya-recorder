@@ -1,0 +1,6 @@
+interface:
+  display_name: "丫丫录音开发"
+  short_description: "评估、开发、验证并提交丫丫录音 MVP"
+  default_prompt: "Use $ya-recorder-development to assess the project and deliver the next MVP item."
+policy:
+  allow_implicit_invocation: true
