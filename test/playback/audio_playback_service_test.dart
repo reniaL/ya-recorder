@@ -52,6 +52,21 @@ void main() {
       expect(service.status.recordingId, recording.id);
     },
   );
+
+  test('publishes playback position and seeks the active recording', () async {
+    final recording = _recording('recording-1');
+    await service.toggle(recording);
+
+    backend.emitPosition(const Duration(milliseconds: 750));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(service.status.position, const Duration(milliseconds: 750));
+
+    await service.seek(const Duration(milliseconds: 250));
+
+    expect(backend.seekPositions, [const Duration(milliseconds: 250)]);
+    expect(service.status.position, const Duration(milliseconds: 250));
+  });
 }
 
 Recording _recording(String id) {
@@ -68,7 +83,10 @@ Recording _recording(String id) {
 class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   final StreamController<AudioBackendState> _stateController =
       StreamController<AudioBackendState>.broadcast();
+  final StreamController<Duration> _positionController =
+      StreamController<Duration>.broadcast();
   final List<String> filePaths = [];
+  final List<Duration> seekPositions = [];
   int playCalls = 0;
   int pauseCalls = 0;
   int stopCalls = 0;
@@ -77,9 +95,17 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   Stream<AudioBackendState> get states => _stateController.stream;
 
   @override
-  Future<void> dispose() => _stateController.close();
+  Stream<Duration> get positions => _positionController.stream;
+
+  @override
+  Future<void> dispose() async {
+    await _stateController.close();
+    await _positionController.close();
+  }
 
   void emit(AudioBackendState state) => _stateController.add(state);
+
+  void emitPosition(Duration position) => _positionController.add(position);
 
   @override
   Future<void> pause() async {
@@ -89,6 +115,11 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   @override
   Future<void> play() async {
     playCalls += 1;
+  }
+
+  @override
+  Future<void> seek(Duration position) async {
+    seekPositions.add(position);
   }
 
   @override

@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/main.dart';
+import 'package:ya_recorder/playback/audio_playback_service.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
@@ -148,6 +150,36 @@ void main() {
     expect(find.text('2026-09-30 16:15 · 01:05'), findsOneWidget);
   });
 
+  testWidgets('bottom player displays and seeks playback progress', (
+    WidgetTester tester,
+  ) async {
+    final playbackBackend = _FakePlaybackBackend();
+    final recordingStore = _RecordingStoreSpy()
+      ..recordings = [_recording('recording-1')];
+    final playbackService = AudioPlaybackService(backend: playbackBackend);
+    addTearDown(playbackService.dispose);
+
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: recordingStore,
+        playbackService: playbackService,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('播放录音'));
+    await tester.pump();
+
+    expect(find.text('00:00'), findsOneWidget);
+    expect(find.text('01:00'), findsAtLeastNWidgets(1));
+    expect(find.byType(Slider), findsOneWidget);
+
+    await tester.tap(find.byType(Slider));
+    await tester.pump();
+
+    expect(playbackBackend.seekPositions, isNotEmpty);
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -269,4 +301,52 @@ class _RecordingStoreSpy extends RecordingStore {
     savedRecording = recording;
     recordings = [recording, ...recordings];
   }
+}
+
+Recording _recording(String id) {
+  return Recording(
+    id: id,
+    title: '播放进度测试',
+    filePath: '/private/$id.m4a',
+    createdAt: DateTime.utc(2026, 9, 30),
+    duration: const Duration(minutes: 1),
+    fileSizeBytes: 1024,
+  );
+}
+
+class _FakePlaybackBackend implements AudioPlaybackBackend {
+  final StreamController<AudioBackendState> _stateController =
+      StreamController<AudioBackendState>.broadcast();
+  final StreamController<Duration> _positionController =
+      StreamController<Duration>.broadcast();
+  final List<Duration> seekPositions = [];
+
+  @override
+  Stream<AudioBackendState> get states => _stateController.stream;
+
+  @override
+  Stream<Duration> get positions => _positionController.stream;
+
+  @override
+  Future<void> dispose() async {
+    await _stateController.close();
+    await _positionController.close();
+  }
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> seek(Duration position) async {
+    seekPositions.add(position);
+  }
+
+  @override
+  Future<void> setFilePath(String filePath) async {}
+
+  @override
+  Future<void> stop() async {}
 }

@@ -558,6 +558,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
           ],
         ),
       ),
+      bottomSheet: _buildPlaybackControls(context),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isSubmitting ? null : _requestPermissionAndStart,
         icon: const Icon(Icons.mic_rounded),
@@ -617,7 +618,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     return RefreshIndicator(
       onRefresh: _loadRecordings,
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(8, 12, 8, 96),
+        padding: const EdgeInsets.fromLTRB(8, 12, 8, 176),
         itemCount: _recordings.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
@@ -648,6 +649,83 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget? _buildPlaybackControls(BuildContext context) {
+    final recordingId = _playbackStatus.recordingId;
+    if (recordingId == null) {
+      return null;
+    }
+    final recording = _recordings.where((item) => item.id == recordingId);
+    if (recording.isEmpty) {
+      return null;
+    }
+
+    final activeRecording = recording.first;
+    final total = activeRecording.duration;
+    final position = _playbackStatus.position > total
+        ? total
+        : _playbackStatus.position;
+    final isPlaying = _playbackStatus.state == PlaybackState.playing;
+    final canSeek = _playbackStatus.state != PlaybackState.loading &&
+        _playbackStatus.state != PlaybackState.failed;
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colorScheme.surfaceContainerHigh,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                activeRecording.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              Row(
+                children: [
+                  Text(_formatDuration(position)),
+                  Expanded(
+                    child: Semantics(
+                      label: '播放进度',
+                      child: Slider(
+                        value: position.inMilliseconds.toDouble(),
+                        max: (total.inMilliseconds > 0
+                                ? total.inMilliseconds
+                                : 1)
+                            .toDouble(),
+                        onChanged: canSeek
+                            ? (value) => _playbackService.seek(
+                                Duration(milliseconds: value.round()),
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                  Text(_formatDuration(total)),
+                  IconButton(
+                    onPressed: _playbackStatus.state == PlaybackState.loading
+                        ? null
+                        : () => _togglePlayback(activeRecording),
+                    icon: Icon(
+                      isPlaying
+                          ? Icons.pause_circle_outline_rounded
+                          : Icons.play_circle_outline_rounded,
+                    ),
+                    tooltip: isPlaying ? '暂停播放' : '播放录音',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
