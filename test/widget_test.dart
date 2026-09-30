@@ -285,6 +285,56 @@ void main() {
     expect(find.text('Inbox note'), findsOneWidget);
   });
 
+  testWidgets('moves a recording between a folder and all recordings', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy()
+      ..folders = [
+        RecordingFolder(
+          id: 'folder-interviews',
+          name: 'Interviews',
+          createdAt: DateTime.utc(2026, 9, 30),
+        ),
+      ]
+      ..recordings = [
+        Recording(
+          id: 'recording-1',
+          title: 'Interview',
+          filePath: '/private/recording-1.m4a',
+          createdAt: DateTime.utc(2026, 9, 30),
+          duration: const Duration(seconds: 30),
+          fileSizeBytes: 1024,
+        ),
+      ];
+    await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('录音操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移动到文件夹'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('moveRecording-recording-1-folder-interviews')),
+    );
+    await tester.pumpAndSettle();
+    expect(recordingStore.recordings.single.folderId, 'folder-interviews');
+
+    await tester.tap(find.byKey(const Key('folderScopeSelector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folderScope-folder-interviews')));
+    await tester.pumpAndSettle();
+    expect(find.text('Interview'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('录音操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移动到文件夹'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('moveRecording-recording-1-all')));
+    await tester.pumpAndSettle();
+    expect(recordingStore.recordings.single.folderId, isNull);
+    expect(find.text('Interview'), findsNothing);
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -429,6 +479,33 @@ class _RecordingStoreSpy extends RecordingStore {
         : recordings
               .where((recording) => recording.folderId == folderId)
               .toList();
+  }
+
+  @override
+  Future<void> moveRecording({
+    required String recordingId,
+    String? folderId,
+  }) async {
+    if (folderId != null && !folders.any((folder) => folder.id == folderId)) {
+      throw StateError('Folder does not exist.');
+    }
+    recordings = [
+      for (final recording in recordings)
+        if (recording.id == recordingId)
+          Recording(
+            id: recording.id,
+            title: recording.title,
+            filePath: recording.filePath,
+            createdAt: recording.createdAt,
+            duration: recording.duration,
+            fileSizeBytes: recording.fileSizeBytes,
+            folderId: folderId,
+            deletedAt: recording.deletedAt,
+            wasInterrupted: recording.wasInterrupted,
+          )
+        else
+          recording,
+    ];
   }
 
   @override

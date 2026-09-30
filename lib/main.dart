@@ -268,6 +268,70 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     }
   }
 
+  Future<void> _moveRecording(Recording recording) async {
+    try {
+      final folders = await (await _getRecordingStore()).listFolders();
+      if (!mounted) {
+        return;
+      }
+      final destinations = folders
+          .where((folder) => folder.id != recording.folderId)
+          .toList();
+      if (recording.folderId == null && destinations.isEmpty) {
+        _setServiceError('请先创建一个文件夹，再移动录音。');
+        return;
+      }
+
+      final selectedFolderId = await showModalBottomSheet<String?>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(title: Text('移动录音到')),
+              if (recording.folderId != null)
+                ListTile(
+                  key: Key('moveRecording-${recording.id}-all'),
+                  leading: const Icon(Icons.library_music_outlined),
+                  title: const Text('全部录音'),
+                  onTap: () => Navigator.pop(context, ''),
+                ),
+              for (final folder in destinations)
+                ListTile(
+                  key: Key('moveRecording-${recording.id}-${folder.id}'),
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(folder.name),
+                  onTap: () => Navigator.pop(context, folder.id),
+                ),
+            ],
+          ),
+        ),
+      );
+      if (!mounted || selectedFolderId == null) {
+        return;
+      }
+
+      setState(() {
+        _isSubmitting = true;
+        _serviceError = null;
+      });
+      final store = await _getRecordingStore();
+      await store.moveRecording(
+        recordingId: recording.id,
+        folderId: selectedFolderId.isEmpty ? null : selectedFolderId,
+      );
+      await _loadRecordings();
+    } catch (_) {
+      _setServiceError('无法移动该录音。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   Future<void> _openFolderManagement() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -802,10 +866,13 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                   onSelected: (action) {
                     if (action == 'rename') {
                       _renameRecording(recording);
+                    } else if (action == 'move') {
+                      _moveRecording(recording);
                     }
                   },
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: 'rename', child: Text('重命名')),
+                    PopupMenuItem(value: 'move', child: Text('移动到文件夹')),
                   ],
                 ),
               ],

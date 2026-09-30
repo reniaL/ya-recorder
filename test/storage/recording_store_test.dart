@@ -149,6 +149,40 @@ void main() {
       expect(renamed.duration, const Duration(seconds: 12));
       expect(renamed.folderId, isNull);
     });
+
+    test(
+      'moves an active recording without changing its file metadata',
+      () async {
+        final createdAt = DateTime.utc(2026, 9, 29, 8);
+        await store.createFolder(id: 'folder-work', name: 'Work');
+        await store.saveRecording(
+          Recording(
+            id: 'recording-1',
+            title: 'Planning session',
+            filePath: '/private/recording-1.m4a',
+            createdAt: createdAt,
+            duration: const Duration(seconds: 12),
+            fileSizeBytes: 512,
+          ),
+        );
+
+        await store.moveRecording(
+          recordingId: 'recording-1',
+          folderId: 'folder-work',
+        );
+
+        final moved = (await store.listRecordings(
+          folderId: 'folder-work',
+        )).single;
+        expect(moved.filePath, '/private/recording-1.m4a');
+        expect(moved.createdAt, createdAt);
+        expect(moved.duration, const Duration(seconds: 12));
+        expect(moved.folderId, 'folder-work');
+
+        await store.moveRecording(recordingId: 'recording-1');
+        expect((await store.listRecordings()).single.folderId, isNull);
+      },
+    );
   });
 
   test(
