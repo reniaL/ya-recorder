@@ -87,6 +87,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   String? _libraryError;
   String? _playbackError;
   List<Recording> _recordings = const [];
+  String? _selectedFolderId;
+  String? _selectedFolderName;
   Future<RecordingStore>? _openedRecordingStore;
 
   @override
@@ -133,10 +135,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   }
 
   Future<void> _loadRecordings() async {
+    final folderId = _selectedFolderId;
     try {
       final store = await _getRecordingStore();
-      final recordings = await store.listRecordings();
-      if (!mounted) {
+      final recordings = await store.listRecordings(folderId: folderId);
+      if (!mounted || folderId != _selectedFolderId) {
         return;
       }
       setState(() {
@@ -153,6 +156,75 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
         _libraryError = '无法读取本地录音。';
       });
     }
+  }
+
+  Future<void> _chooseFolderScope() async {
+    try {
+      final folders = await (await _getRecordingStore()).listFolders();
+      if (!mounted) {
+        return;
+      }
+      final selectedFolderId = await showModalBottomSheet<String?>(
+        context: context,
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ListTile(title: Text('选择录音范围')),
+              ListTile(
+                key: const Key('folderScope-all'),
+                leading: const Icon(Icons.library_music_outlined),
+                title: const Text('全部录音'),
+                trailing: _selectedFolderId == null
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () => Navigator.pop(context, ''),
+              ),
+              for (final folder in folders)
+                ListTile(
+                  key: Key('folderScope-${folder.id}'),
+                  leading: const Icon(Icons.folder_outlined),
+                  title: Text(folder.name),
+                  trailing: _selectedFolderId == folder.id
+                      ? const Icon(Icons.check_rounded)
+                      : null,
+                  onTap: () => Navigator.pop(context, folder.id),
+                ),
+            ],
+          ),
+        ),
+      );
+      if (!mounted || selectedFolderId == null) {
+        return;
+      }
+      final folderId = selectedFolderId.isEmpty ? null : selectedFolderId;
+      if (folderId == _selectedFolderId) {
+        return;
+      }
+
+      final selectedFolder = folders.where((folder) => folder.id == folderId);
+      setState(() {
+        _selectedFolderId = folderId;
+        _selectedFolderName = selectedFolder.isEmpty
+            ? null
+            : selectedFolder.single.name;
+        _isLoadingRecordings = true;
+        _libraryError = null;
+      });
+      await _loadRecordings();
+    } catch (_) {
+      _setLibraryError('无法读取文件夹。');
+    }
+  }
+
+  void _setLibraryError(String message) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _isLoadingRecordings = false;
+      _libraryError = message;
+    });
   }
 
   Future<void> _togglePlayback(Recording recording) async {
@@ -548,7 +620,12 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   Widget _buildRecordingLibrary(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('全部录音'),
+        title: TextButton.icon(
+          key: const Key('folderScopeSelector'),
+          onPressed: _chooseFolderScope,
+          icon: const Icon(Icons.arrow_drop_down_rounded),
+          label: Text(_selectedFolderName ?? '全部录音'),
+        ),
         centerTitle: false,
         backgroundColor: Colors.transparent,
         actions: [

@@ -230,6 +230,61 @@ void main() {
     },
   );
 
+  testWidgets('switches between all recordings and a selected folder', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy()
+      ..folders = [
+        RecordingFolder(
+          id: 'folder-interviews',
+          name: 'Interviews',
+          createdAt: DateTime.utc(2026, 9, 30),
+        ),
+      ]
+      ..recordings = [
+        Recording(
+          id: 'recording-in-folder',
+          title: 'Interview',
+          filePath: '/private/recording-in-folder.m4a',
+          createdAt: DateTime.utc(2026, 9, 30),
+          duration: const Duration(seconds: 30),
+          fileSizeBytes: 1024,
+          folderId: 'folder-interviews',
+        ),
+        Recording(
+          id: 'recording-all',
+          title: 'Inbox note',
+          filePath: '/private/recording-all.m4a',
+          createdAt: DateTime.utc(2026, 9, 29),
+          duration: const Duration(seconds: 10),
+          fileSizeBytes: 512,
+        ),
+      ];
+    await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Interview'), findsOneWidget);
+    expect(find.text('Inbox note'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('folderScopeSelector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folderScope-folder-interviews')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Interviews'), findsOneWidget);
+    expect(find.text('Interview'), findsOneWidget);
+    expect(find.text('Inbox note'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('folderScopeSelector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folderScope-all')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('全部录音'), findsOneWidget);
+    expect(find.text('Interview'), findsOneWidget);
+    expect(find.text('Inbox note'), findsOneWidget);
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -369,7 +424,11 @@ class _RecordingStoreSpy extends RecordingStore {
 
   @override
   Future<List<Recording>> listRecordings({String? folderId}) async {
-    return recordings;
+    return folderId == null
+        ? recordings
+        : recordings
+              .where((recording) => recording.folderId == folderId)
+              .toList();
   }
 
   @override
