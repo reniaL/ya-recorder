@@ -171,6 +171,62 @@ void main() {
     );
     expect(find.text('录音已保存'), findsOneWidget);
   });
+
+  testWidgets(
+    'confirmed cancellation returns to idle without saving an index',
+    (WidgetTester tester) async {
+      final recordingStore = _RecordingStoreSpy();
+      final recordingEvents = StreamController<RecordingEvent>.broadcast();
+      addTearDown(recordingEvents.close);
+      initialState = 'recording';
+
+      await tester.pumpWidget(
+        MyApp(
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: recordingEvents.stream,
+          ),
+          recordingStore: recordingStore,
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.text('放弃本次录音'));
+      await tester.pumpAndSettle();
+      expect(find.text('放弃这次录音？'), findsOneWidget);
+
+      await tester.tap(find.text('放弃'));
+      await tester.pump();
+      expect(invokedMethods, contains('cancel'));
+
+      recordingEvents.add(
+        const RecordingStateChanged(
+          RecordingSessionStatus(
+            state: RecordingLifecycleState.discarding,
+            elapsed: Duration.zero,
+            canResume: false,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('正在放弃录音'), findsOneWidget);
+
+      recordingEvents.add(
+        const RecordingStateChanged(
+          RecordingSessionStatus(
+            state: RecordingLifecycleState.idle,
+            elapsed: Duration.zero,
+            canResume: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(recordingStore.savedRecording, isNull);
+      expect(find.text('本次录音已放弃'), findsOneWidget);
+      expect(find.text('开始录音'), findsOneWidget);
+    },
+  );
 }
 
 class _RecordingStoreSpy extends RecordingStore {

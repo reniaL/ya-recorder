@@ -63,9 +63,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   RecordingSessionStatus _status = _idleStatus;
   bool _isSubmitting = false;
   bool _isPersistingRecording = false;
+  bool _isCancellingRecording = false;
   String? _permissionMessage;
   String? _serviceError;
   String? _saveMessage;
+  String? _discardMessage;
   Future<RecordingStore>? _openedRecordingStore;
 
   @override
@@ -110,6 +112,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       _permissionMessage = null;
       _serviceError = null;
       _saveMessage = null;
+      _discardMessage = null;
     });
 
     try {
@@ -246,12 +249,19 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
 
     setState(() {
       _isSubmitting = true;
+      _isCancellingRecording = true;
       _serviceError = null;
+      _discardMessage = null;
     });
     try {
       await widget.recordingService.cancel();
     } on PlatformException catch (error) {
-      _setServiceError(error.message ?? '无法放弃当前录音。');
+      if (mounted) {
+        setState(() {
+          _isCancellingRecording = false;
+          _serviceError = error.message ?? '无法放弃当前录音。';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -269,15 +279,23 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     switch (event) {
       case RecordingStateChanged(:final status):
         setState(() {
+          final cancellationCompleted =
+              _isCancellingRecording &&
+              status.state == RecordingLifecycleState.idle;
           _status = status;
           if (status.state != RecordingLifecycleState.failed) {
             _serviceError = null;
+          }
+          if (cancellationCompleted) {
+            _isCancellingRecording = false;
+            _discardMessage = '本次录音已放弃';
           }
         });
       case RecordingSaved(:final recording):
         unawaited(_persistSavedRecording(recording));
       case RecordingFailed(:final message):
         setState(() {
+          _isCancellingRecording = false;
           _serviceError = message;
         });
     }
@@ -473,6 +491,13 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                 _MessagePanel(
                   icon: Icons.check_circle_outline_rounded,
                   message: _saveMessage!,
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (_discardMessage != null) ...[
+                _MessagePanel(
+                  icon: Icons.delete_outline_rounded,
+                  message: _discardMessage!,
                 ),
                 const SizedBox(height: 16),
               ],
