@@ -4,15 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'recording/recording_service.dart';
+import 'storage/app_storage_paths.dart';
+import 'storage/models/recording.dart';
+import 'storage/recording_store.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.recordingService});
+  const MyApp({super.key, this.recordingService, this.recordingStore});
 
   final RecordingService? recordingService;
+  final RecordingStore? recordingStore;
 
   @override
   Widget build(BuildContext context) {
@@ -28,15 +32,21 @@ class MyApp extends StatelessWidget {
       ),
       home: RecordingHomePage(
         recordingService: recordingService ?? RecordingService(),
+        recordingStore: recordingStore,
       ),
     );
   }
 }
 
 class RecordingHomePage extends StatefulWidget {
-  const RecordingHomePage({super.key, required this.recordingService});
+  const RecordingHomePage({
+    super.key,
+    required this.recordingService,
+    this.recordingStore,
+  });
 
   final RecordingService recordingService;
+  final RecordingStore? recordingStore;
 
   @override
   State<RecordingHomePage> createState() => _RecordingHomePageState();
@@ -52,8 +62,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   late final StreamSubscription<RecordingEvent> _eventSubscription;
   RecordingSessionStatus _status = _idleStatus;
   bool _isSubmitting = false;
+  bool _isPersistingRecording = false;
   String? _permissionMessage;
   String? _serviceError;
+  String? _saveMessage;
+  Future<RecordingStore>? _openedRecordingStore;
 
   @override
   void initState() {
@@ -96,6 +109,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       _isSubmitting = true;
       _permissionMessage = null;
       _serviceError = null;
+      _saveMessage = null;
     });
 
     try {
@@ -178,6 +192,34 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     }
   }
 
+  Future<void> _stopAndSave() async {
+    if (_isSubmitting || !_canStop) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _serviceError = null;
+      _status = RecordingSessionStatus(
+        state: RecordingLifecycleState.stopping,
+        elapsed: _status.elapsed,
+        canResume: false,
+        sessionId: _status.sessionId,
+      );
+    });
+    try {
+      await widget.recordingService.stop();
+    } on PlatformException catch (error) {
+      _setServiceError(error.message ?? '无法停止录音。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmCancellation() async {
     final shouldCancel = await showDialog<bool>(
       context: context,
@@ -232,10 +274,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
             _serviceError = null;
           }
         });
-      case RecordingSaved():
-        setState(() {
-          _status = _idleStatus;
-        });
+      case RecordingSaved(:final recording):
+        unawaited(_persistSavedRecording(recording));
       case RecordingFailed(:final message):
         setState(() {
           _serviceError = message;
@@ -256,9 +296,76 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     });
   }
 
+  Future<void> _persistSavedRecording(
+    SavedNativeRecording savedRecording,
+  ) async {
+    setState(() {
+      _isPersistingRecording = true;
+      _saveMessage = null;
+      _serviceError = null;
+    });
+
+    try {
+      final store = await _getRecordingStore();
+      await store.saveRecording(
+        Recording(
+          id: savedRecording.id,
+          title: _defaultTitle(savedRecording.createdAt),
+          filePath: savedRecording.filePath,
+          createdAt: savedRecording.createdAt,
+          duration: savedRecording.duration,
+          fileSizeBytes: savedRecording.fileSizeBytes,
+          wasInterrupted: savedRecording.wasInterrupted,
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isPersistingRecording = false;
+        _status = _idleStatus;
+        _saveMessage = '录音已保存';
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isPersistingRecording = false;
+        _serviceError = '无法将录音保存到本地索引。';
+      });
+    }
+  }
+
+  Future<RecordingStore> _getRecordingStore() {
+    final recordingStore = widget.recordingStore;
+    if (recordingStore != null) {
+      return Future.value(recordingStore);
+    }
+
+    return _openedRecordingStore ??= _openDefaultRecordingStore();
+  }
+
+  static Future<RecordingStore> _openDefaultRecordingStore() async {
+    final paths = await AppStoragePaths.create();
+    final store = RecordingStore(databasePath: paths.databasePath);
+    await store.open();
+    return store;
+  }
+
+  static String _defaultTitle(DateTime createdAt) {
+    final localTime = createdAt.toLocal();
+    final month = localTime.month.toString().padLeft(2, '0');
+    final day = localTime.day.toString().padLeft(2, '0');
+    final hour = localTime.hour.toString().padLeft(2, '0');
+    final minute = localTime.minute.toString().padLeft(2, '0');
+    return '录音 ${localTime.year}-$month-$day $hour:$minute';
+  }
+
   bool get _canStart =>
-      _status.state == RecordingLifecycleState.idle ||
-      _status.state == RecordingLifecycleState.failed;
+      !_isPersistingRecording &&
+      (_status.state == RecordingLifecycleState.idle ||
+          _status.state == RecordingLifecycleState.failed);
 
   bool get _hasActiveSession => switch (_status.state) {
     RecordingLifecycleState.preparing ||
@@ -273,6 +380,10 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
 
   bool get _canResume =>
       _status.state == RecordingLifecycleState.paused && _status.canResume;
+
+  bool get _canStop =>
+      _status.state == RecordingLifecycleState.recording ||
+      _status.state == RecordingLifecycleState.paused;
 
   bool get _canCancel => switch (_status.state) {
     RecordingLifecycleState.preparing ||
@@ -358,6 +469,13 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                 ),
                 const SizedBox(height: 16),
               ],
+              if (_saveMessage != null) ...[
+                _MessagePanel(
+                  icon: Icons.check_circle_outline_rounded,
+                  message: _saveMessage!,
+                ),
+                const SizedBox(height: 16),
+              ],
               if (_canStart)
                 SizedBox(
                   height: 56,
@@ -369,32 +487,46 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                     label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
                   ),
                 )
-              else if (_canPause || _canResume || _canCancel)
-                Row(
+              else if (_canPause || _canResume || _canStop || _canCancel)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (_canPause || _canResume)
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _isSubmitting ? null : _pauseOrResume,
-                          icon: Icon(
-                            _canPause
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                          ),
-                          label: Text(_canPause ? '暂停' : '继续录音'),
-                        ),
+                    if (_canPause || _canResume || _canStop)
+                      Row(
+                        children: [
+                          if (_canPause || _canResume)
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: _isSubmitting
+                                    ? null
+                                    : _pauseOrResume,
+                                icon: Icon(
+                                  _canPause
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                ),
+                                label: Text(_canPause ? '暂停' : '继续录音'),
+                              ),
+                            ),
+                          if ((_canPause || _canResume) && _canStop)
+                            const SizedBox(width: 12),
+                          if (_canStop)
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: _isSubmitting ? null : _stopAndSave,
+                                icon: const Icon(Icons.stop_rounded),
+                                label: const Text('停止并保存'),
+                              ),
+                            ),
+                        ],
                       ),
-                    if ((_canPause || _canResume) && _canCancel)
-                      const SizedBox(width: 12),
+                    if ((_canPause || _canResume || _canStop) && _canCancel)
+                      const SizedBox(height: 12),
                     if (_canCancel)
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _isSubmitting
-                              ? null
-                              : _confirmCancellation,
-                          icon: const Icon(Icons.delete_outline_rounded),
-                          label: const Text('放弃本次录音'),
-                        ),
+                      OutlinedButton.icon(
+                        onPressed: _isSubmitting ? null : _confirmCancellation,
+                        icon: const Icon(Icons.delete_outline_rounded),
+                        label: const Text('放弃本次录音'),
                       ),
                   ],
                 ),

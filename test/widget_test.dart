@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/main.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
+import 'package:ya_recorder/storage/models/recording.dart';
+import 'package:ya_recorder/storage/recording_store.dart';
 
 void main() {
   const commandChannel = MethodChannel(
@@ -15,6 +20,8 @@ void main() {
   late String initialState;
   late bool initialCanResume;
   late List<String> invokedMethods;
+
+  setUpAll(sqfliteFfiInit);
 
   setUp(() {
     permissionGranted = false;
@@ -117,4 +124,63 @@ void main() {
 
     expect(invokedMethods, contains('resume'));
   });
+
+  testWidgets('stopped recording is written to the local index', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy();
+    final recordingEvents = StreamController<RecordingEvent>.broadcast();
+    addTearDown(recordingEvents.close);
+    initialState = 'recording';
+
+    await tester.pumpWidget(
+      MyApp(
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: recordingEvents.stream,
+        ),
+        recordingStore: recordingStore,
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('停止并保存'));
+    await tester.pump();
+    expect(invokedMethods, contains('stop'));
+    expect(find.text('正在完成录音'), findsOneWidget);
+
+    recordingEvents.add(
+      RecordingSaved(
+        SavedNativeRecording(
+          id: 'recording-1',
+          filePath: '/private/recording-1.m4a',
+          createdAt: DateTime.utc(2026, 9, 30, 8, 15),
+          duration: const Duration(seconds: 12),
+          fileSizeBytes: 1024,
+          wasInterrupted: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(recordingStore.savedRecording, isNotNull);
+    expect(recordingStore.savedRecording!.id, 'recording-1');
+    expect(
+      recordingStore.savedRecording!.duration,
+      const Duration(seconds: 12),
+    );
+    expect(find.text('录音已保存'), findsOneWidget);
+  });
+}
+
+class _RecordingStoreSpy extends RecordingStore {
+  _RecordingStoreSpy()
+    : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
+
+  Recording? savedRecording;
+
+  @override
+  Future<void> saveRecording(Recording recording) async {
+    savedRecording = recording;
+  }
 }

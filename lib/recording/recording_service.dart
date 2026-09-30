@@ -113,9 +113,13 @@ class RecordingFailed extends RecordingEvent {
 }
 
 class RecordingService {
-  RecordingService({MethodChannel? commands, EventChannel? events})
-    : _commands = commands ?? const MethodChannel(_commandChannelName),
-      _events = events ?? const EventChannel(_eventChannelName);
+  RecordingService({
+    MethodChannel? commands,
+    EventChannel? events,
+    Stream<RecordingEvent>? eventStream,
+  }) : _commands = commands ?? const MethodChannel(_commandChannelName),
+       _events = events ?? const EventChannel(_eventChannelName),
+       _eventStream = eventStream;
 
   static const _commandChannelName =
       'io.github.renial.ya_recorder/recording_commands';
@@ -124,8 +128,10 @@ class RecordingService {
 
   final MethodChannel _commands;
   final EventChannel _events;
+  final Stream<RecordingEvent>? _eventStream;
 
   Stream<RecordingEvent> get events =>
+      _eventStream ??
       _events.receiveBroadcastStream().map((Object? rawEvent) {
         if (rawEvent is! Map) {
           throw const FormatException('Recording event must be a map.');
