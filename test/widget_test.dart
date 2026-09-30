@@ -180,6 +180,28 @@ void main() {
     expect(playbackBackend.seekPositions, isNotEmpty);
   });
 
+  testWidgets('renames a recording from its action menu', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy()
+      ..recordings = [_recording('recording-1')];
+    await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('录音操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重命名'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('重命名录音'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '会议记录');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('会议记录'), findsOneWidget);
+    expect(recordingStore.recordings.single.filePath, '/private/recording-1.m4a');
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -300,6 +322,30 @@ class _RecordingStoreSpy extends RecordingStore {
   Future<void> saveRecording(Recording recording) async {
     savedRecording = recording;
     recordings = [recording, ...recordings];
+  }
+
+  @override
+  Future<void> renameRecording({
+    required String recordingId,
+    required String title,
+  }) async {
+    recordings = [
+      for (final recording in recordings)
+        if (recording.id == recordingId)
+          Recording(
+            id: recording.id,
+            title: title.trim(),
+            filePath: recording.filePath,
+            createdAt: recording.createdAt,
+            duration: recording.duration,
+            fileSizeBytes: recording.fileSizeBytes,
+            folderId: recording.folderId,
+            deletedAt: recording.deletedAt,
+            wasInterrupted: recording.wasInterrupted,
+          )
+        else
+          recording,
+    ];
   }
 }
 

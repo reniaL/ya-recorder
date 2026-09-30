@@ -122,6 +122,23 @@ class RecordingStore {
     });
   }
 
+  Future<void> renameRecording({
+    required String recordingId,
+    required String title,
+  }) async {
+    _requireNonEmpty(recordingId, 'recordingId');
+    final normalizedTitle = title.trim();
+    _requireNonEmpty(normalizedTitle, 'title');
+    final database = await _openDatabase();
+    final updatedCount = await database.update(
+      'recordings',
+      {'title': normalizedTitle},
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [recordingId],
+    );
+    _requireSingleUpdatedRow(updatedCount, recordingId);
+  }
+
   Future<void> softDeleteRecording({
     required String recordingId,
     required DateTime deletedAt,

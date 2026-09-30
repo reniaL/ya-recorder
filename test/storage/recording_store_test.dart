@@ -101,6 +101,32 @@ void main() {
 
       await expectLater(store.saveRecording(recording), throwsStateError);
     });
+
+    test('renames an active recording without changing its metadata', () async {
+      final createdAt = DateTime.utc(2026, 9, 29, 8);
+      await store.saveRecording(
+        Recording(
+          id: 'recording-1',
+          title: 'Original title',
+          filePath: '/private/recording-1.m4a',
+          createdAt: createdAt,
+          duration: const Duration(seconds: 12),
+          fileSizeBytes: 512,
+        ),
+      );
+
+      await store.renameRecording(
+        recordingId: 'recording-1',
+        title: '  Renamed recording  ',
+      );
+
+      final renamed = (await store.listRecordings()).single;
+      expect(renamed.title, 'Renamed recording');
+      expect(renamed.filePath, '/private/recording-1.m4a');
+      expect(renamed.createdAt, createdAt);
+      expect(renamed.duration, const Duration(seconds: 12));
+      expect(renamed.folderId, isNull);
+    });
   });
 
   test('AppStoragePaths separates completed and temporary recordings', () async {

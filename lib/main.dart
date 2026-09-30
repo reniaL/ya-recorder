@@ -161,6 +161,41 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     await _playbackService.toggle(recording);
   }
 
+  Future<void> _renameRecording(Recording recording) async {
+    final title = await showDialog<String>(
+      context: context,
+      builder: (context) => _RenameRecordingDialog(
+        initialTitle: recording.title,
+      ),
+    );
+
+    final normalizedTitle = title?.trim();
+    if (normalizedTitle == null || normalizedTitle.isEmpty || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _serviceError = null;
+    });
+    try {
+      final store = await _getRecordingStore();
+      await store.renameRecording(
+        recordingId: recording.id,
+        title: normalizedTitle,
+      );
+      await _loadRecordings();
+    } catch (_) {
+      _setServiceError('无法重命名该录音。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   void _handlePlaybackStatus(PlaybackStatus status) {
     if (!mounted) {
       return;
@@ -638,14 +673,30 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
               '${_formatDateTime(recording.createdAt)} · '
               '${_formatDuration(recording.duration)}',
             ),
-            trailing: IconButton(
-              onPressed: () => _togglePlayback(recording),
-              icon: Icon(
-                isPlaying
-                    ? Icons.pause_circle_outline_rounded
-                    : Icons.play_circle_outline_rounded,
-              ),
-              tooltip: isPlaying ? '暂停播放' : '播放录音',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  onPressed: () => _togglePlayback(recording),
+                  icon: Icon(
+                    isPlaying
+                        ? Icons.pause_circle_outline_rounded
+                        : Icons.play_circle_outline_rounded,
+                  ),
+                  tooltip: isPlaying ? '暂停播放' : '播放录音',
+                ),
+                PopupMenuButton<String>(
+                  tooltip: '录音操作',
+                  onSelected: (action) {
+                    if (action == 'rename') {
+                      _renameRecording(recording);
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(value: 'rename', child: Text('重命名')),
+                  ],
+                ),
+              ],
             ),
           );
         },
@@ -945,6 +996,52 @@ class _MessagePanel extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _RenameRecordingDialog extends StatefulWidget {
+  const _RenameRecordingDialog({required this.initialTitle});
+
+  final String initialTitle;
+
+  @override
+  State<_RenameRecordingDialog> createState() => _RenameRecordingDialogState();
+}
+
+class _RenameRecordingDialogState extends State<_RenameRecordingDialog> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialTitle,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('重命名录音'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 120,
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) => Navigator.pop(context, value),
+        decoration: const InputDecoration(labelText: '录音标题'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('保存'),
+        ),
+      ],
     );
   }
 }
