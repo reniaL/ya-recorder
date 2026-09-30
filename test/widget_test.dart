@@ -125,6 +125,29 @@ void main() {
     expect(invokedMethods, contains('resume'));
   });
 
+  testWidgets('saved recordings are shown in the all recordings list', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy()
+      ..recordings = [
+        Recording(
+          id: 'recording-1',
+          title: '项目讨论',
+          filePath: '/private/recording-1.m4a',
+          createdAt: DateTime.utc(2026, 9, 30, 8, 15),
+          duration: const Duration(minutes: 1, seconds: 5),
+          fileSizeBytes: 1024,
+        ),
+      ];
+
+    await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+    await tester.pumpAndSettle();
+
+    expect(find.text('全部录音'), findsOneWidget);
+    expect(find.text('项目讨论'), findsOneWidget);
+    expect(find.text('2026-09-30 16:15 · 01:05'), findsOneWidget);
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -234,9 +257,16 @@ class _RecordingStoreSpy extends RecordingStore {
     : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
 
   Recording? savedRecording;
+  List<Recording> recordings = const [];
+
+  @override
+  Future<List<Recording>> listRecordings({String? folderId}) async {
+    return recordings;
+  }
 
   @override
   Future<void> saveRecording(Recording recording) async {
     savedRecording = recording;
+    recordings = [recording, ...recordings];
   }
 }

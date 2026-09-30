@@ -64,10 +64,13 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   bool _isSubmitting = false;
   bool _isPersistingRecording = false;
   bool _isCancellingRecording = false;
+  bool _isLoadingRecordings = true;
   String? _permissionMessage;
   String? _serviceError;
   String? _saveMessage;
   String? _discardMessage;
+  String? _libraryError;
+  List<Recording> _recordings = const [];
   Future<RecordingStore>? _openedRecordingStore;
 
   @override
@@ -78,6 +81,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       onError: _handleEventError,
     );
     _loadCurrentStatus();
+    _loadRecordings();
   }
 
   @override
@@ -99,6 +103,29 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       _setServiceError(error.message ?? '无法读取当前录音状态。');
     } on FormatException catch (error) {
       _setServiceError(error.message);
+    }
+  }
+
+  Future<void> _loadRecordings() async {
+    try {
+      final store = await _getRecordingStore();
+      final recordings = await store.listRecordings();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _recordings = recordings;
+        _isLoadingRecordings = false;
+        _libraryError = null;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingRecordings = false;
+        _libraryError = '无法读取本地录音。';
+      });
     }
   }
 
@@ -344,6 +371,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
         _status = _idleStatus;
         _saveMessage = '录音已保存';
       });
+      await _loadRecordings();
     } catch (_) {
       if (!mounted) {
         return;
@@ -415,6 +443,154 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_hasActiveSession && _status.state != RecordingLifecycleState.failed) {
+      return _buildRecordingLibrary(context);
+    }
+
+    return _buildRecordingControls(context);
+  }
+
+  Widget _buildRecordingLibrary(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('全部录音'),
+        centerTitle: false,
+        backgroundColor: Colors.transparent,
+      ),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            if (_permissionMessage != null ||
+                _serviceError != null ||
+                _saveMessage != null ||
+                _discardMessage != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_permissionMessage != null) ...[
+                      _MessagePanel(
+                        icon: Icons.mic_off_rounded,
+                        message: _permissionMessage!,
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: _isSubmitting ? null : _openAppSettings,
+                          icon: const Icon(Icons.settings_outlined),
+                          label: const Text('前往系统设置'),
+                        ),
+                      ),
+                    ],
+                    if (_serviceError != null)
+                      _MessagePanel(
+                        icon: Icons.error_outline_rounded,
+                        message: _serviceError!,
+                        isError: true,
+                      ),
+                    if (_saveMessage != null)
+                      _MessagePanel(
+                        icon: Icons.check_circle_outline_rounded,
+                        message: _saveMessage!,
+                      ),
+                    if (_discardMessage != null)
+                      _MessagePanel(
+                        icon: Icons.delete_outline_rounded,
+                        message: _discardMessage!,
+                      ),
+                  ],
+                ),
+              ),
+            Expanded(child: _buildRecordingList(context)),
+          ],
+        ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _isSubmitting ? null : _requestPermissionAndStart,
+        icon: const Icon(Icons.mic_rounded),
+        label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
+      ),
+    );
+  }
+
+  Widget _buildRecordingList(BuildContext context) {
+    if (_isLoadingRecordings) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_libraryError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, size: 48),
+              const SizedBox(height: 16),
+              Text(_libraryError!),
+              const SizedBox(height: 12),
+              OutlinedButton(
+                onPressed: _loadRecordings,
+                child: const Text('重新加载'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_recordings.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.mic_none_rounded,
+                size: 56,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 16),
+              Text('还没有录音', style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 8),
+              const Text('点击“开始录音”录下第一段声音。'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadRecordings,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(8, 12, 8, 96),
+        itemCount: _recordings.length,
+        separatorBuilder: (_, _) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final recording = _recordings[index];
+          return ListTile(
+            leading: const Icon(Icons.graphic_eq_rounded),
+            title: Text(
+              recording.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Text(
+              '${_formatDateTime(recording.createdAt)} · '
+              '${_formatDuration(recording.duration)}',
+            ),
+            trailing: const Icon(Icons.play_circle_outline_rounded),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRecordingControls(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -582,6 +758,15 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       return '$paddedMinutes:$paddedSeconds';
     }
     return '${hours.toString().padLeft(2, '0')}:$paddedMinutes:$paddedSeconds';
+  }
+
+  String _formatDateTime(DateTime dateTime) {
+    final localTime = dateTime.toLocal();
+    final month = localTime.month.toString().padLeft(2, '0');
+    final day = localTime.day.toString().padLeft(2, '0');
+    final hour = localTime.hour.toString().padLeft(2, '0');
+    final minute = localTime.minute.toString().padLeft(2, '0');
+    return '${localTime.year}-$month-$day $hour:$minute';
   }
 }
 
