@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'playback/audio_playback_service.dart';
 import 'recording/recording_service.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
@@ -13,10 +14,16 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.recordingService, this.recordingStore});
+  const MyApp({
+    super.key,
+    this.recordingService,
+    this.recordingStore,
+    this.playbackService,
+  });
 
   final RecordingService? recordingService;
   final RecordingStore? recordingStore;
+  final AudioPlaybackService? playbackService;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +40,7 @@ class MyApp extends StatelessWidget {
       home: RecordingHomePage(
         recordingService: recordingService ?? RecordingService(),
         recordingStore: recordingStore,
+        playbackService: playbackService,
       ),
     );
   }
@@ -43,10 +51,12 @@ class RecordingHomePage extends StatefulWidget {
     super.key,
     required this.recordingService,
     this.recordingStore,
+    this.playbackService,
   });
 
   final RecordingService recordingService;
   final RecordingStore? recordingStore;
+  final AudioPlaybackService? playbackService;
 
   @override
   State<RecordingHomePage> createState() => _RecordingHomePageState();
@@ -60,7 +70,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   );
 
   late final StreamSubscription<RecordingEvent> _eventSubscription;
+  late final AudioPlaybackService _playbackService;
+  late final StreamSubscription<PlaybackStatus> _playbackSubscription;
+  late final bool _ownsPlaybackService;
   RecordingSessionStatus _status = _idleStatus;
+  PlaybackStatus _playbackStatus = const PlaybackStatus.idle();
   bool _isSubmitting = false;
   bool _isPersistingRecording = false;
   bool _isCancellingRecording = false;
@@ -70,12 +84,19 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   String? _saveMessage;
   String? _discardMessage;
   String? _libraryError;
+  String? _playbackError;
   List<Recording> _recordings = const [];
   Future<RecordingStore>? _openedRecordingStore;
 
   @override
   void initState() {
     super.initState();
+    _ownsPlaybackService = widget.playbackService == null;
+    _playbackService = widget.playbackService ?? AudioPlaybackService();
+    _playbackStatus = _playbackService.status;
+    _playbackSubscription = _playbackService.statuses.listen(
+      _handlePlaybackStatus,
+    );
     _eventSubscription = widget.recordingService.events.listen(
       _handleRecordingEvent,
       onError: _handleEventError,
@@ -87,6 +108,10 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   @override
   void dispose() {
     _eventSubscription.cancel();
+    _playbackSubscription.cancel();
+    if (_ownsPlaybackService) {
+      unawaited(_playbackService.dispose());
+    }
     super.dispose();
   }
 
@@ -129,6 +154,23 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     }
   }
 
+  Future<void> _togglePlayback(Recording recording) async {
+    setState(() {
+      _playbackError = null;
+    });
+    await _playbackService.toggle(recording);
+  }
+
+  void _handlePlaybackStatus(PlaybackStatus status) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _playbackStatus = status;
+      _playbackError = status.errorMessage;
+    });
+  }
+
   Future<void> _requestPermissionAndStart() async {
     if (_isSubmitting || !_canStart) {
       return;
@@ -143,6 +185,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     });
 
     try {
+      await _playbackService.stop();
       final granted = await widget.recordingService
           .requestMicrophonePermission();
       if (!mounted) {
@@ -464,7 +507,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
             if (_permissionMessage != null ||
                 _serviceError != null ||
                 _saveMessage != null ||
-                _discardMessage != null)
+                _discardMessage != null ||
+                _playbackError != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
                 child: Column(
@@ -500,6 +544,12 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                       _MessagePanel(
                         icon: Icons.delete_outline_rounded,
                         message: _discardMessage!,
+                      ),
+                    if (_playbackError != null)
+                      _MessagePanel(
+                        icon: Icons.error_outline_rounded,
+                        message: _playbackError!,
+                        isError: true,
                       ),
                   ],
                 ),
@@ -572,7 +622,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
           final recording = _recordings[index];
+          final isPlaying =
+              _playbackStatus.recordingId == recording.id &&
+              _playbackStatus.state == PlaybackState.playing;
           return ListTile(
+            onTap: () => _togglePlayback(recording),
             leading: const Icon(Icons.graphic_eq_rounded),
             title: Text(
               recording.title,
@@ -583,7 +637,15 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
               '${_formatDateTime(recording.createdAt)} · '
               '${_formatDuration(recording.duration)}',
             ),
-            trailing: const Icon(Icons.play_circle_outline_rounded),
+            trailing: IconButton(
+              onPressed: () => _togglePlayback(recording),
+              icon: Icon(
+                isPlaying
+                    ? Icons.pause_circle_outline_rounded
+                    : Icons.play_circle_outline_rounded,
+              ),
+              tooltip: isPlaying ? '暂停播放' : '播放录音',
+            ),
           );
         },
       ),
