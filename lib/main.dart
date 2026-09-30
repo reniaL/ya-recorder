@@ -152,6 +152,32 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     }
   }
 
+  Future<void> _pauseOrResume() async {
+    if (_isSubmitting || (!_canPause && !_canResume)) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _serviceError = null;
+    });
+    try {
+      if (_canPause) {
+        await widget.recordingService.pause();
+      } else {
+        await widget.recordingService.resume();
+      }
+    } on PlatformException catch (error) {
+      _setServiceError(error.message ?? '无法更新录音状态。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   Future<void> _confirmCancellation() async {
     final shouldCancel = await showDialog<bool>(
       context: context,
@@ -243,6 +269,21 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     RecordingLifecycleState.idle || RecordingLifecycleState.failed => false,
   };
 
+  bool get _canPause => _status.state == RecordingLifecycleState.recording;
+
+  bool get _canResume =>
+      _status.state == RecordingLifecycleState.paused && _status.canResume;
+
+  bool get _canCancel => switch (_status.state) {
+    RecordingLifecycleState.preparing ||
+    RecordingLifecycleState.recording ||
+    RecordingLifecycleState.paused => true,
+    RecordingLifecycleState.idle ||
+    RecordingLifecycleState.stopping ||
+    RecordingLifecycleState.discarding ||
+    RecordingLifecycleState.failed => false,
+  };
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -328,11 +369,34 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                     label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
                   ),
                 )
-              else if (_hasActiveSession)
-                OutlinedButton.icon(
-                  onPressed: _isSubmitting ? null : _confirmCancellation,
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('放弃本次录音'),
+              else if (_canPause || _canResume || _canCancel)
+                Row(
+                  children: [
+                    if (_canPause || _canResume)
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _isSubmitting ? null : _pauseOrResume,
+                          icon: Icon(
+                            _canPause
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                          ),
+                          label: Text(_canPause ? '暂停' : '继续录音'),
+                        ),
+                      ),
+                    if ((_canPause || _canResume) && _canCancel)
+                      const SizedBox(width: 12),
+                    if (_canCancel)
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isSubmitting
+                              ? null
+                              : _confirmCancellation,
+                          icon: const Icon(Icons.delete_outline_rounded),
+                          label: const Text('放弃本次录音'),
+                        ),
+                      ),
+                  ],
                 ),
             ],
           ),

@@ -12,10 +12,14 @@ void main() {
   );
 
   late bool permissionGranted;
+  late String initialState;
+  late bool initialCanResume;
   late List<String> invokedMethods;
 
   setUp(() {
     permissionGranted = false;
+    initialState = 'idle';
+    initialCanResume = false;
     invokedMethods = [];
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -23,10 +27,16 @@ void main() {
       invokedMethods.add(call.method);
       switch (call.method) {
         case 'getStatus':
-          return {'state': 'idle', 'elapsedMs': 0, 'canResume': false};
+          return {
+            'state': initialState,
+            'elapsedMs': 0,
+            'canResume': initialCanResume,
+          };
         case 'requestMicrophonePermission':
           return permissionGranted;
         case 'start':
+        case 'pause':
+        case 'resume':
         case 'cancel':
         case 'openAppSettings':
           return null;
@@ -81,5 +91,30 @@ void main() {
 
     expect(find.text('正在准备录音'), findsOneWidget);
     expect(invokedMethods, contains('start'));
+  });
+
+  testWidgets('recording can be paused', (WidgetTester tester) async {
+    initialState = 'recording';
+    await tester.pumpWidget(const MyApp());
+    await tester.pump();
+
+    expect(find.text('暂停'), findsOneWidget);
+    await tester.tap(find.text('暂停'));
+    await tester.pump();
+
+    expect(invokedMethods, contains('pause'));
+  });
+
+  testWidgets('paused recording can resume', (WidgetTester tester) async {
+    initialState = 'paused';
+    initialCanResume = true;
+    await tester.pumpWidget(const MyApp());
+    await tester.pump();
+
+    expect(find.text('继续录音'), findsOneWidget);
+    await tester.tap(find.text('继续录音'));
+    await tester.pump();
+
+    expect(invokedMethods, contains('resume'));
   });
 }
