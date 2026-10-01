@@ -7,6 +7,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/main.dart';
 import 'package:ya_recorder/playback/audio_playback_service.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
+import 'package:ya_recorder/sharing/audio_share_service.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/models/recording_folder.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
@@ -250,6 +251,28 @@ void main() {
       recordingStore.recordings.single.filePath,
       '/private/recording-1.m4a',
     );
+  });
+
+  testWidgets('shares a recording from its action menu', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy()
+      ..recordings = [_recording('recording-1')];
+    final sharePlatform = _WidgetFakeAudioSharePlatform();
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: recordingStore,
+        audioShareService: AudioShareService(platform: sharePlatform),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('录音操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分享'));
+    await tester.pump();
+
+    expect(sharePlatform.filePath, '/private/recording-1.m4a');
   });
 
   testWidgets(
@@ -716,6 +739,18 @@ Recording _recording(String id) {
     duration: const Duration(minutes: 1),
     fileSizeBytes: 1024,
   );
+}
+
+class _WidgetFakeAudioSharePlatform implements AudioSharePlatform {
+  String? filePath;
+
+  @override
+  Future<void> shareM4a({
+    required String filePath,
+    required String title,
+  }) async {
+    this.filePath = filePath;
+  }
 }
 
 class _FakePlaybackBackend implements AudioPlaybackBackend {

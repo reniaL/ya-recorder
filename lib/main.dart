@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'playback/audio_playback_service.dart';
 import 'recording/recording_service.dart';
+import 'sharing/audio_share_service.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
@@ -20,11 +21,13 @@ class MyApp extends StatelessWidget {
     this.recordingService,
     this.recordingStore,
     this.playbackService,
+    this.audioShareService,
   });
 
   final RecordingService? recordingService;
   final RecordingStore? recordingStore;
   final AudioPlaybackService? playbackService;
+  final AudioShareService? audioShareService;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +45,7 @@ class MyApp extends StatelessWidget {
         recordingService: recordingService ?? RecordingService(),
         recordingStore: recordingStore,
         playbackService: playbackService,
+        audioShareService: audioShareService,
       ),
     );
   }
@@ -53,11 +57,13 @@ class RecordingHomePage extends StatefulWidget {
     required this.recordingService,
     this.recordingStore,
     this.playbackService,
+    this.audioShareService,
   });
 
   final RecordingService recordingService;
   final RecordingStore? recordingStore;
   final AudioPlaybackService? playbackService;
+  final AudioShareService? audioShareService;
 
   @override
   State<RecordingHomePage> createState() => _RecordingHomePageState();
@@ -74,6 +80,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   late final AudioPlaybackService _playbackService;
   late final StreamSubscription<PlaybackStatus> _playbackSubscription;
   late final bool _ownsPlaybackService;
+  late final AudioShareService _audioShareService;
   RecordingSessionStatus _status = _idleStatus;
   PlaybackStatus _playbackStatus = const PlaybackStatus.idle();
   bool _isSubmitting = false;
@@ -121,6 +128,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     super.initState();
     _ownsPlaybackService = widget.playbackService == null;
     _playbackService = widget.playbackService ?? AudioPlaybackService();
+    _audioShareService = widget.audioShareService ?? AudioShareService();
     _playbackStatus = _playbackService.status;
     _playbackSubscription = _playbackService.statuses.listen(
       _handlePlaybackStatus,
@@ -257,6 +265,24 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       _playbackError = null;
     });
     await _playbackService.toggle(recording);
+  }
+
+  Future<void> _shareRecording(Recording recording) async {
+    setState(() {
+      _isSubmitting = true;
+      _serviceError = null;
+    });
+    try {
+      await _audioShareService.shareRecording(recording);
+    } catch (_) {
+      _setServiceError('无法分享该录音。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
   }
 
   Future<void> _renameRecording(Recording recording) async {
@@ -971,11 +997,14 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                       _renameRecording(recording);
                     } else if (action == 'move') {
                       _moveRecording(recording);
+                    } else if (action == 'share') {
+                      _shareRecording(recording);
                     }
                   },
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: 'rename', child: Text('重命名')),
                     PopupMenuItem(value: 'move', child: Text('移动到文件夹')),
+                    PopupMenuItem(value: 'share', child: Text('分享')),
                   ],
                 ),
               ],
