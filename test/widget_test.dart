@@ -151,6 +151,55 @@ void main() {
     expect(find.text('2026-09-30 16:15 · 01:05'), findsOneWidget);
   });
 
+  testWidgets('searches recording titles in the current scope', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy()
+      ..recordings = [
+        Recording(
+          id: 'project',
+          title: '项目讨论',
+          filePath: '/private/project.m4a',
+          createdAt: DateTime.utc(2026, 9, 30),
+          duration: const Duration(minutes: 1),
+          fileSizeBytes: 1024,
+        ),
+        Recording(
+          id: 'interview',
+          title: '客户访谈',
+          filePath: '/private/interview.m4a',
+          createdAt: DateTime.utc(2026, 9, 29),
+          duration: const Duration(minutes: 1),
+          fileSizeBytes: 1024,
+        ),
+      ];
+
+    await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('recordingSearchButton')));
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('recordingSearchField')), '项目');
+    await tester.pump();
+
+    expect(find.text('项目讨论'), findsOneWidget);
+    expect(find.text('客户访谈'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('recordingSearchField')), '');
+    await tester.pump();
+
+    expect(find.text('项目讨论'), findsOneWidget);
+    expect(find.text('客户访谈'), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('recordingSearchField')),
+      '不存在',
+    );
+    await tester.pump();
+
+    expect(find.text('没有匹配的录音'), findsOneWidget);
+  });
+
   testWidgets('bottom player displays and seeks playback progress', (
     WidgetTester tester,
   ) async {

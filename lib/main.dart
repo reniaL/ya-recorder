@@ -80,6 +80,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   bool _isPersistingRecording = false;
   bool _isCancellingRecording = false;
   bool _isLoadingRecordings = true;
+  bool _isSearching = false;
   String? _permissionMessage;
   String? _serviceError;
   String? _saveMessage;
@@ -87,9 +88,33 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   String? _libraryError;
   String? _playbackError;
   List<Recording> _recordings = const [];
+  String _searchQuery = '';
   String? _selectedFolderId;
   String? _selectedFolderName;
   Future<RecordingStore>? _openedRecordingStore;
+
+  List<Recording> get _visibleRecordings {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return _recordings;
+    }
+    return _recordings
+        .where((recording) => recording.title.toLowerCase().contains(query))
+        .toList();
+  }
+
+  void _setSearchQuery(String value) {
+    setState(() {
+      _searchQuery = value;
+    });
+  }
+
+  void _closeSearch() {
+    setState(() {
+      _isSearching = false;
+      _searchQuery = '';
+    });
+  }
 
   @override
   void initState() {
@@ -717,15 +742,41 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   Widget _buildRecordingLibrary(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: TextButton.icon(
-          key: const Key('folderScopeSelector'),
-          onPressed: _chooseFolderScope,
-          icon: const Icon(Icons.arrow_drop_down_rounded),
-          label: Text(_selectedFolderName ?? '全部录音'),
-        ),
+        title: _isSearching
+            ? TextField(
+                key: const Key('recordingSearchField'),
+                autofocus: true,
+                onChanged: _setSearchQuery,
+                decoration: const InputDecoration(
+                  hintText: '搜索当前范围的录音',
+                  border: InputBorder.none,
+                ),
+              )
+            : TextButton.icon(
+                key: const Key('folderScopeSelector'),
+                onPressed: _chooseFolderScope,
+                icon: const Icon(Icons.arrow_drop_down_rounded),
+                label: Text(_selectedFolderName ?? '全部录音'),
+              ),
         centerTitle: false,
         backgroundColor: Colors.transparent,
         actions: [
+          IconButton(
+            key: const Key('recordingSearchButton'),
+            tooltip: _isSearching ? '关闭搜索' : '搜索录音',
+            onPressed: () {
+              if (_isSearching) {
+                _closeSearch();
+              } else {
+                setState(() {
+                  _isSearching = true;
+                });
+              }
+            },
+            icon: Icon(
+              _isSearching ? Icons.close_rounded : Icons.search_rounded,
+            ),
+          ),
           PopupMenuButton<String>(
             key: const Key('manageFoldersMenu'),
             tooltip: '更多',
@@ -859,14 +910,33 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       );
     }
 
+    final visibleRecordings = _visibleRecordings;
+    if (visibleRecordings.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.search_off_rounded, size: 56),
+              const SizedBox(height: 16),
+              const Text('没有匹配的录音'),
+              const SizedBox(height: 8),
+              const Text('请尝试其他标题关键词。'),
+            ],
+          ),
+        ),
+      );
+    }
+
     return RefreshIndicator(
       onRefresh: _loadRecordings,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(8, 12, 8, 176),
-        itemCount: _recordings.length,
+        itemCount: visibleRecordings.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
-          final recording = _recordings[index];
+          final recording = visibleRecordings[index];
           final isPlaying =
               _playbackStatus.recordingId == recording.id &&
               _playbackStatus.state == PlaybackState.playing;
