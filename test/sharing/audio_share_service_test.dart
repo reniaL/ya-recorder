@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as path;
+import 'package:share_plus/share_plus.dart';
 import 'package:ya_recorder/sharing/audio_share_service.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 
@@ -26,6 +30,39 @@ void main() {
       expect(recording.title, '项目讨论');
     },
   );
+
+  test('stages a title-named copy and removes it after sharing', () async {
+    final temporaryDirectory = await Directory.systemTemp.createTemp(
+      'ya-recorder-sharing-test-',
+    );
+    addTearDown(() => temporaryDirectory.delete(recursive: true));
+    final sourceFile = File(path.join(temporaryDirectory.path, 'internal.m4a'));
+    await sourceFile.writeAsBytes([1, 2, 3]);
+    final platform = SharePlusAudioSharePlatform(
+      temporaryDirectoryProvider: () async => temporaryDirectory,
+      share: (params) async {
+        final stagedFile = File(params.files!.single.path);
+        expect(path.basename(stagedFile.path), '项目讨论.m4a');
+        expect(await stagedFile.readAsBytes(), [1, 2, 3]);
+        return ShareResult.unavailable;
+      },
+    );
+
+    await platform.shareM4a(
+      filePath: sourceFile.path,
+      fileName: '项目讨论.m4a',
+      title: '项目讨论',
+    );
+
+    expect(await sourceFile.readAsBytes(), [1, 2, 3]);
+    expect(
+      await temporaryDirectory
+          .list()
+          .where((entity) => entity is Directory)
+          .isEmpty,
+      isTrue,
+    );
+  });
 }
 
 class _FakeAudioSharePlatform implements AudioSharePlatform {
