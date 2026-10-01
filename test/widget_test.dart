@@ -273,6 +273,7 @@ void main() {
     await tester.pump();
 
     expect(sharePlatform.filePath, '/private/recording-1.m4a');
+    expect(sharePlatform.fileName, '播放进度测试.m4a');
   });
 
   testWidgets(
@@ -743,13 +744,16 @@ Recording _recording(String id) {
 
 class _WidgetFakeAudioSharePlatform implements AudioSharePlatform {
   String? filePath;
+  String? fileName;
 
   @override
   Future<void> shareM4a({
     required String filePath,
+    required String fileName,
     required String title,
   }) async {
     this.filePath = filePath;
+    this.fileName = fileName;
   }
 }
 
