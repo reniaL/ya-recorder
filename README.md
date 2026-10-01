@@ -43,6 +43,7 @@
 - [开发进度](docs/development-progress.md)
 - [MVP 用户流程](docs/product/user-flows.md)
 - [UI 交互设计](docs/product/ui-interaction-design.md)
+- [真机测试反馈](docs/device-feedback.md)
 - [录音生命周期](docs/architecture/recording-lifecycle.md)
 
 ## 开源许可
