@@ -93,6 +93,99 @@ void main() {
       },
     );
 
+    test(
+      'batch operations are atomic and preserve audio metadata across restart',
+      () async {
+        await store.createFolder(id: 'work', name: 'Work');
+        final created = DateTime.utc(2026, 10, 5);
+        for (final id in ['one', 'two', 'untouched']) {
+          await store.saveRecording(
+            Recording(
+              id: id,
+              title: id,
+              filePath: '/private/$id.m4a',
+              createdAt: created,
+              duration: const Duration(seconds: 12),
+              fileSizeBytes: 512,
+            ),
+          );
+        }
+        await expectLater(
+          store.moveRecordings(
+            recordingIds: ['one', 'missing'],
+            folderId: 'work',
+          ),
+          throwsStateError,
+        );
+        expect(
+          (await store.listRecordings()).every((r) => r.folderId == null),
+          isTrue,
+        );
+        await expectLater(
+          store.moveRecordings(
+            recordingIds: ['one', 'two'],
+            folderId: 'missing',
+          ),
+          throwsStateError,
+        );
+        await store.moveRecordings(
+          recordingIds: ['one', 'two', 'one'],
+          folderId: 'work',
+        );
+        final moved = await store.listRecordings(folderId: 'work');
+        expect(moved.length, 2);
+        for (final r in moved) {
+          expect(r.filePath, '/private/${r.id}.m4a');
+          expect(r.createdAt, created);
+          expect(r.duration, const Duration(seconds: 12));
+          expect(r.fileSizeBytes, 512);
+          expect(r.title, r.id);
+        }
+        await expectLater(
+          store.softDeleteRecordings(
+            recordingIds: ['one', 'missing'],
+            deletedAt: created,
+          ),
+          throwsStateError,
+        );
+        expect(await store.listRecentlyDeleted(), isEmpty);
+        await store.softDeleteRecordings(
+          recordingIds: ['two'],
+          deletedAt: created,
+        );
+        await expectLater(
+          store.softDeleteRecordings(
+            recordingIds: ['one', 'two'],
+            deletedAt: created,
+          ),
+          throwsStateError,
+        );
+        expect((await store.listRecordings(folderId: 'work')).single.id, 'one');
+        await store.restoreRecording('two');
+        await store.softDeleteRecordings(
+          recordingIds: ['one', 'two', 'one'],
+          deletedAt: created,
+        );
+        await store.close();
+        await store.open();
+        expect((await store.listRecordings()).single.id, 'untouched');
+        final deleted = await store.listRecentlyDeleted();
+        expect(deleted.length, 2);
+        expect(
+          deleted.every((r) => r.deletedAt == created && r.folderId == 'work'),
+          isTrue,
+        );
+        await expectLater(
+          store.moveRecordings(recordingIds: []),
+          throwsArgumentError,
+        );
+        await expectLater(
+          store.softDeleteRecordings(recordingIds: [''], deletedAt: created),
+          throwsArgumentError,
+        );
+      },
+    );
+
     test('rejects recording data that references a missing folder', () async {
       final recording = Recording(
         id: 'orphaned-recording',

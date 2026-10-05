@@ -485,6 +485,196 @@ void main() {
     },
   );
 
+  testWidgets(
+    'batch delete requires confirmation and stops selected playback',
+    (tester) async {
+      final store = _RecordingStoreSpy()
+        ..recordings = [_recording('one'), _recording('two')];
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('播放录音').first);
+      await tester.pumpAndSettle();
+      await tester.longPress(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 条'), findsOneWidget);
+      expect(find.text('开始录音'), findsNothing);
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
+      expect(store.recordings.every((r) => !r.isDeleted), isTrue);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 2 条'), findsOneWidget);
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移入最近删除'));
+      await tester.pumpAndSettle();
+      expect(store.recordings.every((r) => r.isDeleted), isTrue);
+      expect(playback.status.recordingId, isNull);
+      expect(find.text('开始录音'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'select all only selects search results and query changes clear selection',
+    (tester) async {
+      final store = _RecordingStoreSpy()
+        ..recordings = [
+          _recording('one'),
+          Recording(
+            id: 'two',
+            title: '其他录音',
+            filePath: '/private/two.m4a',
+            createdAt: DateTime.utc(2026),
+            duration: Duration.zero,
+            fileSizeBytes: 1,
+          ),
+        ];
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('搜索录音'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('recordingSearchField')),
+        '播放',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('多选录音'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 1 条'), findsOneWidget);
+      await tester.enterText(find.byKey(const Key('recordingSearchField')), '');
+      await tester.pumpAndSettle();
+      expect(find.text('已选 0 条'), findsOneWidget);
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('取消全选'));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 0 条'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('多选录音'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'batch moves mixed folders then clears selection on scope change',
+    (tester) async {
+      final store = _RecordingStoreSpy()
+        ..folders = [
+          RecordingFolder(
+            id: 'work',
+            name: 'Work',
+            createdAt: DateTime.utc(2026),
+          ),
+        ]
+        ..recordings = [_recording('one'), _recording('two')];
+      await store.moveRecording(recordingId: 'one', folderId: 'work');
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('多选录音'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移动'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('batchMove-all')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('batchMove-work')));
+      await tester.pumpAndSettle();
+      expect(store.recordings.every((r) => r.folderId == 'work'), isTrue);
+      await tester.longPress(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('folderScopeSelector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('folderScope-work')));
+      await tester.pumpAndSettle();
+      expect(find.text('已选 0 条'), findsOneWidget);
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移动'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('batchMove-work')), findsNothing);
+      await tester.tap(find.byKey(const Key('batchMove-all')));
+      await tester.pumpAndSettle();
+      expect(store.recordings.every((r) => r.folderId == null), isTrue);
+      expect(find.byKey(const Key('recordingRow-one')), findsNothing);
+    },
+  );
+
+  testWidgets('batch failure keeps selection for retry', (tester) async {
+    final store = _RecordingStoreSpy()
+      ..recordings = [_recording('one')]
+      ..failBatchDelete = true;
+    await tester.pumpWidget(MyApp(recordingStore: store));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.byKey(const Key('recordingRow-one')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('移入最近删除'));
+    await tester.pumpAndSettle();
+    expect(find.text('无法批量删除录音，请重试。'), findsOneWidget);
+    expect(find.text('已选 1 条'), findsOneWidget);
+    expect(store.recordings.single.isDeleted, isFalse);
+  });
+
+  testWidgets(
+    'batch submission locks selection and prevents duplicate operations',
+    (tester) async {
+      final gate = Completer<void>();
+      final store = _RecordingStoreSpy()
+        ..recordings = [_recording('one')]
+        ..batchDeleteGate = gate.future;
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      await tester.longPress(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('删除'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移入最近删除'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.tap(find.text('删除'));
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.text('已选 1 条'), findsOneWidget);
+      expect(store.batchDeleteCalls, 1);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.recordings.single.isDeleted, isTrue);
+      expect(find.byTooltip('多选录音'), findsOneWidget);
+    },
+  );
+
+  testWidgets('selection controls fit a narrow screen with larger text', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+    await tester.pumpWidget(MyApp(recordingStore: store));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.byKey(const Key('recordingRow-one')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('移动'), findsOneWidget);
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tap(find.byTooltip('退出多选'));
+    await tester.pumpAndSettle();
+    expect(find.text('开始录音'), findsOneWidget);
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -596,6 +786,32 @@ class _RecordingStoreSpy extends RecordingStore {
   Recording? savedRecording;
   List<Recording> recordings = const [];
   List<RecordingFolder> folders = const [];
+  bool failBatchDelete = false;
+  Future<void>? batchDeleteGate;
+  int batchDeleteCalls = 0;
+
+  @override
+  Future<void> moveRecordings({
+    required Iterable<String> recordingIds,
+    String? folderId,
+  }) async {
+    for (final id in recordingIds) {
+      await moveRecording(recordingId: id, folderId: folderId);
+    }
+  }
+
+  @override
+  Future<void> softDeleteRecordings({
+    required Iterable<String> recordingIds,
+    required DateTime deletedAt,
+  }) async {
+    batchDeleteCalls++;
+    if (batchDeleteGate != null) await batchDeleteGate;
+    if (failBatchDelete) throw StateError('Simulated failure');
+    for (final id in recordingIds) {
+      await softDeleteRecording(recordingId: id, deletedAt: deletedAt);
+    }
+  }
 
   @override
   Future<RecordingFolder> createFolder({

@@ -213,6 +213,57 @@ class RecordingStore {
     _requireSingleUpdatedRow(updatedCount, recordingId);
   }
 
+  Future<void> moveRecordings({
+    required Iterable<String> recordingIds,
+    String? folderId,
+  }) async {
+    await _updateActiveRecordings(
+      recordingIds,
+      {'folder_id': folderId},
+      validate: (transaction) => _ensureFolderExists(transaction, folderId),
+    );
+  }
+
+  Future<void> softDeleteRecordings({
+    required Iterable<String> recordingIds,
+    required DateTime deletedAt,
+  }) async {
+    await _updateActiveRecordings(recordingIds, {
+      'deleted_at': deletedAt.toUtc().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> _updateActiveRecordings(
+    Iterable<String> recordingIds,
+    Map<String, Object?> values, {
+    Future<void> Function(sqflite.Transaction)? validate,
+  }) async {
+    final ids = recordingIds.toSet();
+    if (ids.isEmpty) {
+      throw ArgumentError('At least one recording is required.');
+    }
+    for (final id in ids) {
+      _requireNonEmpty(id, 'recordingId');
+    }
+    final database = await _openDatabase();
+    await database.transaction((transaction) async {
+      if (validate != null) {
+        await validate(transaction);
+      }
+      // Individual updates avoid SQLite's bind parameter limit. The enclosing
+      // transaction rolls back every change if a selected recording is stale.
+      for (final id in ids) {
+        final count = await transaction.update(
+          'recordings',
+          values,
+          where: 'id = ? AND deleted_at IS NULL',
+          whereArgs: [id],
+        );
+        _requireSingleUpdatedRow(count, id);
+      }
+    });
+  }
+
   Future<void> softDeleteRecording({
     required String recordingId,
     required DateTime deletedAt,

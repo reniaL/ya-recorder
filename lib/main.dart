@@ -88,6 +88,9 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   bool _isCancellingRecording = false;
   bool _isLoadingRecordings = true;
   bool _isSearching = false;
+  bool _isSelecting = false;
+  bool _isApplyingBatch = false;
+  final Set<String> _selectedRecordingIds = {};
   String? _permissionMessage;
   String? _serviceError;
   String? _saveMessage;
@@ -113,6 +116,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   void _setSearchQuery(String value) {
     setState(() {
       _searchQuery = value;
+      _selectedRecordingIds.clear();
     });
   }
 
@@ -120,6 +124,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     setState(() {
       _isSearching = false;
       _searchQuery = '';
+      _selectedRecordingIds.clear();
     });
   }
 
@@ -177,6 +182,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       }
       setState(() {
         _recordings = recordings;
+        _selectedRecordingIds.retainAll(_visibleRecordings.map((r) => r.id));
         _isLoadingRecordings = false;
         _libraryError = null;
       });
@@ -238,6 +244,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       final selectedFolder = folders.where((folder) => folder.id == folderId);
       setState(() {
         _selectedFolderId = folderId;
+        _selectedRecordingIds.clear();
         _selectedFolderName = selectedFolder.isEmpty
             ? null
             : selectedFolder.single.name;
@@ -425,6 +432,124 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       if (mounted) {
         setState(() {
           _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  void _exitSelection() {
+    if (_isSubmitting) return;
+    setState(() {
+      _isSelecting = false;
+      _selectedRecordingIds.clear();
+    });
+  }
+
+  void _toggleSelection(String id) {
+    if (_isSubmitting) return;
+    setState(() {
+      _isSelecting = true;
+      if (!_selectedRecordingIds.add(id)) {
+        _selectedRecordingIds.remove(id);
+      }
+    });
+  }
+
+  Future<void> _operateOnSelection({required bool delete}) async {
+    if (_isSubmitting || _selectedRecordingIds.isEmpty) return;
+    final ids = _selectedRecordingIds.toSet();
+    // Lock selection and navigation while choosing a destination or confirming.
+    setState(() {
+      _isSubmitting = true;
+      _serviceError = null;
+    });
+    try {
+      final store = await _getRecordingStore();
+      if (!mounted) return;
+      if (delete) {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('将 ${ids.length} 条录音移入最近删除？'),
+            content: const Text('录音会保留在最近删除中，可在保留期内恢复。'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('移入最近删除'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+        setState(() => _isApplyingBatch = true);
+        if (ids.contains(_playbackStatus.recordingId)) {
+          await _playbackService.stop();
+        }
+        await store.softDeleteRecordings(
+          recordingIds: ids,
+          deletedAt: DateTime.now(),
+        );
+      } else {
+        final folders = await store.listFolders();
+        if (!mounted) return;
+        final selected = _recordings.where((r) => ids.contains(r.id)).toList();
+        final destinations = folders
+            .where((f) => selected.any((r) => r.folderId != f.id))
+            .toList();
+        final canMoveToAll = selected.any((r) => r.folderId != null);
+        if (!canMoveToAll && destinations.isEmpty) {
+          _setServiceError('请先创建一个文件夹，再移动录音。');
+          return;
+        }
+        final destination = await showModalBottomSheet<String>(
+          context: context,
+          builder: (context) => SafeArea(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ListTile(title: Text('移动 ${ids.length} 条录音到')),
+                  if (canMoveToAll)
+                    ListTile(
+                      key: const Key('batchMove-all'),
+                      title: const Text('全部录音'),
+                      onTap: () => Navigator.pop(context, ''),
+                    ),
+                  for (final folder in destinations)
+                    ListTile(
+                      key: Key('batchMove-${folder.id}'),
+                      title: Text(folder.name),
+                      onTap: () => Navigator.pop(context, folder.id),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+        if (destination == null || !mounted) return;
+        setState(() => _isApplyingBatch = true);
+        await store.moveRecordings(
+          recordingIds: ids,
+          folderId: destination.isEmpty ? null : destination,
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _isSelecting = false;
+        _selectedRecordingIds.clear();
+      });
+      await _loadRecordings();
+    } catch (_) {
+      _setServiceError(delete ? '无法批量删除录音，请重试。' : '无法批量移动录音，请重试。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+          _isApplyingBatch = false;
         });
       }
     }
@@ -813,124 +938,225 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   }
 
   Widget _buildRecordingLibrary(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: _isSearching
-            ? TextField(
-                key: const Key('recordingSearchField'),
-                autofocus: true,
-                onChanged: _setSearchQuery,
-                decoration: const InputDecoration(
-                  hintText: '搜索当前范围的录音',
-                  border: InputBorder.none,
+    return PopScope(
+      canPop: !_isSelecting && !_isSubmitting,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isSelecting) _exitSelection();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: _isSearching
+              ? TextField(
+                  key: const Key('recordingSearchField'),
+                  autofocus: true,
+                  enabled: !_isSubmitting,
+                  onChanged: _setSearchQuery,
+                  decoration: const InputDecoration(
+                    hintText: '搜索当前范围的录音',
+                    border: InputBorder.none,
+                  ),
+                )
+              : TextButton.icon(
+                  key: const Key('folderScopeSelector'),
+                  onPressed: _isSubmitting ? null : _chooseFolderScope,
+                  icon: const Icon(Icons.arrow_drop_down_rounded),
+                  label: Text(_selectedFolderName ?? '全部录音'),
                 ),
-              )
-            : TextButton.icon(
-                key: const Key('folderScopeSelector'),
-                onPressed: _chooseFolderScope,
-                icon: const Icon(Icons.arrow_drop_down_rounded),
-                label: Text(_selectedFolderName ?? '全部录音'),
+          centerTitle: false,
+          backgroundColor: Colors.transparent,
+          actions: [
+            if (_isSelecting)
+              IconButton(
+                tooltip: '退出多选',
+                onPressed: _isSubmitting ? null : _exitSelection,
+                icon: const Icon(Icons.close),
               ),
-        centerTitle: false,
-        backgroundColor: Colors.transparent,
-        actions: [
-          IconButton(
-            key: const Key('recordingSearchButton'),
-            tooltip: _isSearching ? '关闭搜索' : '搜索录音',
-            onPressed: () {
-              if (_isSearching) {
-                _closeSearch();
-              } else {
-                setState(() {
-                  _isSearching = true;
-                });
-              }
-            },
-            icon: Icon(
-              _isSearching ? Icons.close_rounded : Icons.search_rounded,
+            if (!_isSelecting)
+              IconButton(
+                tooltip: '多选录音',
+                onPressed: _isSubmitting || _visibleRecordings.isEmpty
+                    ? null
+                    : () => setState(() => _isSelecting = true),
+                icon: const Icon(Icons.checklist),
+              ),
+            IconButton(
+              key: const Key('recordingSearchButton'),
+              tooltip: _isSearching ? '关闭搜索' : '搜索录音',
+              onPressed: _isSubmitting
+                  ? null
+                  : () {
+                      if (_isSearching) {
+                        _closeSearch();
+                      } else {
+                        setState(() {
+                          _isSearching = true;
+                        });
+                      }
+                    },
+              icon: Icon(
+                _isSearching ? Icons.close_rounded : Icons.search_rounded,
+              ),
             ),
-          ),
-          PopupMenuButton<String>(
-            key: const Key('manageFoldersMenu'),
-            tooltip: '更多',
-            onSelected: (action) {
-              if (action == 'folders') {
-                _openFolderManagement();
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                key: Key('manageFoldersItem'),
-                value: 'folders',
-                child: Text('文件夹管理'),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            if (_permissionMessage != null ||
-                _serviceError != null ||
-                _saveMessage != null ||
-                _discardMessage != null ||
-                _playbackError != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_permissionMessage != null) ...[
-                      _MessagePanel(
-                        icon: Icons.mic_off_rounded,
-                        message: _permissionMessage!,
-                      ),
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: OutlinedButton.icon(
-                          onPressed: _isSubmitting ? null : _openAppSettings,
-                          icon: const Icon(Icons.settings_outlined),
-                          label: const Text('前往系统设置'),
-                        ),
-                      ),
-                    ],
-                    if (_serviceError != null)
-                      _MessagePanel(
-                        icon: Icons.error_outline_rounded,
-                        message: _serviceError!,
-                        isError: true,
-                      ),
-                    if (_saveMessage != null)
-                      _MessagePanel(
-                        icon: Icons.check_circle_outline_rounded,
-                        message: _saveMessage!,
-                      ),
-                    if (_discardMessage != null)
-                      _MessagePanel(
-                        icon: Icons.delete_outline_rounded,
-                        message: _discardMessage!,
-                      ),
-                    if (_playbackError != null)
-                      _MessagePanel(
-                        icon: Icons.error_outline_rounded,
-                        message: _playbackError!,
-                        isError: true,
-                      ),
-                  ],
+            PopupMenuButton<String>(
+              enabled: !_isSelecting && !_isSubmitting,
+              key: const Key('manageFoldersMenu'),
+              tooltip: '更多',
+              onSelected: (action) {
+                if (action == 'folders') {
+                  _openFolderManagement();
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  key: Key('manageFoldersItem'),
+                  value: 'folders',
+                  child: Text('文件夹管理'),
                 ),
-              ),
-            Expanded(child: _buildRecordingList(context)),
+              ],
+            ),
           ],
         ),
-      ),
-      bottomSheet: _buildPlaybackControls(context),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isSubmitting ? null : _requestPermissionAndStart,
-        icon: const Icon(Icons.mic_rounded),
-        label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              if (_permissionMessage != null ||
+                  _serviceError != null ||
+                  _saveMessage != null ||
+                  _discardMessage != null ||
+                  _playbackError != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_permissionMessage != null) ...[
+                        _MessagePanel(
+                          icon: Icons.mic_off_rounded,
+                          message: _permissionMessage!,
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: _isSubmitting ? null : _openAppSettings,
+                            icon: const Icon(Icons.settings_outlined),
+                            label: const Text('前往系统设置'),
+                          ),
+                        ),
+                      ],
+                      if (_serviceError != null)
+                        _MessagePanel(
+                          icon: Icons.error_outline_rounded,
+                          message: _serviceError!,
+                          isError: true,
+                        ),
+                      if (_saveMessage != null)
+                        _MessagePanel(
+                          icon: Icons.check_circle_outline_rounded,
+                          message: _saveMessage!,
+                        ),
+                      if (_discardMessage != null)
+                        _MessagePanel(
+                          icon: Icons.delete_outline_rounded,
+                          message: _discardMessage!,
+                        ),
+                      if (_playbackError != null)
+                        _MessagePanel(
+                          icon: Icons.error_outline_rounded,
+                          message: _playbackError!,
+                          isError: true,
+                        ),
+                    ],
+                  ),
+                ),
+              Expanded(child: _buildRecordingList(context)),
+              if (_isSelecting)
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '已选 ${_selectedRecordingIds.length} 条',
+                              ),
+                            ),
+                            TextButton(
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () => setState(() {
+                                      final visibleIds = _visibleRecordings
+                                          .map((r) => r.id)
+                                          .toSet();
+                                      if (visibleIds.isNotEmpty &&
+                                          _selectedRecordingIds.containsAll(
+                                            visibleIds,
+                                          )) {
+                                        _selectedRecordingIds.clear();
+                                      } else {
+                                        _selectedRecordingIds.addAll(
+                                          visibleIds,
+                                        );
+                                      }
+                                    }),
+                              child: Text(
+                                _visibleRecordings.isNotEmpty &&
+                                        _selectedRecordingIds.length ==
+                                            _visibleRecordings.length
+                                    ? '取消全选'
+                                    : '全选',
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    _isSubmitting ||
+                                        _selectedRecordingIds.isEmpty
+                                    ? null
+                                    : () => _operateOnSelection(delete: false),
+                                icon: const Icon(Icons.drive_file_move_outline),
+                                label: const Text('移动'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed:
+                                    _isSubmitting ||
+                                        _selectedRecordingIds.isEmpty
+                                    ? null
+                                    : () => _operateOnSelection(delete: true),
+                                icon: const Icon(Icons.delete_outline),
+                                label: const Text('删除'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (_isApplyingBatch) const LinearProgressIndicator(),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        bottomSheet: _isSelecting ? null : _buildPlaybackControls(context),
+        floatingActionButton: _isSelecting
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: _isSubmitting ? null : _requestPermissionAndStart,
+                icon: const Icon(Icons.mic_rounded),
+                label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
+              ),
       ),
     );
   }
@@ -1003,9 +1229,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     }
 
     return RefreshIndicator(
-      onRefresh: _loadRecordings,
+      onRefresh: () async {
+        if (!_isSubmitting) await _loadRecordings();
+      },
       child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(8, 12, 8, 176),
+        padding: EdgeInsets.fromLTRB(8, 12, 8, _isSelecting ? 12 : 176),
         itemCount: visibleRecordings.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
@@ -1014,8 +1242,25 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
               _playbackStatus.recordingId == recording.id &&
               _playbackStatus.state == PlaybackState.playing;
           return ListTile(
-            onTap: () => _togglePlayback(recording),
-            leading: const Icon(Icons.graphic_eq_rounded),
+            key: Key('recordingRow-${recording.id}'),
+            selected: _selectedRecordingIds.contains(recording.id),
+            onTap: _isSubmitting
+                ? null
+                : () => _isSelecting
+                      ? _toggleSelection(recording.id)
+                      : _togglePlayback(recording),
+            onLongPress: _isSubmitting
+                ? null
+                : () => _toggleSelection(recording.id),
+            leading: _isSelecting
+                ? Checkbox(
+                    value: _selectedRecordingIds.contains(recording.id),
+                    semanticLabel: '选择 ${recording.title}',
+                    onChanged: _isSubmitting
+                        ? null
+                        : (_) => _toggleSelection(recording.id),
+                  )
+                : const Icon(Icons.graphic_eq_rounded),
             title: Text(
               recording.title,
               maxLines: 1,
@@ -1025,40 +1270,42 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
               '${_formatDateTime(recording.createdAt)} · '
               '${_formatDuration(recording.duration)}',
             ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  onPressed: () => _togglePlayback(recording),
-                  icon: Icon(
-                    isPlaying
-                        ? Icons.pause_circle_outline_rounded
-                        : Icons.play_circle_outline_rounded,
+            trailing: _isSelecting
+                ? null
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        onPressed: () => _togglePlayback(recording),
+                        icon: Icon(
+                          isPlaying
+                              ? Icons.pause_circle_outline_rounded
+                              : Icons.play_circle_outline_rounded,
+                        ),
+                        tooltip: isPlaying ? '暂停播放' : '播放录音',
+                      ),
+                      PopupMenuButton<String>(
+                        tooltip: '录音操作',
+                        onSelected: (action) {
+                          if (action == 'rename') {
+                            _renameRecording(recording);
+                          } else if (action == 'move') {
+                            _moveRecording(recording);
+                          } else if (action == 'share') {
+                            _shareRecording(recording);
+                          } else if (action == 'delete') {
+                            _deleteRecording(recording);
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(value: 'rename', child: Text('重命名')),
+                          PopupMenuItem(value: 'move', child: Text('移动到文件夹')),
+                          PopupMenuItem(value: 'share', child: Text('分享')),
+                          PopupMenuItem(value: 'delete', child: Text('删除')),
+                        ],
+                      ),
+                    ],
                   ),
-                  tooltip: isPlaying ? '暂停播放' : '播放录音',
-                ),
-                PopupMenuButton<String>(
-                  tooltip: '录音操作',
-                  onSelected: (action) {
-                    if (action == 'rename') {
-                      _renameRecording(recording);
-                    } else if (action == 'move') {
-                      _moveRecording(recording);
-                    } else if (action == 'share') {
-                      _shareRecording(recording);
-                    } else if (action == 'delete') {
-                      _deleteRecording(recording);
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem(value: 'rename', child: Text('重命名')),
-                    PopupMenuItem(value: 'move', child: Text('移动到文件夹')),
-                    PopupMenuItem(value: 'share', child: Text('分享')),
-                    PopupMenuItem(value: 'delete', child: Text('删除')),
-                  ],
-                ),
-              ],
-            ),
           );
         },
       ),
