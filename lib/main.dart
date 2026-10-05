@@ -383,6 +383,53 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
     }
   }
 
+  Future<void> _deleteRecording(Recording recording) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('移入最近删除？'),
+        content: const Text('录音会保留在最近删除中，可在保留期内恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('移入最近删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _serviceError = null;
+    });
+    try {
+      if (_playbackStatus.recordingId == recording.id) {
+        await _playbackService.stop();
+      }
+      final store = await _getRecordingStore();
+      await store.softDeleteRecording(
+        recordingId: recording.id,
+        deletedAt: DateTime.now(),
+      );
+      await _loadRecordings();
+    } catch (_) {
+      _setServiceError('无法删除该录音。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
   Future<void> _openFolderManagement() async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
@@ -999,12 +1046,15 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                       _moveRecording(recording);
                     } else if (action == 'share') {
                       _shareRecording(recording);
+                    } else if (action == 'delete') {
+                      _deleteRecording(recording);
                     }
                   },
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: 'rename', child: Text('重命名')),
                     PopupMenuItem(value: 'move', child: Text('移动到文件夹')),
                     PopupMenuItem(value: 'share', child: Text('分享')),
+                    PopupMenuItem(value: 'delete', child: Text('删除')),
                   ],
                 ),
               ],

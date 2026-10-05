@@ -276,6 +276,29 @@ void main() {
     expect(sharePlatform.fileName, '播放进度测试.m4a');
   });
 
+  testWidgets('moves a recording to recently deleted after confirmation', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy()
+      ..recordings = [_recording('recording-1')];
+    await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('录音操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('移入最近删除？'), findsOneWidget);
+    expect(recordingStore.recordings.single.isDeleted, isFalse);
+
+    await tester.tap(find.text('移入最近删除'));
+    await tester.pumpAndSettle();
+
+    expect(recordingStore.recordings.single.isDeleted, isTrue);
+    expect(find.text('播放进度测试'), findsNothing);
+  });
+
   testWidgets(
     'creates a uniquely named logical folder from folder management',
     (WidgetTester tester) async {
@@ -601,11 +624,13 @@ class _RecordingStoreSpy extends RecordingStore {
 
   @override
   Future<List<Recording>> listRecordings({String? folderId}) async {
-    return folderId == null
-        ? recordings
-        : recordings
-              .where((recording) => recording.folderId == folderId)
-              .toList();
+    return recordings
+        .where(
+          (recording) =>
+              !recording.isDeleted &&
+              (folderId == null || recording.folderId == folderId),
+        )
+        .toList();
   }
 
   @override
@@ -723,6 +748,30 @@ class _RecordingStoreSpy extends RecordingStore {
             fileSizeBytes: recording.fileSizeBytes,
             folderId: recording.folderId,
             deletedAt: recording.deletedAt,
+            wasInterrupted: recording.wasInterrupted,
+          )
+        else
+          recording,
+    ];
+  }
+
+  @override
+  Future<void> softDeleteRecording({
+    required String recordingId,
+    required DateTime deletedAt,
+  }) async {
+    recordings = [
+      for (final recording in recordings)
+        if (recording.id == recordingId)
+          Recording(
+            id: recording.id,
+            title: recording.title,
+            filePath: recording.filePath,
+            createdAt: recording.createdAt,
+            duration: recording.duration,
+            fileSizeBytes: recording.fileSizeBytes,
+            folderId: recording.folderId,
+            deletedAt: deletedAt.toUtc(),
             wasInterrupted: recording.wasInterrupted,
           )
         else

@@ -151,6 +151,38 @@ void main() {
     });
 
     test(
+      'soft deletes an active recording without changing its file metadata',
+      () async {
+        final createdAt = DateTime.utc(2026, 9, 29, 8);
+        final deletedAt = createdAt.add(const Duration(days: 1));
+        await store.saveRecording(
+          Recording(
+            id: 'recording-1',
+            title: 'Planning session',
+            filePath: '/private/recording-1.m4a',
+            createdAt: createdAt,
+            duration: const Duration(seconds: 12),
+            fileSizeBytes: 512,
+          ),
+        );
+
+        await store.softDeleteRecording(
+          recordingId: 'recording-1',
+          deletedAt: deletedAt,
+        );
+
+        expect(await store.listRecordings(), isEmpty);
+        final deleted = (await store.listRecentlyDeleted()).single;
+        expect(deleted.title, 'Planning session');
+        expect(deleted.filePath, '/private/recording-1.m4a');
+        expect(deleted.createdAt, createdAt);
+        expect(deleted.duration, const Duration(seconds: 12));
+        expect(deleted.fileSizeBytes, 512);
+        expect(deleted.deletedAt, deletedAt);
+      },
+    );
+
+    test(
       'moves an active recording without changing its file metadata',
       () async {
         final createdAt = DateTime.utc(2026, 9, 29, 8);
