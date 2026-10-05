@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import 'models/recording.dart';
@@ -12,12 +14,16 @@ class RecordingStore {
   RecordingStore({
     required this.databasePath,
     sqflite.DatabaseFactory? databaseFactory,
-  }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory;
+    Future<void> Function(String)? deleteAudioFile,
+  }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
+       _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
 
   static const _schemaVersion = 1;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
+  final Future<void> Function(String) _deleteAudioFile;
+  static const retentionPeriod = Duration(days: 30);
 
   sqflite.Database? _database;
   Future<sqflite.Database>? _openingDatabase;
@@ -279,27 +285,93 @@ class RecordingStore {
     _requireSingleUpdatedRow(updatedCount, recordingId);
   }
 
-  Future<void> restoreRecording(String recordingId) async {
+  Future<void> restoreRecording(String recordingId, {DateTime? now}) async {
     _requireNonEmpty(recordingId, 'recordingId');
     final database = await _openDatabase();
-    final updatedCount = await database.update(
-      'recordings',
-      {'deleted_at': null},
-      where: 'id = ? AND deleted_at IS NOT NULL',
-      whereArgs: [recordingId],
-    );
-    _requireSingleUpdatedRow(updatedCount, recordingId);
+    await database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'recordings',
+        where: 'id = ? AND deleted_at > ?',
+        whereArgs: [
+          recordingId,
+          (now ?? DateTime.now())
+              .toUtc()
+              .subtract(retentionPeriod)
+              .millisecondsSinceEpoch,
+        ],
+      );
+      _requireSingleUpdatedRow(rows.length, recordingId);
+      if (!await File(rows.single['file_path']! as String).exists()) {
+        throw StateError('The recording audio file is missing.');
+      }
+      await transaction.update(
+        'recordings',
+        {'deleted_at': null},
+        where: 'id = ?',
+        whereArgs: [recordingId],
+      );
+    });
   }
 
   Future<void> permanentlyDeleteRecording(String recordingId) async {
+    await _deleteRecording(recordingId);
+  }
+
+  Future<void> _deleteRecording(String recordingId, {DateTime? cutoff}) async {
     _requireNonEmpty(recordingId, 'recordingId');
     final database = await _openDatabase();
-    final deletedCount = await database.delete(
-      'recordings',
-      where: 'id = ? AND deleted_at IS NOT NULL',
-      whereArgs: [recordingId],
-    );
-    _requireSingleUpdatedRow(deletedCount, recordingId);
+    await database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'recordings',
+        where: 'id = ? AND deleted_at IS NOT NULL',
+        whereArgs: [recordingId],
+      );
+      if (cutoff != null &&
+          (rows.isEmpty ||
+              Recording.fromDatabaseMap(
+                rows.single,
+              ).deletedAt!.isAfter(cutoff))) {
+        return;
+      }
+      _requireSingleUpdatedRow(rows.length, recordingId);
+      // Delete the audio first. On failure the index remains available for
+      // retry. If the process stops before the index commit, a missing file
+      // is safe to delete again. The transaction serializes restore/delete.
+      await _deleteAudioFile(rows.single['file_path']! as String);
+      await transaction.delete(
+        'recordings',
+        where: 'id = ?',
+        whereArgs: [recordingId],
+      );
+    });
+  }
+
+  /// Returns failures while still attempting every expired recording.
+  /// Retained indexes allow a later startup/foreground refresh to retry.
+  Future<List<String>> purgeExpiredRecordings({DateTime? now}) async {
+    final cutoff = (now ?? DateTime.now()).toUtc().subtract(retentionPeriod);
+    final deleted = await listRecentlyDeleted();
+    final failures = <String>[];
+    for (final recording in deleted) {
+      if (recording.deletedAt!.isAfter(cutoff)) continue;
+      try {
+        await _deleteRecording(recording.id, cutoff: cutoff);
+      } catch (_) {
+        failures.add(recording.id);
+      }
+    }
+    return failures;
+  }
+
+  static Future<void> _deleteFileIfPresent(String filePath) async {
+    try {
+      await File(filePath).delete();
+    } on FileSystemException catch (error) {
+      // ENOENT / Windows path not found; all other errors require a retry.
+      if (error.osError?.errorCode != 2 && error.osError?.errorCode != 3) {
+        rethrow;
+      }
+    }
   }
 
   Future<sqflite.Database> _openDatabase() {

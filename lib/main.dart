@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'playback/audio_playback_service.dart';
 import 'recording/recording_service.dart';
 import 'sharing/audio_share_service.dart';
+import 'storage/recently_deleted_page.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
@@ -69,7 +70,8 @@ class RecordingHomePage extends StatefulWidget {
   State<RecordingHomePage> createState() => _RecordingHomePageState();
 }
 
-class _RecordingHomePageState extends State<RecordingHomePage> {
+class _RecordingHomePageState extends State<RecordingHomePage>
+    with WidgetsBindingObserver {
   static const _idleStatus = RecordingSessionStatus(
     state: RecordingLifecycleState.idle,
     elapsed: Duration.zero,
@@ -131,6 +133,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ownsPlaybackService = widget.playbackService == null;
     _playbackService = widget.playbackService ?? AudioPlaybackService();
     _audioShareService = widget.audioShareService ?? AudioShareService();
@@ -143,11 +146,12 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       onError: _handleEventError,
     );
     _loadCurrentStatus();
-    _loadRecordings();
+    _initializeLibrary();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _successMessageTimer?.cancel();
     _eventSubscription.cancel();
     _playbackSubscription.cancel();
@@ -155,6 +159,45 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       unawaited(_playbackService.dispose());
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _cleanupExpiredRecordings();
+    }
+  }
+
+  Future<void> _initializeLibrary() async {
+    await _loadRecordings();
+    await _cleanupExpiredRecordings();
+  }
+
+  Future<void> _cleanupExpiredRecordings() async {
+    try {
+      final failures = await (await _getRecordingStore())
+          .purgeExpiredRecordings();
+      if (failures.isNotEmpty) {
+        _setServiceError('部分过期录音未能清理，请在最近删除中重试。');
+      }
+    } catch (_) {
+      _setServiceError('无法清理过期录音，请在最近删除中重试。');
+    }
+  }
+
+  Future<void> _openRecentlyDeleted() async {
+    try {
+      final store = await _getRecordingStore();
+      if (!mounted) return;
+      await _playbackService.stop();
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(builder: (_) => RecentlyDeletedPage(store: store)),
+      );
+      if (mounted) await _loadRecordings();
+    } catch (_) {
+      _setLibraryError('无法打开最近删除。');
+    }
   }
 
   // Called inside setState so replacement and clearing render together with
@@ -1027,6 +1070,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
               onSelected: (action) {
                 if (action == 'folders') {
                   _openFolderManagement();
+                } else if (action == 'recentlyDeleted') {
+                  _openRecentlyDeleted();
                 }
               },
               itemBuilder: (context) => const [
@@ -1035,6 +1080,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                   value: 'folders',
                   child: Text('文件夹管理'),
                 ),
+                PopupMenuItem(value: 'recentlyDeleted', child: Text('最近删除')),
               ],
             ),
           ],

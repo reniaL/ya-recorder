@@ -99,11 +99,13 @@ void main() {
         await store.createFolder(id: 'work', name: 'Work');
         final created = DateTime.utc(2026, 10, 5);
         for (final id in ['one', 'two', 'untouched']) {
+          final audioPath = path.join(temporaryDirectory.path, '$id.m4a');
+          await File(audioPath).writeAsBytes(List.filled(512, 1));
           await store.saveRecording(
             Recording(
               id: id,
               title: id,
-              filePath: '/private/$id.m4a',
+              filePath: audioPath,
               createdAt: created,
               duration: const Duration(seconds: 12),
               fileSizeBytes: 512,
@@ -135,7 +137,7 @@ void main() {
         final moved = await store.listRecordings(folderId: 'work');
         expect(moved.length, 2);
         for (final r in moved) {
-          expect(r.filePath, '/private/${r.id}.m4a');
+          expect(r.filePath, path.join(temporaryDirectory.path, '${r.id}.m4a'));
           expect(r.createdAt, created);
           expect(r.duration, const Duration(seconds: 12));
           expect(r.fileSizeBytes, 512);

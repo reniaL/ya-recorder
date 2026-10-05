@@ -152,6 +152,39 @@ void main() {
     expect(find.text('2026-09-30 16:15 · 01:05'), findsOneWidget);
   });
 
+  testWidgets(
+    'recently deleted opens from More and restored recordings refresh on return',
+    (tester) async {
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      await store.softDeleteRecording(
+        recordingId: 'one',
+        deletedAt: DateTime.now(),
+      );
+      final playback = AudioPlaybackService(backend: _FakePlaybackBackend());
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('播放进度测试'), findsNothing);
+      await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('最近删除'));
+      await tester.pumpAndSettle();
+      expect(find.text('播放进度测试'), findsOneWidget);
+      expect(find.text('开始录音'), findsNothing);
+      await tester.tap(find.byTooltip('播放进度测试的操作'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('恢复'));
+      await tester.pumpAndSettle();
+      expect(find.text('最近删除为空'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('全部录音'), findsOneWidget);
+      expect(find.text('播放进度测试'), findsOneWidget);
+    },
+  );
+
   testWidgets('searches recording titles in the current scope', (
     WidgetTester tester,
   ) async {
@@ -929,6 +962,30 @@ class _RecordingStoreSpy extends RecordingStore {
   bool failBatchDelete = false;
   Future<void>? batchDeleteGate;
   int batchDeleteCalls = 0;
+
+  @override
+  Future<List<Recording>> listRecentlyDeleted() async =>
+      recordings.where((r) => r.isDeleted).toList();
+
+  @override
+  Future<void> restoreRecording(String recordingId, {DateTime? now}) async {
+    recordings = [
+      for (final r in recordings)
+        if (r.id == recordingId)
+          Recording(
+            id: r.id,
+            title: r.title,
+            filePath: r.filePath,
+            createdAt: r.createdAt,
+            duration: r.duration,
+            fileSizeBytes: r.fileSizeBytes,
+            folderId: r.folderId,
+            wasInterrupted: r.wasInterrupted,
+          )
+        else
+          r,
+    ];
+  }
 
   @override
   Future<void> moveRecordings({
