@@ -315,6 +315,280 @@ void main() {
     });
   }
 
+  testWidgets(
+    'row opens detail with autoplay and toolbar return stops playback',
+    (tester) async {
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('recordingRow-one')),
+          matching: find.text('播放进度测试'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('录音详情'), findsOneWidget);
+      expect(playback.status.state, PlaybackState.playing);
+      expect(backend.playCalls, 1);
+      expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
+      await tester.tap(find.byKey(const Key('recordingDetailProgress')));
+      await tester.pump();
+      expect(backend.seekPositions, isNotEmpty);
+      await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('已暂停'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(playback.status.recordingId, isNull);
+      expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
+      expect(find.byKey(const Key('recordingRow-one')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'bottom title preserves playing or paused progress and system return stops',
+    (tester) async {
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('播放录音'));
+      await tester.pumpAndSettle();
+      expect(find.text('录音详情'), findsNothing);
+      await playback.seek(const Duration(seconds: 20));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('libraryPlaybackTitle')));
+      await tester.pumpAndSettle();
+      expect(playback.status.position.inSeconds, 20);
+      expect(backend.playCalls, 1);
+      expect(backend.filePaths.length, 1);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(playback.status.recordingId, isNull);
+
+      await tester.tap(find.byTooltip('播放录音'));
+      await tester.pumpAndSettle();
+      await playback.seek(const Duration(seconds: 30));
+      await playback.pause();
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('libraryPlaybackTitle')));
+      await tester.pumpAndSettle();
+      expect(playback.status.position.inSeconds, 30);
+      expect(playback.status.state, PlaybackState.playing);
+      expect(backend.filePaths.length, 2);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('another detail replaces playback and restores search scope', (
+    tester,
+  ) async {
+    final store = _RecordingStoreSpy()
+      ..recordings = [_recording('one'), _recording('two')];
+    final backend = _FakePlaybackBackend();
+    final playback = AudioPlaybackService(backend: backend);
+    addTearDown(playback.dispose);
+    await tester.pumpWidget(
+      MyApp(recordingStore: store, playbackService: playback),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('播放录音').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingSearchButton')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('recordingSearchField')), '进度');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingRow-two')));
+    await tester.pumpAndSettle();
+    expect(playback.status.recordingId, 'two');
+    expect(backend.filePaths, ['/private/one.m4a', '/private/two.m4a']);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(playback.status.recordingId, isNull);
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).controller.text,
+      '进度',
+    );
+    expect(find.byKey(const Key('recordingRow-two')), findsOneWidget);
+  });
+
+  testWidgets('return during autoplay loading cancels delayed sound', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final backend = _FakePlaybackBackend()..loadGate = gate.future;
+    final playback = AudioPlaybackService(backend: backend);
+    addTearDown(playback.dispose);
+    final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+    await tester.pumpWidget(
+      MyApp(recordingStore: store, playbackService: playback),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingRow-one')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('正在加载'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(playback.status.recordingId, isNull);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(backend.playCalls, 0);
+    expect(find.text('录音详情'), findsNothing);
+    expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
+  });
+
+  testWidgets(
+    'detail retries failed autoplay and fits narrow large-text screen',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final backend = _FakePlaybackBackend()..failLoad = true;
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final longTitle = List.filled(12, '长标题录音').join();
+      await store.renameRecording(recordingId: 'one', title: longTitle);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      expect(find.text('播放失败'), findsOneWidget);
+      expect(backend.playCalls, 0);
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.widget<Text>(find.byKey(const Key('recordingDetailTitle'))).data,
+        longTitle,
+      );
+      backend.failLoad = false;
+      await tester.ensureVisible(find.text('重试播放'));
+      await tester.tap(find.text('重试播放'));
+      await tester.pumpAndSettle();
+      expect(playback.status.state, PlaybackState.playing);
+      expect(backend.filePaths.length, 2);
+      await tester.ensureVisible(
+        find.byKey(const Key('recordingDetailPlayButton')),
+      );
+      await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
+      await tester.pumpAndSettle();
+      expect(playback.status.state, PlaybackState.paused);
+      expect(tester.takeException(), isNull);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('selection row clicks do not navigate or autoplay', (
+    tester,
+  ) async {
+    final backend = _FakePlaybackBackend();
+    final playback = AudioPlaybackService(backend: backend);
+    addTearDown(playback.dispose);
+    final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+    await tester.pumpWidget(
+      MyApp(recordingStore: store, playbackService: playback),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('多选录音'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingRow-one')));
+    await tester.pumpAndSettle();
+    expect(find.text('已选 1 条'), findsOneWidget);
+    expect(find.text('录音详情'), findsNothing);
+    expect(backend.playCalls, 0);
+  });
+
+  testWidgets('detail return preserves folder and scrolled list position', (
+    tester,
+  ) async {
+    final store = _RecordingStoreSpy()
+      ..folders = [
+        RecordingFolder(
+          id: 'folder',
+          name: '测试目录',
+          createdAt: DateTime.utc(2026),
+        ),
+      ]
+      ..recordings = List.generate(30, (index) => _recording('item-$index'));
+    for (final recording in store.recordings) {
+      await store.moveRecording(recordingId: recording.id, folderId: 'folder');
+    }
+    final playback = AudioPlaybackService(backend: _FakePlaybackBackend());
+    addTearDown(playback.dispose);
+    await tester.pumpWidget(
+      MyApp(recordingStore: store, playbackService: playback),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folderScopeSelector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folderScope-folder')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('recordingRow-item-20')),
+      200,
+    );
+    await tester.pumpAndSettle();
+    final position = tester
+        .state<ScrollableState>(find.byType(Scrollable))
+        .position
+        .pixels;
+    expect(position, greaterThan(0));
+    await tester.tap(find.byKey(const Key('recordingRow-item-20')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('测试目录'), findsOneWidget);
+    expect(
+      tester.state<ScrollableState>(find.byType(Scrollable)).position.pixels,
+      position,
+    );
+    expect(playback.status.recordingId, isNull);
+  });
+
+  testWidgets(
+    'completed detail stays open and swipe back stops playback',
+    (tester) async {
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      backend.emit(AudioBackendState.completed);
+      await tester.pumpAndSettle();
+      expect(find.text('录音详情'), findsOneWidget);
+      expect(find.text('未播放'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
+      await tester.pumpAndSettle();
+      expect(backend.seekPositions, [Duration.zero]);
+      expect(playback.status.state, PlaybackState.playing);
+      await tester.dragFrom(const Offset(5, 200), const Offset(700, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('录音详情'), findsNothing);
+      expect(playback.status.recordingId, isNull);
+    },
+    variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+  );
+
   testWidgets('bottom player displays and seeks playback progress', (
     WidgetTester tester,
   ) async {
@@ -1319,6 +1593,12 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
   final StreamController<Duration> _positionController =
       StreamController<Duration>.broadcast();
   final List<Duration> seekPositions = [];
+  final List<String> filePaths = [];
+  int playCalls = 0;
+  Future<void>? loadGate;
+  bool failLoad = false;
+
+  void emit(AudioBackendState state) => _stateController.add(state);
 
   @override
   Stream<AudioBackendState> get states => _stateController.stream;
@@ -1336,7 +1616,9 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
   Future<void> pause() async {}
 
   @override
-  Future<void> play() async {}
+  Future<void> play() async {
+    playCalls += 1;
+  }
 
   @override
   Future<void> seek(Duration position) async {
@@ -1344,7 +1626,11 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
   }
 
   @override
-  Future<void> setFilePath(String filePath) async {}
+  Future<void> setFilePath(String filePath) async {
+    filePaths.add(filePath);
+    if (loadGate != null) await loadGate;
+    if (failLoad) throw StateError('Cannot load audio');
+  }
 
   @override
   Future<void> stop() async {}

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'playback/audio_playback_service.dart';
+import 'playback/recording_detail_page.dart';
 import 'recording/recording_service.dart';
 import 'sharing/audio_share_service.dart';
 import 'storage/recently_deleted_page.dart';
@@ -86,6 +87,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   RecordingSessionStatus _status = _idleStatus;
   PlaybackStatus _playbackStatus = const PlaybackStatus.idle();
   bool _isSubmitting = false;
+  bool _isDetailOpen = false;
   bool _isPersistingRecording = false;
   bool _isCancellingRecording = false;
   bool _isLoadingRecordings = true;
@@ -335,6 +337,24 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       _playbackError = null;
     });
     await _playbackService.toggle(recording);
+  }
+
+  Future<void> _openRecordingDetail(Recording recording) async {
+    if (_isSelecting || _isSubmitting || _isDetailOpen) return;
+    _isDetailOpen = true;
+    setState(() => _playbackError = null);
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => RecordingDetailPage(
+            recording: recording,
+            playbackService: _playbackService,
+          ),
+        ),
+      );
+    } finally {
+      _isDetailOpen = false;
+    }
   }
 
   Future<void> _shareRecording(Recording recording) async {
@@ -1331,7 +1351,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                 ? null
                 : () => _isSelecting
                       ? _toggleSelection(recording.id)
-                      : _togglePlayback(recording),
+                      : _openRecordingDetail(recording),
             onLongPress: _isSubmitting
                 ? null
                 : () => _toggleSelection(recording.id),
@@ -1428,11 +1448,18 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                activeRecording.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleSmall,
+              InkWell(
+                key: const Key('libraryPlaybackTitle'),
+                onTap: () => _openRecordingDetail(activeRecording),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    activeRecording.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
               ),
               Semantics(
                 label: '播放进度',

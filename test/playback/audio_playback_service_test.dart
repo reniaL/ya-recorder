@@ -67,6 +67,106 @@ void main() {
     expect(backend.seekPositions, [const Duration(milliseconds: 250)]);
     expect(service.status.position, const Duration(milliseconds: 250));
   });
+
+  test(
+    'explicit play preserves playing position and resumes without reload',
+    () async {
+      final recording = _recording('one');
+      await service.play(recording);
+      await service.seek(const Duration(milliseconds: 400));
+      await service.play(recording);
+      expect(backend.playCalls, 1);
+      expect(service.status.position.inMilliseconds, 400);
+      await service.pause();
+      await service.play(recording);
+      expect(service.status.state, PlaybackState.playing);
+      expect(service.status.position.inMilliseconds, 400);
+      expect(backend.filePaths, [recording.filePath]);
+      expect(backend.playCalls, 2);
+    },
+  );
+
+  test('completed recording replays from the actual backend start', () async {
+    final recording = _recording('one');
+    await service.play(recording);
+    backend.emit(AudioBackendState.completed);
+    await Future<void>.delayed(Duration.zero);
+    backend.emitPosition(const Duration(seconds: 1));
+    await Future<void>.delayed(Duration.zero);
+    expect(service.status.position, Duration.zero);
+    await service.play(recording);
+    expect(backend.seekPositions, [Duration.zero]);
+    expect(backend.playCalls, 2);
+  });
+
+  test('stop invalidates an in-flight file load before it can play', () async {
+    final gate = Completer<void>();
+    backend.loadGate = gate.future;
+    final loading = service.play(_recording('one'));
+    await Future<void>.delayed(Duration.zero);
+    expect(service.status.state, PlaybackState.loading);
+    final stopping = service.stop();
+    expect(service.status.recordingId, isNull);
+    gate.complete();
+    await Future.wait([loading, stopping]);
+    expect(backend.playCalls, 0);
+    expect(service.status.recordingId, isNull);
+  });
+
+  test(
+    'manual seek after completion is preserved when playback resumes',
+    () async {
+      final recording = _recording('one');
+      await service.play(recording);
+      backend.emit(AudioBackendState.completed);
+      await Future<void>.delayed(Duration.zero);
+      await service.seek(const Duration(milliseconds: 500));
+      await service.play(recording);
+      expect(service.status.position.inMilliseconds, 500);
+      expect(backend.seekPositions, [const Duration(milliseconds: 500)]);
+    },
+  );
+
+  test('a new recording cannot race the cancelled previous load', () async {
+    final gate = Completer<void>();
+    backend.loadGate = gate.future;
+    final first = service.play(_recording('one'));
+    await Future<void>.delayed(Duration.zero);
+    final second = service.play(_recording('two'));
+    expect(service.status.recordingId, 'two');
+    gate.complete();
+    await Future.wait([first, second]);
+    expect(backend.filePaths, ['/private/one.m4a', '/private/two.m4a']);
+    expect(backend.playCalls, 1);
+    expect(service.status.recordingId, 'two');
+    expect(service.status.state, PlaybackState.playing);
+  });
+
+  test('failed autoplay retries by loading the file again', () async {
+    backend.failLoad = true;
+    await service.play(_recording('one'));
+    expect(service.status.state, PlaybackState.failed);
+    expect(backend.playCalls, 0);
+    backend.failLoad = false;
+    await service.play(_recording('one'));
+    expect(service.status.state, PlaybackState.playing);
+    expect(backend.filePaths.length, 2);
+  });
+
+  test(
+    'late errors from cancelled play cannot affect another recording',
+    () async {
+      final gate = Completer<void>();
+      backend.playGate = gate.future;
+      await service.play(_recording('one'));
+      backend.playGate = null;
+      await service.play(_recording('two'));
+      gate.completeError(StateError('old playback failed'));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.status.recordingId, 'two');
+      expect(service.status.state, PlaybackState.playing);
+    },
+  );
 }
 
 Recording _recording(String id) {
@@ -90,6 +190,9 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   int playCalls = 0;
   int pauseCalls = 0;
   int stopCalls = 0;
+  Future<void>? loadGate;
+  Future<void>? playGate;
+  bool failLoad = false;
 
   @override
   Stream<AudioBackendState> get states => _stateController.stream;
@@ -115,6 +218,7 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   @override
   Future<void> play() async {
     playCalls += 1;
+    if (playGate != null) await playGate;
   }
 
   @override
@@ -125,6 +229,8 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   @override
   Future<void> setFilePath(String filePath) async {
     filePaths.add(filePath);
+    if (loadGate != null) await loadGate;
+    if (failLoad) throw StateError('Cannot load audio');
   }
 
   @override
