@@ -234,6 +234,87 @@ void main() {
     expect(find.text('没有匹配的录音'), findsOneWidget);
   });
 
+  for (final viewport in [const Size(390, 844), const Size(320, 640)]) {
+    testWidgets('library bottom controls do not overlap at $viewport', (
+      tester,
+    ) async {
+      tester.view.physicalSize = viewport;
+      tester.view.devicePixelRatio = 1;
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      tester.platformDispatcher.textScaleFactorTestValue = viewport.width == 320
+          ? 2
+          : 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final store = _RecordingStoreSpy()
+        ..recordings = List.generate(20, (index) => _recording('item-$index'));
+      final playback = AudioPlaybackService(backend: _FakePlaybackBackend());
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      final fabFinder = find.byType(FloatingActionButton);
+      final playerFinder = find.byKey(const Key('libraryPlaybackControls'));
+      expect(playerFinder, findsNothing);
+      final listBottomWithoutPlayer = tester
+          .getRect(find.byType(ListView))
+          .bottom;
+      expect(
+        tester.getRect(fabFinder).bottom,
+        lessThanOrEqualTo(viewport.height - 34),
+      );
+
+      await tester.tap(find.byTooltip('播放录音').first);
+      await tester.pumpAndSettle();
+      final playerRect = tester.getRect(playerFinder);
+      final fabRect = tester.getRect(fabFinder);
+      expect(playerRect.overlaps(fabRect), isFalse);
+      expect(fabRect.top - playerRect.bottom, greaterThanOrEqualTo(16));
+      expect(fabRect.bottom, lessThanOrEqualTo(viewport.height - 34));
+      expect(
+        tester.getRect(find.byType(ListView)).bottom,
+        lessThanOrEqualTo(playerRect.top),
+      );
+      expect(
+        tester.getRect(find.byType(ListView)).bottom,
+        lessThan(listBottomWithoutPlayer),
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('recordingRow-item-19')),
+        200,
+      );
+      await tester.drag(find.byType(ListView), const Offset(0, -200));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(const Key('recordingRow-item-19'))).bottom,
+        lessThanOrEqualTo(playerRect.top),
+      );
+
+      await tester.tap(find.byTooltip('多选录音'));
+      await tester.pumpAndSettle();
+      expect(playerFinder, findsNothing);
+      expect(fabFinder, findsNothing);
+      await tester.tap(find.byTooltip('退出多选'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(playerFinder).overlaps(tester.getRect(fabFinder)),
+        isFalse,
+      );
+      expect(playback.status.recordingId, 'item-0');
+      await playback.stop();
+      await tester.pumpAndSettle();
+      expect(playerFinder, findsNothing);
+      expect(
+        tester.getRect(find.byType(ListView)).bottom,
+        listBottomWithoutPlayer,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('bottom player displays and seeks playback progress', (
     WidgetTester tester,
   ) async {

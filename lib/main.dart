@@ -1213,14 +1213,33 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             ],
           ),
         ),
-        bottomSheet: _isSelecting ? null : _buildPlaybackControls(context),
-        floatingActionButton: _isSelecting
+        bottomNavigationBar: _isSelecting
             ? null
-            : FloatingActionButton.extended(
+            : _buildLibraryBottomBar(context),
+      ),
+    );
+  }
+
+  Widget _buildLibraryBottomBar(BuildContext context) {
+    final player = _buildPlaybackControls(context);
+    return SafeArea(
+      top: false,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ?player,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FloatingActionButton.extended(
                 onPressed: _isSubmitting ? null : _requestPermissionAndStart,
                 icon: const Icon(Icons.mic_rounded),
                 label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
               ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1297,7 +1316,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         if (!_isSubmitting) await _loadRecordings();
       },
       child: ListView.separated(
-        padding: EdgeInsets.fromLTRB(8, 12, 8, _isSelecting ? 12 : 176),
+        padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
         itemCount: visibleRecordings.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
@@ -1398,9 +1417,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     final colorScheme = Theme.of(context).colorScheme;
 
     return Material(
+      key: const Key('libraryPlaybackControls'),
       color: colorScheme.surfaceContainerHigh,
       child: SafeArea(
         top: false,
+        bottom: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Column(
@@ -1413,27 +1434,22 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                 overflow: TextOverflow.ellipsis,
                 style: Theme.of(context).textTheme.titleSmall,
               ),
+              Semantics(
+                label: '播放进度',
+                child: Slider(
+                  value: position.inMilliseconds.toDouble(),
+                  max: (total.inMilliseconds > 0 ? total.inMilliseconds : 1)
+                      .toDouble(),
+                  onChanged: canSeek
+                      ? (value) => _playbackService.seek(
+                          Duration(milliseconds: value.round()),
+                        )
+                      : null,
+                ),
+              ),
               Row(
                 children: [
-                  Text(_formatDuration(position)),
-                  Expanded(
-                    child: Semantics(
-                      label: '播放进度',
-                      child: Slider(
-                        value: position.inMilliseconds.toDouble(),
-                        max:
-                            (total.inMilliseconds > 0
-                                    ? total.inMilliseconds
-                                    : 1)
-                                .toDouble(),
-                        onChanged: canSeek
-                            ? (value) => _playbackService.seek(
-                                Duration(milliseconds: value.round()),
-                              )
-                            : null,
-                      ),
-                    ),
-                  ),
+                  Expanded(child: Text(_formatDuration(position))),
                   Text(_formatDuration(total)),
                   IconButton(
                     onPressed: _playbackStatus.state == PlaybackState.loading
