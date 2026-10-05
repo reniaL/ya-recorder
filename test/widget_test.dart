@@ -675,6 +675,139 @@ void main() {
     expect(find.text('开始录音'), findsOneWidget);
   });
 
+  testWidgets(
+    'success message can be dismissed without affecting errors or recordings',
+    (tester) async {
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      final store = _RecordingStoreSpy();
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: store,
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      events.add(_savedRecordingEvent('one'));
+      await tester.pumpAndSettle();
+      events.add(const RecordingFailed(code: 'test', message: '录音服务错误'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('关闭提示'));
+      await tester.pumpAndSettle();
+      expect(find.text('录音已保存'), findsNothing);
+      expect(find.text('录音服务错误'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.text('录音服务错误'), findsOneWidget);
+      expect(store.recordings.single.id, 'one');
+    },
+  );
+
+  testWidgets(
+    'new success message replaces the previous message and restarts expiry',
+    (tester) async {
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: _RecordingStoreSpy(),
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      events.add(_savedRecordingEvent('one'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 3));
+      events.add(_savedRecordingEvent('two'));
+      await tester.pumpAndSettle();
+      expect(find.text('录音已保存'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('录音已保存'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('录音已保存'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'starting the next recording clears the previous success message',
+    (tester) async {
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      final playback = AudioPlaybackService(backend: _FakePlaybackBackend());
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: _RecordingStoreSpy(),
+          playbackService: playback,
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      events.add(_savedRecordingEvent('one'));
+      await tester.pumpAndSettle();
+      permissionGranted = true;
+      await tester.tap(find.text('开始录音'));
+      await tester.pumpAndSettle();
+      expect(invokedMethods, contains('start'));
+      expect(find.text('录音已保存'), findsNothing);
+      await tester.pump(const Duration(seconds: 5));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('disposing the page cancels the success timer', (tester) async {
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: _RecordingStoreSpy(),
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('one'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(seconds: 5));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('interrupted save remains visible as an exception result', (
+    tester,
+  ) async {
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    final store = _RecordingStoreSpy();
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('one', wasInterrupted: true));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.text('录音已中断，已录部分已保存。'), findsOneWidget);
+    expect(find.text('录音已保存'), findsNothing);
+    expect(find.byTooltip('关闭提示'), findsNothing);
+    expect(store.recordings.single.wasInterrupted, isTrue);
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -720,6 +853,11 @@ void main() {
       const Duration(seconds: 12),
     );
     expect(find.text('录音已保存'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('录音已保存'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('录音已保存'), findsNothing);
+    expect(recordingStore.savedRecording, isNotNull);
   });
 
   testWidgets(
@@ -775,6 +913,8 @@ void main() {
       expect(recordingStore.savedRecording, isNull);
       expect(find.text('本次录音已放弃'), findsOneWidget);
       expect(find.text('开始录音'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.text('本次录音已放弃'), findsNothing);
     },
   );
 }
@@ -1004,6 +1144,19 @@ Recording _recording(String id) {
     createdAt: DateTime.utc(2026, 9, 30),
     duration: const Duration(minutes: 1),
     fileSizeBytes: 1024,
+  );
+}
+
+RecordingSaved _savedRecordingEvent(String id, {bool wasInterrupted = false}) {
+  return RecordingSaved(
+    SavedNativeRecording(
+      id: id,
+      filePath: '/private/$id.m4a',
+      createdAt: DateTime.utc(2026, 10, 5),
+      duration: const Duration(seconds: 12),
+      fileSizeBytes: 1024,
+      wasInterrupted: wasInterrupted,
+    ),
   );
 }
 

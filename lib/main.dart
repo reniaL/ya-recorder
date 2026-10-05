@@ -93,8 +93,8 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   final Set<String> _selectedRecordingIds = {};
   String? _permissionMessage;
   String? _serviceError;
-  String? _saveMessage;
-  String? _discardMessage;
+  String? _successMessage;
+  Timer? _successMessageTimer;
   String? _libraryError;
   String? _playbackError;
   List<Recording> _recordings = const [];
@@ -148,12 +148,32 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
 
   @override
   void dispose() {
+    _successMessageTimer?.cancel();
     _eventSubscription.cancel();
     _playbackSubscription.cancel();
     if (_ownsPlaybackService) {
       unawaited(_playbackService.dispose());
     }
     super.dispose();
+  }
+
+  // Called inside setState so replacement and clearing render together with
+  // the recording state. Only one success message and timer may exist.
+  void _updateSuccessMessage(String? message) {
+    _successMessageTimer?.cancel();
+    _successMessageTimer = null;
+    _successMessage = message;
+    if (message != null) {
+      _successMessageTimer = Timer(
+        const Duration(seconds: 4),
+        _dismissSuccessMessage,
+      );
+    }
+  }
+
+  void _dismissSuccessMessage() {
+    if (!mounted) return;
+    setState(() => _updateSuccessMessage(null));
   }
 
   Future<void> _loadCurrentStatus() async {
@@ -624,8 +644,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       _isSubmitting = true;
       _permissionMessage = null;
       _serviceError = null;
-      _saveMessage = null;
-      _discardMessage = null;
+      _updateSuccessMessage(null);
     });
 
     try {
@@ -765,7 +784,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       _isSubmitting = true;
       _isCancellingRecording = true;
       _serviceError = null;
-      _discardMessage = null;
+      _updateSuccessMessage(null);
     });
     try {
       await widget.recordingService.cancel();
@@ -802,7 +821,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
           }
           if (cancellationCompleted) {
             _isCancellingRecording = false;
-            _discardMessage = '本次录音已放弃';
+            _updateSuccessMessage('本次录音已放弃');
           }
         });
       case RecordingSaved(:final recording):
@@ -833,7 +852,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
   ) async {
     setState(() {
       _isPersistingRecording = true;
-      _saveMessage = null;
+      _updateSuccessMessage(null);
       _serviceError = null;
     });
 
@@ -856,7 +875,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
       setState(() {
         _isPersistingRecording = false;
         _status = _idleStatus;
-        _saveMessage = '录音已保存';
+        if (savedRecording.wasInterrupted) {
+          _serviceError = '录音已中断，已录部分已保存。';
+        } else {
+          _updateSuccessMessage('录音已保存');
+        }
       });
       await _loadRecordings();
     } catch (_) {
@@ -1022,8 +1045,7 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
             children: [
               if (_permissionMessage != null ||
                   _serviceError != null ||
-                  _saveMessage != null ||
-                  _discardMessage != null ||
+                  _successMessage != null ||
                   _playbackError != null)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
@@ -1051,15 +1073,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                           message: _serviceError!,
                           isError: true,
                         ),
-                      if (_saveMessage != null)
+                      if (_successMessage != null)
                         _MessagePanel(
                           icon: Icons.check_circle_outline_rounded,
-                          message: _saveMessage!,
-                        ),
-                      if (_discardMessage != null)
-                        _MessagePanel(
-                          icon: Icons.delete_outline_rounded,
-                          message: _discardMessage!,
+                          message: _successMessage!,
+                          onDismiss: _dismissSuccessMessage,
                         ),
                       if (_playbackError != null)
                         _MessagePanel(
@@ -1464,17 +1482,11 @@ class _RecordingHomePageState extends State<RecordingHomePage> {
                 ),
                 const SizedBox(height: 16),
               ],
-              if (_saveMessage != null) ...[
+              if (_successMessage != null) ...[
                 _MessagePanel(
                   icon: Icons.check_circle_outline_rounded,
-                  message: _saveMessage!,
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (_discardMessage != null) ...[
-                _MessagePanel(
-                  icon: Icons.delete_outline_rounded,
-                  message: _discardMessage!,
+                  message: _successMessage!,
+                  onDismiss: _dismissSuccessMessage,
                 ),
                 const SizedBox(height: 16),
               ],
@@ -1576,11 +1588,13 @@ class _MessagePanel extends StatelessWidget {
     required this.icon,
     required this.message,
     this.isError = false,
+    this.onDismiss,
   });
 
   final IconData icon;
   final String message;
   final bool isError;
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -1603,6 +1617,12 @@ class _MessagePanel extends StatelessWidget {
             Expanded(
               child: Text(message, style: TextStyle(color: foregroundColor)),
             ),
+            if (onDismiss != null)
+              IconButton(
+                tooltip: '关闭提示',
+                onPressed: onDismiss,
+                icon: const Icon(Icons.close_rounded),
+              ),
           ],
         ),
       ),
