@@ -18,6 +18,163 @@ void main() {
   });
 
   test(
+    'scrub waits for pause and seek before resuming at the final position',
+    () async {
+      await service.play(
+        _recording('one', duration: const Duration(seconds: 60)),
+      );
+      await service.setSpeed(1.5);
+      final pauseGate = Completer<void>();
+      final seekGate = Completer<void>();
+      backend.pauseGate = pauseGate.future;
+      backend.seekGate = seekGate.future;
+      final session = service.beginScrub()!;
+      final finishing = service.finishScrub(
+        session,
+        const Duration(seconds: 30),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(backend.pauseCalls, 1);
+      expect(backend.seekPositions, isEmpty);
+      expect(backend.playCalls, 1);
+      backend.emitPosition(const Duration(seconds: 2));
+      backend.emit(AudioBackendState.playing);
+      await Future<void>.delayed(Duration.zero);
+      expect(service.status.state, PlaybackState.paused);
+      expect(service.status.position, Duration.zero);
+      pauseGate.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(backend.seekPositions, [const Duration(seconds: 30)]);
+      expect(backend.playCalls, 1);
+      seekGate.complete();
+      await finishing;
+      expect(backend.playCalls, 2);
+      expect(service.status.state, PlaybackState.playing);
+      expect(service.status.position.inSeconds, 30);
+      expect(service.status.speed, 1.5);
+      expect(service.isScrubbing, isFalse);
+    },
+  );
+
+  test('paused and completed scrubs do not start playback', () async {
+    await service.play(_recording('one'));
+    await service.pause();
+    await service.finishScrub(
+      service.beginScrub()!,
+      const Duration(milliseconds: 400),
+    );
+    expect(service.status.state, PlaybackState.paused);
+    expect(backend.pauseCalls, 1);
+    expect(backend.playCalls, 1);
+    await service.play(_recording('one'));
+    backend.emit(AudioBackendState.completed);
+    await Future<void>.delayed(Duration.zero);
+    await service.finishScrub(
+      service.beginScrub()!,
+      const Duration(milliseconds: 500),
+    );
+    expect(service.status.state, PlaybackState.idle);
+    expect(service.status.position.inMilliseconds, 500);
+    expect(backend.playCalls, 2);
+  });
+
+  test(
+    'scrubbing to end finishes playing audio but preserves paused end',
+    () async {
+      await service.play(_recording('one'));
+      await service.finishScrub(
+        service.beginScrub()!,
+        const Duration(seconds: 2),
+      );
+      expect(service.status.state, PlaybackState.idle);
+      expect(service.status.position, Duration.zero);
+      expect(backend.playCalls, 1);
+      await service.play(_recording('one'));
+      await service.pause();
+      await service.finishScrub(
+        service.beginScrub()!,
+        const Duration(seconds: 2),
+      );
+      expect(service.status.state, PlaybackState.paused);
+      expect(service.status.position.inSeconds, 1);
+      expect(backend.playCalls, 2);
+    },
+  );
+
+  test(
+    'stop or replacement during scrub seek prevents old playback resuming',
+    () async {
+      for (final replace in [false, true]) {
+        await service.play(_recording('one'));
+        final gate = Completer<void>();
+        backend.seekGate = gate.future;
+        final finishing = service.finishScrub(
+          service.beginScrub()!,
+          const Duration(milliseconds: 400),
+        );
+        await Future<void>.delayed(Duration.zero);
+        final plays = backend.playCalls;
+        final next = replace ? service.play(_recording('two')) : service.stop();
+        backend.seekGate = null;
+        gate.complete();
+        await Future.wait([finishing, next]);
+        expect(backend.playCalls, plays + (replace ? 1 : 0));
+        expect(service.status.recordingId, replace ? 'two' : null);
+        expect(service.isScrubbing, isFalse);
+      }
+    },
+  );
+
+  test('pause and seek failures do not resume scrub playback', () async {
+    for (final pauseFails in [true, false]) {
+      await service.play(_recording('one'));
+      backend.failPause = pauseFails;
+      backend.failSeek = !pauseFails;
+      final plays = backend.playCalls;
+      await service.finishScrub(
+        service.beginScrub()!,
+        const Duration(milliseconds: 300),
+      );
+      expect(service.status.state, PlaybackState.failed);
+      expect(service.isScrubbing, isFalse);
+      expect(backend.playCalls, plays);
+      backend.failPause = false;
+      backend.failSeek = false;
+    }
+  });
+
+  test(
+    'backend error during scrub cannot be overwritten by seek completion',
+    () async {
+      await service.play(_recording('one'));
+      final gate = Completer<void>();
+      backend.seekGate = gate.future;
+      final finishing = service.finishScrub(
+        service.beginScrub()!,
+        const Duration(milliseconds: 300),
+      );
+      await Future<void>.delayed(Duration.zero);
+      backend.emitError(StateError('media error'));
+      await Future<void>.delayed(Duration.zero);
+      gate.complete();
+      await finishing;
+      expect(service.status.state, PlaybackState.failed);
+      expect(backend.playCalls, 1);
+    },
+  );
+
+  test('cancelled drag never resumes and ignores a late release', () async {
+    await service.play(_recording('one'));
+    final session = service.beginScrub()!;
+    service.cancelScrub(session);
+    await service.finishScrub(session, const Duration(milliseconds: 500));
+    await Future<void>.delayed(Duration.zero);
+    expect(backend.seekPositions, isEmpty);
+    expect(backend.playCalls, 1);
+    expect(service.status.state, PlaybackState.paused);
+  });
+
+  test(
     'backend error during pending skip cannot be overwritten by seek success',
     () async {
       await service.play(
@@ -538,6 +695,8 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   bool failLoad = false;
   bool failSeek = false;
   Future<void>? seekGate;
+  Future<void>? pauseGate;
+  bool failPause = false;
 
   @override
   Stream<AudioBackendState> get states => _stateController.stream;
@@ -560,6 +719,8 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   @override
   Future<void> pause() async {
     pauseCalls += 1;
+    if (pauseGate != null) await pauseGate;
+    if (failPause) throw StateError('Cannot pause');
   }
 
   @override

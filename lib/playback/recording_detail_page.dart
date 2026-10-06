@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../storage/models/recording.dart';
 import 'audio_playback_service.dart';
+import 'playback_progress.dart';
 
 class RecordingDetailPage extends StatefulWidget {
   const RecordingDetailPage({
@@ -70,14 +71,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
               final failed = active && status.state == PlaybackState.failed;
               final playing = active && status.state == PlaybackState.playing;
               final total = widget.recording.duration;
-              final position = active
-                  ? Duration(
-                      milliseconds: status.position.inMilliseconds.clamp(
-                        0,
-                        total.inMilliseconds,
-                      ),
-                    )
-                  : Duration.zero;
+              final scrubbing = widget.playbackService.isScrubbing;
               final createdAt = widget.recording.createdAt.toLocal();
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
@@ -126,28 +120,10 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                       Text(status.errorMessage!),
                     ],
                     const SizedBox(height: 16),
-                    Semantics(
-                      label: '播放进度',
-                      child: Slider(
-                        key: const Key('recordingDetailProgress'),
-                        value: position.inMilliseconds.toDouble(),
-                        max: total.inMilliseconds > 0
-                            ? total.inMilliseconds.toDouble()
-                            : 1,
-                        onChanged: active && !loading && !failed
-                            ? (value) => widget.playbackService.seek(
-                                Duration(milliseconds: value.round()),
-                              )
-                            : null,
-                      ),
-                    ),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      spacing: 16,
-                      children: [
-                        Text(_formatDuration(position)),
-                        Text(_formatDuration(total)),
-                      ],
+                    PlaybackProgress(
+                      recording: widget.recording,
+                      service: widget.playbackService,
+                      sliderKey: const Key('recordingDetailProgress'),
                     ),
                     const SizedBox(height: 24),
                     Wrap(
@@ -164,6 +140,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                               active &&
                                   !loading &&
                                   !failed &&
+                                  !scrubbing &&
                                   total > Duration.zero
                               ? widget.playbackService.skipBackward
                               : null,
@@ -173,7 +150,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                           key: const Key('recordingDetailPlayButton'),
                           tooltip: playing ? '暂停播放' : '播放录音',
                           iconSize: 48,
-                          onPressed: loading || failed
+                          onPressed: loading || failed || scrubbing
                               ? null
                               : () => widget.playbackService.toggle(
                                   widget.recording,
@@ -192,6 +169,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                               active &&
                                   !loading &&
                                   !failed &&
+                                  !scrubbing &&
                                   total > Duration.zero
                               ? widget.playbackService.skipForward
                               : null,
@@ -221,7 +199,11 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                               ),
                           ],
                           onChanged:
-                              active && !loading && !failed && !_changingSpeed
+                              active &&
+                                  !loading &&
+                                  !failed &&
+                                  !scrubbing &&
+                                  !_changingSpeed
                               ? (speed) {
                                   if (speed != null) _setSpeed(speed);
                                 }
@@ -240,9 +222,4 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
   }
 
   String _twoDigits(int value) => value.toString().padLeft(2, '0');
-
-  String _formatDuration(Duration duration) {
-    final seconds = duration.inSeconds;
-    return '${(seconds ~/ 60).toString().padLeft(2, '0')}:${_twoDigits(seconds % 60)}';
-  }
 }

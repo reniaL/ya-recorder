@@ -717,6 +717,76 @@ void main() {
     variant: TargetPlatformVariant.only(TargetPlatform.iOS),
   );
 
+  for (final detail in [false, true]) {
+    for (final initiallyPlaying in [false, true]) {
+      testWidgets(
+        '${detail ? 'detail' : 'bottom'} drag follows finger while pause is pending and ${initiallyPlaying ? 'resumes' : 'stays paused'} on release',
+        (tester) async {
+          final backend = _FakePlaybackBackend();
+          final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+          final playback = AudioPlaybackService(backend: backend);
+          addTearDown(playback.dispose);
+          await tester.pumpWidget(
+            MyApp(recordingStore: store, playbackService: playback),
+          );
+          await tester.pumpAndSettle();
+          if (detail) {
+            await tester.tap(find.byKey(const Key('recordingRow-one')));
+          } else {
+            await tester.tap(find.byTooltip('播放录音'));
+          }
+          await tester.pumpAndSettle();
+          if (!initiallyPlaying) {
+            await playback.pause();
+            await tester.pump();
+          }
+          final pauseCalls = backend.pauseCalls;
+          final pauseGate = Completer<void>();
+          final seekGate = Completer<void>();
+          backend.pauseGate = pauseGate.future;
+          backend.seekGate = seekGate.future;
+          final slider = find.byKey(
+            Key(detail ? 'recordingDetailProgress' : 'libraryPlaybackProgress'),
+          );
+          final gesture = await tester.startGesture(
+            tester.getCenter(slider) - const Offset(100, 0),
+          );
+          await gesture.moveBy(const Offset(30, 0));
+          await tester.pump();
+          final first = tester.widget<Slider>(slider).value;
+          expect(first, greaterThan(0));
+          await gesture.moveBy(const Offset(60, 0));
+          await tester.pump();
+          final last = tester.widget<Slider>(slider).value;
+          expect(last, greaterThan(first));
+          expect(find.text(_durationLabel(last)), findsOneWidget);
+          expect(backend.seekPositions, isEmpty);
+          expect(backend.playCalls, 1);
+          expect(backend.pauseCalls, pauseCalls + (initiallyPlaying ? 1 : 0));
+          backend.emitPosition(const Duration(seconds: 1));
+          backend.emit(AudioBackendState.playing);
+          await tester.pump();
+          expect(tester.widget<Slider>(slider).value, last);
+          await gesture.up();
+          await tester.pump();
+          pauseGate.complete();
+          await tester.pump();
+          expect(backend.seekPositions, [Duration(milliseconds: last.round())]);
+          expect(tester.widget<Slider>(slider).value, last);
+          expect(backend.playCalls, 1);
+          seekGate.complete();
+          await tester.pumpAndSettle();
+          expect(playback.status.position.inMilliseconds, last.round());
+          expect(
+            playback.status.state,
+            initiallyPlaying ? PlaybackState.playing : PlaybackState.paused,
+          );
+          expect(backend.playCalls, initiallyPlaying ? 2 : 1);
+        },
+      );
+    }
+  }
+
   testWidgets('bottom player displays and seeks playback progress', (
     WidgetTester tester,
   ) async {
@@ -2190,6 +2260,11 @@ class _WidgetFakeAudioSharePlatform implements AudioSharePlatform {
   }
 }
 
+String _durationLabel(double milliseconds) {
+  final seconds = milliseconds.round() ~/ 1000;
+  return '${(seconds ~/ 60).toString().padLeft(2, '0')}:${(seconds % 60).toString().padLeft(2, '0')}';
+}
+
 class _FakePlaybackBackend implements AudioPlaybackBackend {
   final List<double> speeds = [];
   bool failSpeed = false;
@@ -2200,10 +2275,15 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
   final List<Duration> seekPositions = [];
   final List<String> filePaths = [];
   int playCalls = 0;
+  int pauseCalls = 0;
+  Future<void>? pauseGate;
+  Future<void>? seekGate;
   Future<void>? loadGate;
   bool failLoad = false;
 
   void emit(AudioBackendState state) => _stateController.add(state);
+
+  void emitPosition(Duration position) => _positionController.add(position);
 
   @override
   Stream<AudioBackendState> get states => _stateController.stream;
@@ -2218,7 +2298,10 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
   }
 
   @override
-  Future<void> pause() async {}
+  Future<void> pause() async {
+    pauseCalls += 1;
+    if (pauseGate != null) await pauseGate;
+  }
 
   @override
   Future<void> play() async {
@@ -2228,6 +2311,7 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
   @override
   Future<void> seek(Duration position) async {
     seekPositions.add(position);
+    if (seekGate != null) await seekGate;
   }
 
   @override

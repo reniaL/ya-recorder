@@ -5,6 +5,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import 'playback/audio_playback_service.dart';
+import 'playback/playback_progress.dart';
 import 'playback/recording_detail_page.dart';
 import 'recording/recording_service.dart';
 import 'sharing/audio_share_service.dart';
@@ -1464,14 +1465,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
 
     final activeRecording = recording.first;
-    final total = activeRecording.duration;
-    final position = _playbackStatus.position > total
-        ? total
-        : _playbackStatus.position;
     final isPlaying = _playbackStatus.state == PlaybackState.playing;
-    final canSeek =
-        _playbackStatus.state != PlaybackState.loading &&
-        _playbackStatus.state != PlaybackState.failed;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Material(
@@ -1499,35 +1493,23 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   ),
                 ),
               ),
-              Semantics(
-                label: '播放进度',
-                child: Slider(
-                  value: position.inMilliseconds.toDouble(),
-                  max: (total.inMilliseconds > 0 ? total.inMilliseconds : 1)
-                      .toDouble(),
-                  onChanged: canSeek
-                      ? (value) => _playbackService.seek(
-                          Duration(milliseconds: value.round()),
-                        )
-                      : null,
-                ),
-              ),
-              Row(
-                children: [
-                  Expanded(child: Text(_formatDuration(position))),
-                  Text(_formatDuration(total)),
-                  IconButton(
-                    onPressed: _playbackStatus.state == PlaybackState.loading
-                        ? null
-                        : () => _togglePlayback(activeRecording),
-                    icon: Icon(
-                      isPlaying
-                          ? Icons.pause_circle_outline_rounded
-                          : Icons.play_circle_outline_rounded,
-                    ),
-                    tooltip: isPlaying ? '暂停播放' : '播放录音',
+              PlaybackProgress(
+                recording: activeRecording,
+                service: _playbackService,
+                sliderKey: const Key('libraryPlaybackProgress'),
+                trailing: IconButton(
+                  onPressed:
+                      _playbackStatus.state == PlaybackState.loading ||
+                          _playbackService.isScrubbing
+                      ? null
+                      : () => _togglePlayback(activeRecording),
+                  icon: Icon(
+                    isPlaying
+                        ? Icons.pause_circle_outline_rounded
+                        : Icons.play_circle_outline_rounded,
                   ),
-                ],
+                  tooltip: isPlaying ? '暂停播放' : '播放录音',
+                ),
               ),
               if (_playbackStatus.speed != 1)
                 Text('播放倍速 ${_playbackStatus.speed}×'),

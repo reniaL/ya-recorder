@@ -26,6 +26,14 @@ class PlaybackStatus {
 
 enum AudioBackendState { idle, playing, paused, completed }
 
+/// Identifies one drag, including its original playback state.
+class PlaybackScrubSession {
+  PlaybackScrubSession._(this.generation, this.state);
+
+  final int generation;
+  final PlaybackState state;
+}
+
 abstract interface class AudioPlaybackBackend {
   Stream<AudioBackendState> get states;
   Stream<Duration> get positions;
@@ -65,12 +73,114 @@ class AudioPlaybackService {
   int _generation = 0;
   bool _disposed = false;
   bool _isSkipping = false;
+  PlaybackScrubSession? _scrub;
   Duration _duration = Duration.zero;
 
   PlaybackStatus get status => _status;
   Stream<PlaybackStatus> get statuses => _statusController.stream;
+  bool get isScrubbing => _scrub != null;
+
+  bool isCurrentScrub(PlaybackScrubSession session) =>
+      identical(_scrub, session) && _isCurrent(session.generation);
+
+  PlaybackScrubSession? beginScrub() {
+    if (_disposed ||
+        isScrubbing ||
+        _status.recordingId == null ||
+        _status.state == PlaybackState.loading ||
+        _status.state == PlaybackState.failed ||
+        _duration <= Duration.zero) {
+      return null;
+    }
+    final session = PlaybackScrubSession._(_generation, _status.state);
+    _scrub = session;
+    if (session.state == PlaybackState.playing) {
+      _setStatus(
+        PlaybackStatus(
+          state: PlaybackState.paused,
+          recordingId: _status.recordingId,
+          position: _status.position,
+          speed: _status.speed,
+        ),
+      );
+      unawaited(
+        _enqueue(() async {
+          if (!_isCurrent(session.generation)) return;
+          try {
+            await _backend.pause();
+          } catch (error) {
+            if (!_isCurrent(session.generation)) return;
+            try {
+              await _backend.stop();
+            } catch (_) {
+              // Preserve the pause failure if the backend cannot stop either.
+            }
+            if (_isCurrent(session.generation)) {
+              _setFailed(_status.recordingId, error);
+            }
+          }
+        }),
+      );
+    } else {
+      _setStatus(_status);
+    }
+    return session;
+  }
+
+  /// Only the final drag position reaches the backend, after pause completes.
+  Future<void> finishScrub(PlaybackScrubSession session, Duration position) {
+    if (!isCurrentScrub(session)) return Future<void>.value();
+    return _enqueue(() async {
+      if (!isCurrentScrub(session)) return;
+      final target = Duration(
+        microseconds: position.inMicroseconds.clamp(
+          0,
+          _duration.inMicroseconds,
+        ),
+      );
+      final resume = session.state == PlaybackState.playing;
+      final ended = resume && target >= _duration;
+      try {
+        await _backend.seek(ended ? Duration.zero : target);
+        if (!isCurrentScrub(session)) return;
+        _scrub = null;
+        _setStatus(
+          PlaybackStatus(
+            state: ended ? PlaybackState.idle : session.state,
+            recordingId: _status.recordingId,
+            position: ended ? Duration.zero : target,
+            speed: _status.speed,
+          ),
+        );
+        if (resume && !ended) {
+          unawaited(
+            _backend.play().catchError((Object error) {
+              if (_isCurrent(session.generation)) {
+                _setFailed(_status.recordingId, error);
+              }
+            }),
+          );
+        }
+      } catch (error) {
+        if (!isCurrentScrub(session)) return;
+        try {
+          await _backend.stop();
+        } catch (_) {
+          // Keep the original failure visible.
+        }
+        if (isCurrentScrub(session)) _setFailed(_status.recordingId, error);
+      }
+    });
+  }
+
+  void cancelScrub(PlaybackScrubSession session) {
+    if (!isCurrentScrub(session)) return;
+    _scrub = null;
+    _setStatus(_status);
+  }
 
   Future<void> toggle(Recording recording) async {
+    if (isScrubbing && _status.recordingId == recording.id) return;
     if (_status.recordingId == recording.id) {
       if (_status.state == PlaybackState.playing) {
         await pause();
@@ -101,6 +211,7 @@ class AudioPlaybackService {
     _duration = recording.duration;
     final atEnd = _duration > Duration.zero && previous.position >= _duration;
     final generation = ++_generation;
+    _scrub = null;
     final position = reuse && !atEnd ? previous.position : Duration.zero;
     final speed = sameRecording ? previous.speed : 1.0;
 
@@ -173,6 +284,7 @@ class AudioPlaybackService {
   Future<void> stop() {
     if (_disposed) return Future<void>.value();
     final generation = ++_generation;
+    _scrub = null;
     // Invalidate loading work immediately; stopping the backend is serialized
     // after any pending load so that it cannot later start playing again.
     _setStatus(const PlaybackStatus.idle());
@@ -189,6 +301,7 @@ class AudioPlaybackService {
   Future<void> seek(Duration position) async {
     if (_status.recordingId == null ||
         position.isNegative ||
+        isScrubbing ||
         _status.state == PlaybackState.loading ||
         _disposed) {
       return;
@@ -222,6 +335,7 @@ class AudioPlaybackService {
         _status.recordingId == null ||
         _status.state == PlaybackState.loading ||
         _status.state == PlaybackState.failed ||
+        isScrubbing ||
         _duration <= Duration.zero) {
       return Future<void>.value();
     }
@@ -275,6 +389,7 @@ class AudioPlaybackService {
 
   Future<void> dispose() async {
     _disposed = true;
+    _scrub = null;
     ++_generation;
     await _backendSubscription.cancel();
     await _positionSubscription.cancel();
@@ -287,6 +402,7 @@ class AudioPlaybackService {
       throw ArgumentError.value(speed, 'speed', 'Unsupported playback speed');
     }
     if (_disposed ||
+        isScrubbing ||
         _status.recordingId == null ||
         _status.state == PlaybackState.loading ||
         _status.state == PlaybackState.failed) {
@@ -343,6 +459,7 @@ class AudioPlaybackService {
         _status.state == PlaybackState.loading ||
         _status.state == PlaybackState.idle ||
         _isSkipping ||
+        isScrubbing ||
         _disposed) {
       return;
     }
@@ -390,6 +507,7 @@ class AudioPlaybackService {
         _disposed ||
         _status.state == PlaybackState.loading ||
         _isSkipping ||
+        isScrubbing ||
         _status.state == PlaybackState.idle) {
       return;
     }
@@ -405,6 +523,7 @@ class AudioPlaybackService {
   }
 
   void _setFailed(String? recordingId, Object error) {
+    _scrub = null;
     _setStatus(
       PlaybackStatus(
         state: PlaybackState.failed,
