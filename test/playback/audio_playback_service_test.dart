@@ -18,6 +18,189 @@ void main() {
   });
 
   test(
+    'backend error during pending skip cannot be overwritten by seek success',
+    () async {
+      await service.play(
+        _recording('one', duration: const Duration(seconds: 60)),
+      );
+      final gate = Completer<void>();
+      backend.seekGate = gate.future;
+      final skipping = service.skipForward();
+      await Future<void>.delayed(Duration.zero);
+      backend.emitError(StateError('media error'));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.status.state, PlaybackState.failed);
+      gate.complete();
+      await skipping;
+      expect(service.status.state, PlaybackState.failed);
+    },
+  );
+
+  test(
+    'skip uses audio time at every speed and preserves paused state',
+    () async {
+      await service.play(
+        _recording('one', duration: const Duration(seconds: 60)),
+      );
+      for (final speed in AudioPlaybackService.supportedSpeeds) {
+        await service.setSpeed(speed);
+        await service.seek(const Duration(seconds: 20));
+        await service.skipForward();
+        expect(service.status.position.inSeconds, 25);
+        expect(service.status.speed, speed);
+        expect(service.status.state, PlaybackState.playing);
+        await service.skipBackward();
+        expect(service.status.position.inSeconds, 20);
+      }
+      await service.pause();
+      await service.skipBackward();
+      expect(service.status.position.inSeconds, 15);
+      expect(service.status.state, PlaybackState.paused);
+      expect(backend.playCalls, 1);
+    },
+  );
+
+  test(
+    'short audio clamps beginning and paused end, resume restarts at zero',
+    () async {
+      final recording = _recording(
+        'short',
+        duration: const Duration(milliseconds: 750),
+      );
+      await service.play(recording);
+      await service.pause();
+      await service.skipBackward();
+      expect(service.status.position, Duration.zero);
+      await service.skipForward();
+      expect(service.status.position.inMilliseconds, 750);
+      expect(service.status.state, PlaybackState.paused);
+      backend.emit(AudioBackendState.completed);
+      await Future<void>.delayed(Duration.zero);
+      expect(service.status.state, PlaybackState.paused);
+      await service.play(recording);
+      expect(backend.seekPositions.last, Duration.zero);
+      expect(service.status.position, Duration.zero);
+      expect(service.status.state, PlaybackState.playing);
+    },
+  );
+
+  test(
+    'playing skip to the end finishes without losing recording or speed',
+    () async {
+      final recording = _recording(
+        'short',
+        duration: const Duration(seconds: 3),
+      );
+      await service.play(recording);
+      await service.setSpeed(2);
+      await service.skipForward();
+      expect(backend.pauseCalls, 1);
+      expect(backend.seekPositions, [Duration.zero]);
+      expect(service.status.state, PlaybackState.idle);
+      expect(service.status.recordingId, 'short');
+      expect(service.status.position, Duration.zero);
+      expect(service.status.speed, 2);
+      backend.emit(AudioBackendState.paused);
+      backend.emitPosition(const Duration(seconds: 3));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.status.state, PlaybackState.idle);
+      expect(service.status.position, Duration.zero);
+      await service.play(recording);
+      expect(service.status.state, PlaybackState.playing);
+      expect(service.status.speed, 2);
+    },
+  );
+
+  test(
+    'rapid skip commands accumulate in order rather than using stale positions',
+    () async {
+      await service.play(
+        _recording('one', duration: const Duration(seconds: 60)),
+      );
+      final gate = Completer<void>();
+      backend.seekGate = gate.future;
+      final commands = [
+        service.skipForward(),
+        service.skipForward(),
+        service.skipBackward(),
+      ];
+      await Future<void>.delayed(Duration.zero);
+      expect(backend.seekPositions, [const Duration(seconds: 5)]);
+      backend.seekGate = null;
+      gate.complete();
+      await Future.wait(commands);
+      expect(backend.seekPositions, [
+        const Duration(seconds: 5),
+        const Duration(seconds: 10),
+        const Duration(seconds: 5),
+      ]);
+      expect(service.status.position.inSeconds, 5);
+    },
+  );
+
+  test(
+    'skip is ignored when idle, loading, failed or duration is zero',
+    () async {
+      await service.skipForward();
+      final gate = Completer<void>();
+      backend.loadGate = gate.future;
+      final loading = service.play(_recording('one'));
+      await Future<void>.delayed(Duration.zero);
+      await service.skipForward();
+      await service.skipBackward();
+      gate.complete();
+      await loading;
+      expect(backend.seekPositions, isEmpty);
+      backend.failSeek = true;
+      await service.skipBackward();
+      expect(service.status.state, PlaybackState.failed);
+      await service.skipForward();
+      expect(backend.seekPositions.length, 1);
+      backend.failSeek = false;
+      await service.play(_recording('zero', duration: Duration.zero));
+      await service.skipForward();
+      expect(backend.seekPositions.length, 1);
+    },
+  );
+
+  test('return and replacement invalidate pending skip completion', () async {
+    await service.play(
+      _recording('one', duration: const Duration(seconds: 60)),
+    );
+    final gate = Completer<void>();
+    backend.seekGate = gate.future;
+    final skipping = service.skipForward();
+    await Future<void>.delayed(Duration.zero);
+    final stopping = service.stop();
+    final replacement = service.play(_recording('two'));
+    backend.seekGate = null;
+    gate.complete();
+    await Future.wait([skipping, stopping, replacement]);
+    expect(service.status.recordingId, 'two');
+    expect(service.status.position, Duration.zero);
+    expect(service.status.state, PlaybackState.playing);
+  });
+
+  test(
+    'seek failure during skip is visible and playback can be retried',
+    () async {
+      final recording = _recording(
+        'one',
+        duration: const Duration(seconds: 60),
+      );
+      await service.play(recording);
+      backend.failSeek = true;
+      await service.skipForward();
+      expect(service.status.state, PlaybackState.failed);
+      expect(service.status.errorMessage, isNotNull);
+      backend.failSeek = false;
+      await service.play(recording);
+      expect(service.status.state, PlaybackState.playing);
+      expect(service.status.position, Duration.zero);
+    },
+  );
+
+  test(
     'all supported speeds preserve playback state and audio position',
     () async {
       await service.play(_recording('one'));
@@ -322,13 +505,16 @@ void main() {
   );
 }
 
-Recording _recording(String id) {
+Recording _recording(
+  String id, {
+  Duration duration = const Duration(seconds: 1),
+}) {
   return Recording(
     id: id,
     title: id,
     filePath: '/private/$id.m4a',
     createdAt: DateTime.utc(2026, 9, 30),
-    duration: const Duration(seconds: 1),
+    duration: duration,
     fileSizeBytes: 1,
   );
 }
@@ -350,6 +536,8 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   Future<void>? loadGate;
   Future<void>? playGate;
   bool failLoad = false;
+  bool failSeek = false;
+  Future<void>? seekGate;
 
   @override
   Stream<AudioBackendState> get states => _stateController.stream;
@@ -364,6 +552,8 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   }
 
   void emit(AudioBackendState state) => _stateController.add(state);
+
+  void emitError(Object error) => _stateController.addError(error);
 
   void emitPosition(Duration position) => _positionController.add(position);
 
@@ -381,6 +571,8 @@ class _FakeAudioPlaybackBackend implements AudioPlaybackBackend {
   @override
   Future<void> seek(Duration position) async {
     seekPositions.add(position);
+    if (seekGate != null) await seekGate;
+    if (failSeek) throw StateError('Cannot seek');
   }
 
   @override

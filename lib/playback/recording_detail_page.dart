@@ -150,22 +150,54 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    Center(
-                      child: IconButton.filled(
-                        key: const Key('recordingDetailPlayButton'),
-                        tooltip: playing ? '暂停播放' : '播放录音',
-                        iconSize: 48,
-                        onPressed: loading || failed
-                            ? null
-                            : () => widget.playbackService.toggle(
-                                widget.recording,
-                              ),
-                        icon: Icon(
-                          playing
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 16,
+                      runSpacing: 12,
+                      children: [
+                        IconButton(
+                          key: const Key('recordingDetailSkipBackward'),
+                          tooltip: '快退 5 秒',
+                          iconSize: 36,
+                          onPressed:
+                              active &&
+                                  !loading &&
+                                  !failed &&
+                                  total > Duration.zero
+                              ? widget.playbackService.skipBackward
+                              : null,
+                          icon: const Icon(Icons.replay_5_rounded),
                         ),
-                      ),
+                        IconButton.filled(
+                          key: const Key('recordingDetailPlayButton'),
+                          tooltip: playing ? '暂停播放' : '播放录音',
+                          iconSize: 48,
+                          onPressed: loading || failed
+                              ? null
+                              : () => widget.playbackService.toggle(
+                                  widget.recording,
+                                ),
+                          icon: Icon(
+                            playing
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                          ),
+                        ),
+                        IconButton(
+                          key: const Key('recordingDetailSkipForward'),
+                          tooltip: '快进 5 秒',
+                          iconSize: 36,
+                          onPressed:
+                              active &&
+                                  !loading &&
+                                  !failed &&
+                                  total > Duration.zero
+                              ? widget.playbackService.skipForward
+                              : null,
+                          icon: const Icon(Icons.forward_5_rounded),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 24),
                     InputDecorator(

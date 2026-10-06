@@ -64,6 +64,8 @@ class AudioPlaybackService {
   Future<void> _operations = Future<void>.value();
   int _generation = 0;
   bool _disposed = false;
+  bool _isSkipping = false;
+  Duration _duration = Duration.zero;
 
   PlaybackStatus get status => _status;
   Stream<PlaybackStatus> get statuses => _statusController.stream;
@@ -96,8 +98,10 @@ class AudioPlaybackService {
       return _operations;
     }
     final reuse = sameRecording && previous.state != PlaybackState.failed;
+    _duration = recording.duration;
+    final atEnd = _duration > Duration.zero && previous.position >= _duration;
     final generation = ++_generation;
-    final position = reuse ? previous.position : Duration.zero;
+    final position = reuse && !atEnd ? previous.position : Duration.zero;
     final speed = sameRecording ? previous.speed : 1.0;
 
     _setStatus(
@@ -117,8 +121,9 @@ class AudioPlaybackService {
           await _backend.setFilePath(recording.filePath);
           if (!_isCurrent(generation)) return;
           await _backend.setSpeed(speed);
-        } else if (previous.state == PlaybackState.idle &&
-            position == Duration.zero) {
+        } else if (atEnd ||
+            (previous.state == PlaybackState.idle &&
+                position == Duration.zero)) {
           await _backend.seek(Duration.zero);
         }
         if (!_isCurrent(generation)) return;
@@ -208,6 +213,66 @@ class AudioPlaybackService {
     });
   }
 
+  Future<void> skipForward() => _skip(const Duration(seconds: 5));
+
+  Future<void> skipBackward() => _skip(const Duration(seconds: -5));
+
+  Future<void> _skip(Duration offset) {
+    if (_disposed ||
+        _status.recordingId == null ||
+        _status.state == PlaybackState.loading ||
+        _status.state == PlaybackState.failed ||
+        _duration <= Duration.zero) {
+      return Future<void>.value();
+    }
+    final generation = _generation;
+    return _enqueue(() async {
+      if (!_isCurrent(generation) || _status.state == PlaybackState.failed) {
+        return;
+      }
+      // Compute from the latest position when this command executes so rapid
+      // taps accumulate rather than all seeking from the same old position.
+      final previous = _status;
+      final target = Duration(
+        microseconds: (previous.position + offset).inMicroseconds.clamp(
+          0,
+          _duration.inMicroseconds,
+        ),
+      );
+      final ended =
+          previous.state == PlaybackState.playing && target >= _duration;
+      _isSkipping = true;
+      try {
+        if (ended) {
+          await _backend.pause();
+          if (!_isCurrent(generation)) return;
+        }
+        await _backend.seek(ended ? Duration.zero : target);
+        if (!_isCurrent(generation) || _status.state == PlaybackState.failed) {
+          return;
+        }
+        _setStatus(
+          PlaybackStatus(
+            state: ended ? PlaybackState.idle : previous.state,
+            recordingId: previous.recordingId,
+            position: ended ? Duration.zero : target,
+            speed: previous.speed,
+          ),
+        );
+      } catch (error) {
+        if (!_isCurrent(generation)) return;
+        try {
+          await _backend.stop();
+        } catch (_) {
+          // Preserve the original seek failure for the retry UI.
+        }
+        if (_isCurrent(generation)) _setFailed(previous.recordingId, error);
+      } finally {
+        _isSkipping = false;
+      }
+    });
+  }
+
   Future<void> dispose() async {
     _disposed = true;
     ++_generation;
@@ -276,6 +341,8 @@ class AudioPlaybackService {
     final recordingId = _status.recordingId;
     if (recordingId == null ||
         _status.state == PlaybackState.loading ||
+        _status.state == PlaybackState.idle ||
+        _isSkipping ||
         _disposed) {
       return;
     }
@@ -301,6 +368,7 @@ class AudioPlaybackService {
           ),
         );
       case AudioBackendState.completed:
+        if (_status.state == PlaybackState.paused) return;
         _setStatus(
           PlaybackStatus(
             state: PlaybackState.idle,
@@ -321,6 +389,7 @@ class AudioPlaybackService {
         position.isNegative ||
         _disposed ||
         _status.state == PlaybackState.loading ||
+        _isSkipping ||
         _status.state == PlaybackState.idle) {
       return;
     }

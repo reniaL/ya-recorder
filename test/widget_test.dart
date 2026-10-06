@@ -744,6 +744,139 @@ void main() {
     expect(playbackBackend.seekPositions, isNotEmpty);
   });
 
+  testWidgets(
+    'detail skip controls preserve pause and finish playback at the end',
+    (tester) async {
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('播放录音'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('快进 5 秒'), findsNothing);
+      await tester.tap(find.byKey(const Key('libraryPlaybackTitle')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.pumpAndSettle();
+      expect(playback.status.position.inSeconds, 5);
+      await tester.tap(find.byTooltip('快退 5 秒'));
+      await tester.pumpAndSettle();
+      expect(playback.status.position, Duration.zero);
+      await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
+      await tester.pumpAndSettle();
+      await playback.seek(const Duration(seconds: 58));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.pumpAndSettle();
+      expect(playback.status.position.inSeconds, 60);
+      expect(find.text('已暂停'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
+      await tester.pumpAndSettle();
+      expect(playback.status.position, Duration.zero);
+      await playback.seek(const Duration(seconds: 58));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.pumpAndSettle();
+      expect(find.text('未播放'), findsOneWidget);
+      expect(playback.status.position, Duration.zero);
+      expect(find.text('录音详情'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'detail disables skip during loading and failure and enables after retry',
+    (tester) async {
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final gate = Completer<void>();
+      final backend = _FakePlaybackBackend()..loadGate = gate.future;
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      for (final key in [
+        'recordingDetailSkipBackward',
+        'recordingDetailSkipForward',
+      ]) {
+        expect(
+          tester.widget<IconButton>(find.byKey(Key(key))).onPressed,
+          isNull,
+        );
+      }
+      backend.failLoad = true;
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('播放失败'), findsOneWidget);
+      for (final key in [
+        'recordingDetailSkipBackward',
+        'recordingDetailSkipForward',
+      ]) {
+        expect(
+          tester.widget<IconButton>(find.byKey(Key(key))).onPressed,
+          isNull,
+        );
+      }
+      backend.failLoad = false;
+      backend.loadGate = null;
+      await tester.tap(find.text('重试播放'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byKey(const Key('recordingDetailSkipForward')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'detail skip controls fit narrow large-text layout and remain accessible',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final playback = AudioPlaybackService(backend: _FakePlaybackBackend());
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byTooltip('快进 5 秒'));
+      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.pumpAndSettle();
+      expect(playback.status.position.inSeconds, 5);
+      final backward = tester.getRect(find.byTooltip('快退 5 秒'));
+      final forward = tester.getRect(find.byTooltip('快进 5 秒'));
+      final play = tester.getRect(
+        find.byKey(const Key('recordingDetailPlayButton')),
+      );
+      expect(backward.overlaps(play), isFalse);
+      expect(forward.overlaps(play), isFalse);
+      expect(tester.takeException(), isNull);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    },
+  );
+
   testWidgets('renames a recording from its action menu', (
     WidgetTester tester,
   ) async {
