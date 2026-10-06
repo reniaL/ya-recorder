@@ -21,6 +21,17 @@ class RecordingDetailPage extends StatefulWidget {
 
 class _RecordingDetailPageState extends State<RecordingDetailPage> {
   bool _stopped = false;
+  bool _changingSpeed = false;
+
+  Future<void> _setSpeed(double speed) async {
+    if (_changingSpeed) return;
+    setState(() => _changingSpeed = true);
+    try {
+      await widget.playbackService.setSpeed(speed);
+    } finally {
+      if (mounted) setState(() => _changingSpeed = false);
+    }
+  }
 
   @override
   void initState() {
@@ -110,6 +121,10 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                         ),
                       ),
                     ],
+                    if (!failed && status.errorMessage != null) ...[
+                      const SizedBox(height: 8),
+                      Text(status.errorMessage!),
+                    ],
                     const SizedBox(height: 16),
                     Semantics(
                       label: '播放进度',
@@ -149,6 +164,36 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                           playing
                               ? Icons.pause_rounded
                               : Icons.play_arrow_rounded,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: '播放倍速',
+                        border: OutlineInputBorder(),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<double>(
+                          key: const Key('recordingDetailSpeed'),
+                          isExpanded: true,
+                          value: active ? status.speed : 1,
+                          items: [
+                            for (final speed
+                                in AudioPlaybackService.supportedSpeeds)
+                              DropdownMenuItem(
+                                value: speed,
+                                child: Text(
+                                  '${speed == speed.roundToDouble() ? speed.toInt() : speed}×',
+                                ),
+                              ),
+                          ],
+                          onChanged:
+                              active && !loading && !failed && !_changingSpeed
+                              ? (speed) {
+                                  if (speed != null) _setSpeed(speed);
+                                }
+                              : null,
                         ),
                       ),
                     ),

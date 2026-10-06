@@ -352,6 +352,134 @@ void main() {
   );
 
   testWidgets(
+    'detail selects all speeds and paused speed changes keep position',
+    (tester) async {
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      for (final speed in AudioPlaybackService.supportedSpeeds) {
+        await tester.ensureVisible(
+          find.byKey(const Key('recordingDetailSpeed')),
+        );
+        await tester.tap(find.byKey(const Key('recordingDetailSpeed')));
+        await tester.pumpAndSettle();
+        final label =
+            '${speed == speed.roundToDouble() ? speed.toInt() : speed}×';
+        await tester.tap(find.text(label).last);
+        await tester.pumpAndSettle();
+        expect(playback.status.speed, speed);
+        expect(
+          tester
+              .widget<DropdownButton<double>>(
+                find.byKey(const Key('recordingDetailSpeed')),
+              )
+              .value,
+          speed,
+        );
+      }
+      await playback.seek(const Duration(seconds: 20));
+      await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingDetailSpeed')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('0.75×').last);
+      await tester.pumpAndSettle();
+      expect(playback.status.state, PlaybackState.paused);
+      expect(playback.status.position.inSeconds, 20);
+      expect(playback.status.speed, 0.75);
+      expect(backend.filePaths.length, 1);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(playback.status.speed, 1);
+      expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'same recording enters detail with speed and bottom status retained',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('播放录音'));
+      await tester.pumpAndSettle();
+      await playback.setSpeed(1.5);
+      await playback.seek(const Duration(seconds: 20));
+      await playback.pause();
+      await tester.pumpAndSettle();
+      expect(find.text('播放倍速 1.5×'), findsOneWidget);
+      expect(find.byKey(const Key('recordingDetailSpeed')), findsNothing);
+      await tester.tap(find.byKey(const Key('libraryPlaybackTitle')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('recordingDetailSpeed')));
+      expect(
+        tester
+            .widget<DropdownButton<double>>(
+              find.byKey(const Key('recordingDetailSpeed')),
+            )
+            .value,
+        1.5,
+      );
+      expect(playback.status.position.inSeconds, 20);
+      expect(playback.status.state, PlaybackState.playing);
+      expect(backend.filePaths.length, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
+    'detail shows speed errors without changing selected value and allows retry',
+    (tester) async {
+      final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, playbackService: playback),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      backend.failSpeed = true;
+      await tester.tap(find.byKey(const Key('recordingDetailSpeed')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2×').last);
+      await tester.pumpAndSettle();
+      expect(find.text('无法调整播放倍速，请重试。'), findsOneWidget);
+      expect(playback.status.speed, 1);
+      expect(playback.status.state, PlaybackState.playing);
+      backend.failSpeed = false;
+      await tester.ensureVisible(find.byKey(const Key('recordingDetailSpeed')));
+      await tester.tap(find.byKey(const Key('recordingDetailSpeed')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2×').last);
+      await tester.pumpAndSettle();
+      expect(find.text('无法调整播放倍速，请重试。'), findsNothing);
+      expect(playback.status.speed, 2);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets(
     'bottom title preserves playing or paused progress and system return stops',
     (tester) async {
       final store = _RecordingStoreSpy()..recordings = [_recording('one')];
@@ -1588,6 +1716,8 @@ class _WidgetFakeAudioSharePlatform implements AudioSharePlatform {
 }
 
 class _FakePlaybackBackend implements AudioPlaybackBackend {
+  final List<double> speeds = [];
+  bool failSpeed = false;
   final StreamController<AudioBackendState> _stateController =
       StreamController<AudioBackendState>.broadcast();
   final StreamController<Duration> _positionController =
@@ -1634,4 +1764,13 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
 
   @override
   Future<void> stop() async {}
+
+  @override
+  Future<void> setSpeed(double speed) async {
+    speeds.add(speed);
+    if (failSpeed) {
+      failSpeed = false;
+      throw StateError('Cannot set speed');
+    }
+  }
 }

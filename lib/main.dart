@@ -1491,6 +1491,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   ),
                 ],
               ),
+              if (_playbackStatus.speed != 1)
+                Text('播放倍速 ${_playbackStatus.speed}×'),
             ],
           ),
         ),

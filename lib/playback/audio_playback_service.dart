@@ -11,6 +11,7 @@ class PlaybackStatus {
     required this.state,
     this.recordingId,
     this.position = Duration.zero,
+    this.speed = 1,
     this.errorMessage,
   });
 
@@ -19,6 +20,7 @@ class PlaybackStatus {
   final PlaybackState state;
   final String? recordingId;
   final Duration position;
+  final double speed;
   final String? errorMessage;
 }
 
@@ -32,11 +34,14 @@ abstract interface class AudioPlaybackBackend {
   Future<void> play();
   Future<void> pause();
   Future<void> seek(Duration position);
+  Future<void> setSpeed(double speed);
   Future<void> stop();
   Future<void> dispose();
 }
 
 class AudioPlaybackService {
+  static const supportedSpeeds = <double>[0.75, 1, 1.25, 1.5, 2];
+
   AudioPlaybackService({AudioPlaybackBackend? backend})
     : _backend = backend ?? JustAudioPlaybackBackend() {
     _backendSubscription = _backend.states.listen(
@@ -93,12 +98,14 @@ class AudioPlaybackService {
     final reuse = sameRecording && previous.state != PlaybackState.failed;
     final generation = ++_generation;
     final position = reuse ? previous.position : Duration.zero;
+    final speed = sameRecording ? previous.speed : 1.0;
 
     _setStatus(
       PlaybackStatus(
         state: PlaybackState.loading,
         recordingId: recording.id,
         position: position,
+        speed: speed,
       ),
     );
     return _enqueue(() async {
@@ -108,6 +115,8 @@ class AudioPlaybackService {
           await _backend.stop();
           if (!_isCurrent(generation)) return;
           await _backend.setFilePath(recording.filePath);
+          if (!_isCurrent(generation)) return;
+          await _backend.setSpeed(speed);
         } else if (previous.state == PlaybackState.idle &&
             position == Duration.zero) {
           await _backend.seek(Duration.zero);
@@ -118,6 +127,7 @@ class AudioPlaybackService {
             state: PlaybackState.playing,
             recordingId: recording.id,
             position: position,
+            speed: speed,
           ),
         );
         unawaited(
@@ -146,6 +156,7 @@ class AudioPlaybackService {
             state: PlaybackState.paused,
             recordingId: _status.recordingId,
             position: _status.position,
+            speed: _status.speed,
           ),
         );
       } catch (error) {
@@ -188,6 +199,7 @@ class AudioPlaybackService {
             state: _status.state,
             recordingId: _status.recordingId,
             position: position,
+            speed: _status.speed,
           ),
         );
       } catch (error) {
@@ -203,6 +215,55 @@ class AudioPlaybackService {
     await _positionSubscription.cancel();
     await _backend.dispose();
     await _statusController.close();
+  }
+
+  Future<void> setSpeed(double speed) {
+    if (!supportedSpeeds.contains(speed)) {
+      throw ArgumentError.value(speed, 'speed', 'Unsupported playback speed');
+    }
+    if (_disposed ||
+        _status.recordingId == null ||
+        _status.state == PlaybackState.loading ||
+        _status.state == PlaybackState.failed) {
+      return Future<void>.value();
+    }
+    final generation = _generation;
+    return _enqueue(() async {
+      if (!_isCurrent(generation)) return;
+      String? errorMessage;
+      var appliedSpeed = _status.speed;
+      try {
+        await _backend.setSpeed(speed);
+        appliedSpeed = speed;
+      } catch (_) {
+        if (!_isCurrent(generation)) return;
+        // The plugin updates its local speed before the platform responds.
+        // Restore the last successful value if the native command fails.
+        try {
+          await _backend.setSpeed(appliedSpeed);
+        } catch (error) {
+          if (!_isCurrent(generation)) return;
+          try {
+            await _backend.stop();
+          } catch (_) {
+            // Keep the failure visible even when the backend cannot stop.
+          }
+          if (_isCurrent(generation)) _setFailed(_status.recordingId, error);
+          return;
+        }
+        errorMessage = '无法调整播放倍速，请重试。';
+      }
+      if (!_isCurrent(generation)) return;
+      _setStatus(
+        PlaybackStatus(
+          state: _status.state,
+          recordingId: _status.recordingId,
+          position: _status.position,
+          speed: appliedSpeed,
+          errorMessage: errorMessage,
+        ),
+      );
+    });
   }
 
   bool _isCurrent(int generation) => !_disposed && generation == _generation;
@@ -227,6 +288,7 @@ class AudioPlaybackService {
             state: PlaybackState.playing,
             recordingId: recordingId,
             position: _status.position,
+            speed: _status.speed,
           ),
         );
       case AudioBackendState.paused:
@@ -235,11 +297,16 @@ class AudioPlaybackService {
             state: PlaybackState.paused,
             recordingId: recordingId,
             position: _status.position,
+            speed: _status.speed,
           ),
         );
       case AudioBackendState.completed:
         _setStatus(
-          PlaybackStatus(state: PlaybackState.idle, recordingId: recordingId),
+          PlaybackStatus(
+            state: PlaybackState.idle,
+            recordingId: recordingId,
+            speed: _status.speed,
+          ),
         );
     }
   }
@@ -262,6 +329,7 @@ class AudioPlaybackService {
         state: _status.state,
         recordingId: _status.recordingId,
         position: position,
+        speed: _status.speed,
         errorMessage: _status.errorMessage,
       ),
     );
@@ -273,6 +341,7 @@ class AudioPlaybackService {
         state: PlaybackState.failed,
         recordingId: recordingId,
         position: _status.position,
+        speed: _status.speed,
         errorMessage: '无法播放该录音。',
       ),
     );
@@ -318,6 +387,9 @@ class JustAudioPlaybackBackend implements AudioPlaybackBackend {
 
   @override
   Future<void> seek(Duration position) => _player.seek(position);
+
+  @override
+  Future<void> setSpeed(double speed) => _player.setSpeed(speed);
 
   @override
   Future<void> play() => _player.play();
