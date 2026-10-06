@@ -161,11 +161,8 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                       sliderKey: const Key('recordingDetailProgress'),
                     ),
                     const SizedBox(height: 24),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 8,
-                      runSpacing: 12,
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
                           mainAxisSize: MainAxisSize.min,
@@ -187,7 +184,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                                   : null,
                               icon: const Icon(Icons.replay_5_rounded),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 24),
                             IconButton.filled(
                               key: const Key('recordingDetailPlayButton'),
                               tooltip: playing ? '暂停播放' : '播放录音',
@@ -206,7 +203,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                                     : Icons.play_arrow_rounded,
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 24),
                             IconButton(
                               key: const Key('recordingDetailSkipForward'),
                               tooltip: '快进 5 秒',
@@ -226,6 +223,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 16),
                         PopupMenuButton<double>(
                           key: const Key('recordingDetailSpeed'),
                           tooltip: '播放倍速',
