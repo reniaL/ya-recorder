@@ -271,8 +271,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       final selectedFolderId = await showModalBottomSheet<String?>(
         context: context,
         builder: (context) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: ListView(
+            shrinkWrap: true,
             children: [
               const ListTile(title: Text('选择录音范围')),
               ListTile(
@@ -1037,17 +1037,52 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   autofocus: true,
                   enabled: !_isSubmitting,
                   onChanged: _setSearchQuery,
-                  decoration: const InputDecoration(
-                    hintText: '搜索当前范围的录音',
+                  decoration: InputDecoration(
+                    hintText: _selectedFolderName == null
+                        ? '搜索全部录音'
+                        : '搜索「$_selectedFolderName」中的录音',
                     border: InputBorder.none,
                   ),
                 )
-              : TextButton.icon(
-                  key: const Key('folderScopeSelector'),
-                  onPressed: _isSubmitting ? null : _chooseFolderScope,
-                  icon: const Icon(Icons.arrow_drop_down_rounded),
-                  label: Text(_selectedFolderName ?? '全部录音'),
+              : Semantics(
+                  label: '${_selectedFolderName ?? '全部录音'}，切换录音范围',
+                  button: true,
+                  enabled: !_isSubmitting,
+                  onTap: _isSubmitting ? null : _chooseFolderScope,
+                  child: ExcludeSemantics(
+                    child: TextButton(
+                      key: const Key('folderScopeSelector'),
+                      onPressed: _isSubmitting ? null : _chooseFolderScope,
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(
+                          context,
+                        ).colorScheme.onSurface,
+                        minimumSize: const Size(48, 48),
+                        padding: EdgeInsets.zero,
+                        alignment: Alignment.centerLeft,
+                        textStyle: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              _selectedFolderName ?? '全部录音',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_drop_down_rounded),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
+          titleSpacing: 24,
           centerTitle: false,
           backgroundColor: Colors.transparent,
           actions: [

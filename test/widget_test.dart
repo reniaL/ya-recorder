@@ -1030,6 +1030,103 @@ void main() {
     expect(find.text('Inbox note'), findsOneWidget);
   });
 
+  for (final brightness in Brightness.values) {
+    testWidgets('scope title remains usable with long names in $brightness', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final semantics = tester.ensureSemantics();
+      const name = '工作访谈与会议记录的完整文件夹名称';
+      final store = _RecordingStoreSpy()
+        ..folders = [
+          RecordingFolder(
+            id: 'long-folder',
+            name: name,
+            createdAt: DateTime.utc(2026, 10, 6),
+          ),
+        ]
+        ..recordings = [_recording('one')];
+      await store.moveRecording(recordingId: 'one', folderId: 'long-folder');
+      final service = RecordingService();
+      final playback = AudioPlaybackService(backend: _FakePlaybackBackend());
+      addTearDown(playback.dispose);
+      final theme = ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xff0b6657),
+          brightness: brightness,
+        ),
+        useMaterial3: true,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: RecordingHomePage(
+            recordingService: service,
+            recordingStore: store,
+            playbackService: playback,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final selector = find.byKey(const Key('folderScopeSelector'));
+      expect(tester.getSize(selector).height, greaterThanOrEqualTo(48));
+      await tester.tap(selector);
+      await tester.pumpAndSettle();
+      expect(find.text(name), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('folderScope-long-folder')));
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel('$name，切换录音范围'), findsOneWidget);
+      final title = find.descendant(of: selector, matching: find.text(name));
+      final arrow = find.descendant(
+        of: selector,
+        matching: find.byIcon(Icons.arrow_drop_down_rounded),
+      );
+      expect(tester.getRect(title).right, lessThan(tester.getRect(arrow).left));
+      expect(
+        tester.getRect(selector).right,
+        lessThanOrEqualTo(tester.getRect(find.byTooltip('多选录音')).left),
+      );
+      final style = tester.widget<TextButton>(selector).style!;
+      expect(style.textStyle!.resolve({})!.fontSize, 20);
+      expect(style.textStyle!.resolve({})!.fontWeight, FontWeight.w600);
+      expect(style.foregroundColor!.resolve({}), theme.colorScheme.onSurface);
+      expect(tester.widget<Text>(title).overflow, TextOverflow.ellipsis);
+
+      await tester.tap(find.byKey(const Key('recordingSearchButton')));
+      await tester.pumpAndSettle();
+      final search = find.byKey(const Key('recordingSearchField'));
+      expect(
+        tester.widget<TextField>(search).decoration!.hintText,
+        '搜索「$name」中的录音',
+      );
+      await tester.enterText(search, 'missing');
+      await tester.pumpAndSettle();
+      expect(find.text('没有匹配的录音'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('recordingSearchButton')));
+      await tester.pumpAndSettle();
+      expect(title, findsOneWidget);
+      await tester.tap(selector);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('folderScope-all')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('多选录音'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('退出多选'), findsOneWidget);
+      expect(selector, findsOneWidget);
+      await tester.tap(find.byKey(const Key('recordingSearchButton')));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(search).decoration!.hintText, '搜索全部录音');
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+  }
+
   testWidgets('moves a recording between a folder and all recordings', (
     WidgetTester tester,
   ) async {
