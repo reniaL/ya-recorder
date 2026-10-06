@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import 'playback/audio_playback_service.dart';
@@ -426,8 +427,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       final selectedFolderId = await showModalBottomSheet<String?>(
         context: context,
         builder: (context) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+          child: ListView(
+            shrinkWrap: true,
             children: [
               const ListTile(title: Text('移动录音到')),
               if (recording.folderId != null)
@@ -643,6 +644,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       MaterialPageRoute(
         builder: (context) => _FolderManagementPage(
           listFolders: () async => (await _getRecordingStore()).listFolders(),
+          reorderFolders: (ids) async =>
+              (await _getRecordingStore()).reorderFolders(ids),
           listRecordings: (folderId) async =>
               (await _getRecordingStore()).listRecordings(folderId: folderId),
           createFolder: (name) async {
@@ -1809,9 +1812,11 @@ class _FolderManagementPage extends StatefulWidget {
     required this.createFolder,
     required this.renameFolder,
     required this.deleteFolder,
+    required this.reorderFolders,
   });
 
   final Future<List<RecordingFolder>> Function() listFolders;
+  final Future<void> Function(List<String> ids) reorderFolders;
   final Future<List<Recording>> Function(String folderId) listRecordings;
   final Future<RecordingFolder> Function(String name) createFolder;
   final Future<void> Function(String folderId, String name) renameFolder;
@@ -1825,6 +1830,55 @@ class _FolderManagementPage extends StatefulWidget {
 class _FolderManagementPageState extends State<_FolderManagementPage> {
   late Future<List<RecordingFolder>> _folders = widget.listFolders();
   String? _errorMessage;
+  List<RecordingFolder>? _draft;
+  List<String> _originalIds = [];
+  bool _savingOrder = false;
+
+  void _cancelSort() {
+    if (_savingOrder) return;
+    setState(() {
+      _draft = null;
+      _errorMessage = null;
+    });
+  }
+
+  void _moveFolder(int oldIndex, int newIndex) {
+    if (_savingOrder || _draft == null) return;
+    setState(() {
+      final folder = _draft!.removeAt(oldIndex);
+      _draft!.insert(newIndex, folder);
+    });
+  }
+
+  Future<void> _saveOrder() async {
+    if (_savingOrder || _draft == null) return;
+    final ids = _draft!.map((folder) => folder.id).toList();
+    if (List.generate(
+      ids.length,
+      (i) => ids[i] == _originalIds[i],
+    ).every((same) => same)) {
+      _cancelSort();
+      return;
+    }
+    setState(() {
+      _savingOrder = true;
+      _errorMessage = null;
+    });
+    try {
+      await widget.reorderFolders(ids);
+      if (!mounted) return;
+      setState(() {
+        _folders = Future.value(List<RecordingFolder>.of(_draft!));
+        _draft = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _errorMessage = '无法保存文件夹顺序，请重试');
+      }
+    } finally {
+      if (mounted) setState(() => _savingOrder = false);
+    }
+  }
 
   Future<void> _createFolder() async {
     final name = await showDialog<String>(
@@ -1930,77 +1984,194 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('文件夹管理')),
-      body: FutureBuilder<List<RecordingFolder>>(
-        future: _folders,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text('无法读取文件夹。'));
-          }
-          final folders = snapshot.data ?? const <RecordingFolder>[];
-          return Column(
-            children: [
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
+  Widget _folderRow(RecordingFolder folder, int index, int count) {
+    final sorting = _draft != null;
+    final up = index > 0 && !_savingOrder;
+    final down = index < count - 1 && !_savingOrder;
+    return ListTile(
+      key: ValueKey(folder.id),
+      leading: const Icon(Icons.folder_outlined),
+      title: Text(folder.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      trailing: sorting
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PopupMenuButton<String>(
+                  key: Key('folderSortActions-${folder.id}'),
+                  tooltip: '调整 ${folder.name} 的位置',
+                  enabled: !_savingOrder,
+                  onSelected: (action) => _moveFolder(
+                    index,
+                    action == 'up' ? index - 1 : index + 1,
+                  ),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'up',
+                      enabled: up,
+                      child: const Text('上移'),
+                    ),
+                    PopupMenuItem(
+                      value: 'down',
+                      enabled: down,
+                      child: const Text('下移'),
+                    ),
+                  ],
+                ),
+                Semantics(
+                  label: '调整 ${folder.name} 的顺序',
+                  customSemanticsActions: {
+                    if (up)
+                      const CustomSemanticsAction(label: '上移'): () =>
+                          _moveFolder(index, index - 1),
+                    if (down)
+                      const CustomSemanticsAction(label: '下移'): () =>
+                          _moveFolder(index, index + 1),
+                  },
+                  child: ReorderableDragStartListener(
+                    key: Key('folderDrag-${folder.id}'),
+                    index: index,
+                    enabled: !_savingOrder,
+                    child: const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(Icons.drag_handle),
                     ),
                   ),
                 ),
-              Expanded(
-                child: folders.isEmpty
-                    ? const Center(child: Text('还没有文件夹。'))
-                    : ListView.builder(
-                        itemCount: folders.length,
-                        itemBuilder: (context, index) {
-                          final folder = folders[index];
-                          return ListTile(
-                            leading: const Icon(Icons.folder_outlined),
-                            title: Text(folder.name),
-                            trailing: PopupMenuButton<String>(
-                              key: Key('folderActions-${folder.id}'),
-                              tooltip: '文件夹操作',
-                              onSelected: (action) {
-                                if (action == 'rename') {
-                                  _renameFolder(folder);
-                                } else if (action == 'delete') {
-                                  _deleteFolder(folder);
-                                }
-                              },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(
-                                  value: 'rename',
-                                  child: Text('重命名'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('删除文件夹'),
-                                ),
-                              ],
+              ],
+            )
+          : PopupMenuButton<String>(
+              key: Key('folderActions-${folder.id}'),
+              tooltip: '文件夹操作',
+              onSelected: (action) {
+                if (action == 'rename') _renameFolder(folder);
+                if (action == 'delete') _deleteFolder(folder);
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'rename', child: Text('重命名')),
+                PopupMenuItem(value: 'delete', child: Text('删除文件夹')),
+              ],
+            ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<RecordingFolder>>(
+      future: _folders,
+      builder: (context, snapshot) {
+        final folders = _draft ?? snapshot.data ?? const <RecordingFolder>[];
+        final sorting = _draft != null;
+        return PopScope(
+          canPop: !sorting && !_savingOrder,
+          onPopInvokedWithResult: (didPop, result) {
+            if (!didPop && sorting) _cancelSort();
+          },
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(sorting ? '文件夹排序' : '文件夹管理'),
+              automaticallyImplyLeading: !sorting,
+              leading: sorting
+                  ? IconButton(
+                      key: const Key('cancelFolderSort'),
+                      tooltip: '取消排序',
+                      onPressed: _savingOrder ? null : _cancelSort,
+                      icon: const Icon(Icons.close),
+                    )
+                  : null,
+              actions: [
+                if (sorting)
+                  TextButton(
+                    key: const Key('saveFolderSort'),
+                    onPressed: _savingOrder ? null : _saveOrder,
+                    child: const Text('完成'),
+                  )
+                else
+                  TextButton(
+                    key: const Key('startFolderSort'),
+                    onPressed:
+                        snapshot.connectionState != ConnectionState.done ||
+                            snapshot.hasError ||
+                            folders.length < 2
+                        ? null
+                        : () {
+                            setState(() {
+                              _draft = List.of(folders);
+                              _originalIds = folders.map((f) => f.id).toList();
+                              _errorMessage = null;
+                            });
+                          },
+                    child: const Text('排序'),
+                  ),
+              ],
+            ),
+            body: snapshot.connectionState != ConnectionState.done && !sorting
+                ? const Center(child: CircularProgressIndicator())
+                : snapshot.hasError && !sorting
+                ? const Center(child: Text('无法读取文件夹。'))
+                : Column(
+                    children: [
+                      if (sorting)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('拖动右侧手柄调整顺序'),
+                        ),
+                      if (_savingOrder) const LinearProgressIndicator(),
+                      if (_errorMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                          child: Text(
+                            _errorMessage!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
                             ),
-                          );
-                        },
+                          ),
+                        ),
+                      Expanded(
+                        child: folders.isEmpty
+                            ? const Center(child: Text('还没有文件夹。'))
+                            : sorting
+                            ? ReorderableListView.builder(
+                                key: const Key('folderSortList'),
+                                buildDefaultDragHandles: false,
+                                itemCount: folders.length,
+                                onReorder: (oldIndex, newIndex) {
+                                  _moveFolder(
+                                    oldIndex,
+                                    newIndex > oldIndex
+                                        ? newIndex - 1
+                                        : newIndex,
+                                  );
+                                },
+                                itemBuilder: (_, index) => _folderRow(
+                                  folders[index],
+                                  index,
+                                  folders.length,
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.only(bottom: 96),
+                                itemCount: folders.length,
+                                itemBuilder: (_, index) => _folderRow(
+                                  folders[index],
+                                  index,
+                                  folders.length,
+                                ),
+                              ),
                       ),
-              ),
-            ],
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('createFolderButton'),
-        onPressed: _createFolder,
-        icon: const Icon(Icons.create_new_folder_outlined),
-        label: const Text('创建文件夹'),
-      ),
+                    ],
+                  ),
+            floatingActionButton: sorting
+                ? null
+                : FloatingActionButton.extended(
+                    key: const Key('createFolderButton'),
+                    onPressed: _createFolder,
+                    icon: const Icon(Icons.create_new_folder_outlined),
+                    label: const Text('创建文件夹'),
+                  ),
+          ),
+        );
+      },
     );
   }
 }

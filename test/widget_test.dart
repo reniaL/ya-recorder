@@ -1127,6 +1127,240 @@ void main() {
     });
   }
 
+  Future<void> openFolderManagement(
+    WidgetTester tester,
+    _RecordingStoreSpy store,
+  ) async {
+    await tester.pumpWidget(MyApp(recordingStore: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manageFoldersItem')));
+    await tester.pumpAndSettle();
+  }
+
+  _RecordingStoreSpy folderStore([int count = 3]) => _RecordingStoreSpy()
+    ..folders = List.generate(
+      count,
+      (i) => RecordingFolder(
+        id: 'folder-$i',
+        name: 'Folder $i',
+        createdAt: DateTime.utc(2026, 10, 6),
+      ),
+    )
+    ..recordings = [_recording('one')];
+
+  for (final count in [0, 1]) {
+    testWidgets('folder sorting is unavailable for $count folders', (
+      tester,
+    ) async {
+      await openFolderManagement(tester, folderStore(count));
+      expect(
+        tester
+            .widget<TextButton>(find.byKey(const Key('startFolderSort')))
+            .onPressed,
+        isNull,
+      );
+    });
+  }
+
+  testWidgets(
+    'folder drag supports cancel, system back and shared selector order',
+    (tester) async {
+      final store = folderStore();
+      await openFolderManagement(tester, store);
+      final start = find.byKey(const Key('startFolderSort'));
+      final save = find.byKey(const Key('saveFolderSort'));
+      await tester.tap(start);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('createFolderButton')), findsNothing);
+      expect(find.byKey(const Key('folderActions-folder-0')), findsNothing);
+      await tester.drag(
+        find.byKey(const Key('folderDrag-folder-0')),
+        const Offset(0, 85),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Folder 1')).dy,
+        lessThan(tester.getTopLeft(find.text('Folder 0')).dy),
+      );
+      expect(store.folders.first.id, 'folder-0');
+      await tester.tap(find.byKey(const Key('cancelFolderSort')));
+      await tester.pumpAndSettle();
+      await tester.tap(start);
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(start, findsOneWidget);
+      await tester.tap(start);
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(store.folderReorderCalls, 0);
+      await tester.tap(start);
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const Key('folderDrag-folder-0')),
+        const Offset(0, 85),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(store.folders.map((f) => f.id), [
+        'folder-1',
+        'folder-2',
+        'folder-0',
+      ]);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('folderScopeSelector')));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.byKey(const Key('folderScope-all'))).dy,
+        lessThan(tester.getTopLeft(find.text('Folder 1')).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('Folder 1')).dy,
+        lessThan(tester.getTopLeft(find.text('Folder 0')).dy),
+      );
+      await tester.tap(find.byKey(const Key('folderScope-all')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('录音操作'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移动到文件夹'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Folder 1')).dy,
+        lessThan(tester.getTopLeft(find.text('Folder 0')).dy),
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('多选录音'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recordingRow-one')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('移动'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.text('Folder 1')).dy,
+        lessThan(tester.getTopLeft(find.text('Folder 0')).dy),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'folder order save locks controls, preserves failure and retries',
+    (tester) async {
+      final store = folderStore();
+      await openFolderManagement(tester, store);
+      await tester.tap(find.byKey(const Key('startFolderSort')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('folderSortActions-folder-0')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<PopupMenuItem<String>>(
+              find.widgetWithText(PopupMenuItem<String>, '上移'),
+            )
+            .enabled,
+        isFalse,
+      );
+      await tester.tap(find.text('下移'));
+      await tester.pumpAndSettle();
+      final gate = Completer<void>();
+      store.folderReorderGate = gate.future;
+      store.failFolderReorder = true;
+      final save = find.byKey(const Key('saveFolderSort'));
+      await tester.tap(save);
+      await tester.pump();
+      expect(tester.widget<TextButton>(save).onPressed, isNull);
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('cancelFolderSort')))
+            .onPressed,
+        isNull,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byKey(const Key('folderSortList')), findsOneWidget);
+      expect(store.folderReorderCalls, 1);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('无法保存文件夹顺序，请重试'), findsOneWidget);
+      expect(store.folders.first.id, 'folder-0');
+      expect(
+        tester.getTopLeft(find.text('Folder 1')).dy,
+        lessThan(tester.getTopLeft(find.text('Folder 0')).dy),
+      );
+      store.failFolderReorder = false;
+      store.folderReorderGate = null;
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(store.folders.first.id, 'folder-1');
+      expect(store.folderReorderCalls, 2);
+      expect(find.byKey(const Key('startFolderSort')), findsOneWidget);
+      expect(find.text('无法保存文件夹顺序，请重试'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'folder sort fits large text and scrolls a dragged row at the edge',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final store = folderStore(20);
+      store.folders = store.folders
+          .map(
+            (f) => RecordingFolder(
+              id: f.id,
+              name: '${f.name} 文件夹完整长名称与会议记录',
+              createdAt: f.createdAt,
+            ),
+          )
+          .toList();
+      await openFolderManagement(tester, store);
+      await tester.tap(find.byKey(const Key('startFolderSort')));
+      await tester.pumpAndSettle();
+      final handle = find.byKey(const Key('folderDrag-folder-0'));
+      final semantics = tester.widget<Semantics>(
+        find.ancestor(of: handle, matching: find.byType(Semantics)).first,
+      );
+      expect(semantics.properties.label, contains(store.folders.first.name));
+      final actions = semantics.properties.customSemanticsActions!;
+      expect(actions.keys.map((a) => a.label), ['下移']);
+      actions.values.single();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final list = find.byKey(const Key('folderSortList'));
+      final scrollable = find.descendant(
+        of: list,
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scrollable).position;
+      final gesture = await tester.startGesture(tester.getCenter(handle));
+      await gesture.moveBy(const Offset(0, 10));
+      await tester.pump();
+      await gesture.moveTo(
+        Offset(tester.getCenter(handle).dx, tester.getRect(list).bottom - 8),
+      );
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(position.pixels, greaterThan(0));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('cancelFolderSort')));
+      await tester.pumpAndSettle();
+      expect(store.folderReorderCalls, 0);
+    },
+  );
+
   testWidgets('moves a recording between a folder and all recordings', (
     WidgetTester tester,
   ) async {
@@ -1675,6 +1909,17 @@ class _RecordingStoreSpy extends RecordingStore {
   bool failBatchDelete = false;
   Future<void>? batchDeleteGate;
   int batchDeleteCalls = 0;
+  bool failFolderReorder = false;
+  Future<void>? folderReorderGate;
+  int folderReorderCalls = 0;
+
+  @override
+  Future<void> reorderFolders(List<String> ids) async {
+    folderReorderCalls++;
+    if (folderReorderGate != null) await folderReorderGate;
+    if (failFolderReorder) throw StateError('Cannot save order');
+    folders = ids.map((id) => folders.singleWhere((f) => f.id == id)).toList();
+  }
 
   @override
   Future<List<Recording>> listRecentlyDeleted() async =>

@@ -18,7 +18,7 @@ class RecordingStore {
   }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
        _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
 
-  static const _schemaVersion = 1;
+  static const _schemaVersion = 2;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -56,23 +56,54 @@ class RecordingStore {
     final normalizedName = name.trim();
     _requireNonEmpty(normalizedName, 'name');
 
-    final folder = RecordingFolder(
-      id: id,
-      name: normalizedName,
-      createdAt: createdAt ?? DateTime.now().toUtc(),
-    );
     final database = await _openDatabase();
-    await database.insert('folders', folder.toDatabaseMap());
-    return folder;
+    return database.transaction((txn) async {
+      final rows = await txn.rawQuery(
+        'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM folders',
+      );
+      final folder = RecordingFolder(
+        id: id,
+        name: normalizedName,
+        createdAt: createdAt ?? DateTime.now().toUtc(),
+        sortOrder: rows.single['next_order']! as int,
+      );
+      await txn.insert('folders', folder.toDatabaseMap());
+      return folder;
+    });
   }
 
   Future<List<RecordingFolder>> listFolders() async {
     final database = await _openDatabase();
     final rows = await database.query(
       'folders',
-      orderBy: 'name COLLATE NOCASE ASC, id ASC',
+      orderBy: 'sort_order ASC, id ASC',
     );
     return rows.map(RecordingFolder.fromDatabaseMap).toList();
+  }
+
+  Future<void> reorderFolders(List<String> folderIds) async {
+    final ids = List<String>.of(folderIds);
+    final database = await _openDatabase();
+    await database.transaction((txn) async {
+      final rows = await txn.query('folders', columns: ['id']);
+      final existing = rows.map((row) => row['id']! as String).toSet();
+      if (ids.length != existing.length ||
+          ids.toSet().length != ids.length ||
+          !existing.containsAll(ids)) {
+        throw StateError(
+          'Folder order must contain every current folder once.',
+        );
+      }
+      for (var index = 0; index < ids.length; index++) {
+        final count = await txn.update(
+          'folders',
+          {'sort_order': index},
+          where: 'id = ?',
+          whereArgs: [ids[index]],
+        );
+        _requireSingleFolder(count, ids[index]);
+      }
+    });
   }
 
   Future<void> renameFolder({
@@ -395,6 +426,26 @@ class RecordingStore {
         onCreate: (database, version) async {
           await _createSchema(database);
         },
+        onUpgrade: (database, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await database.execute(
+              'ALTER TABLE folders ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+            );
+            final folders = await database.query(
+              'folders',
+              columns: ['id'],
+              orderBy: 'name COLLATE NOCASE ASC, id ASC',
+            );
+            for (var index = 0; index < folders.length; index++) {
+              await database.update(
+                'folders',
+                {'sort_order': index},
+                where: 'id = ?',
+                whereArgs: [folders[index]['id']],
+              );
+            }
+          }
+        },
       ),
     );
     _openingDatabase = opening;
@@ -414,7 +465,8 @@ class RecordingStore {
       CREATE TABLE folders (
         id TEXT PRIMARY KEY NOT NULL,
         name TEXT NOT NULL COLLATE NOCASE UNIQUE,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0
       )
     ''');
     await database.execute('''
