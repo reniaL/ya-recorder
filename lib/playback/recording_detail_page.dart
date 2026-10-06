@@ -24,6 +24,24 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
   bool _stopped = false;
   bool _changingSpeed = false;
 
+  void _showFullTitle() {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('录音标题'),
+        content: SingleChildScrollView(
+          child: SelectableText(widget.recording.title),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _setSpeed(double speed) async {
     if (_changingSpeed) return;
     setState(() => _changingSpeed = true);
@@ -59,7 +77,27 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
         if (didPop) _stopPlayback();
       },
       child: Scaffold(
-        appBar: AppBar(title: const Text('录音详情')),
+        appBar: AppBar(
+          title: Tooltip(
+            message: '查看完整录音标题',
+            child: InkWell(
+              key: const Key('recordingDetailTitleButton'),
+              onTap: _showFullTitle,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    widget.recording.title,
+                    key: const Key('recordingDetailTitle'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
         body: SafeArea(
           child: StreamBuilder<PlaybackStatus>(
             stream: widget.playbackService.statuses,
@@ -79,14 +117,11 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      widget.recording.title,
-                      key: const Key('recordingDetailTitle'),
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
                       '${createdAt.year}-${_twoDigits(createdAt.month)}-${_twoDigits(createdAt.day)} '
                       '${_twoDigits(createdAt.hour)}:${_twoDigits(createdAt.minute)}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     Text(
@@ -129,87 +164,117 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                     Wrap(
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 16,
+                      spacing: 8,
                       runSpacing: 12,
                       children: [
-                        IconButton(
-                          key: const Key('recordingDetailSkipBackward'),
-                          tooltip: '快退 5 秒',
-                          iconSize: 36,
-                          onPressed:
-                              active &&
-                                  !loading &&
-                                  !failed &&
-                                  !scrubbing &&
-                                  total > Duration.zero
-                              ? widget.playbackService.skipBackward
-                              : null,
-                          icon: const Icon(Icons.replay_5_rounded),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              key: const Key('recordingDetailSkipBackward'),
+                              tooltip: '快退 5 秒',
+                              iconSize: 36,
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(56, 56),
+                              ),
+                              onPressed:
+                                  active &&
+                                      !loading &&
+                                      !failed &&
+                                      !scrubbing &&
+                                      total > Duration.zero
+                                  ? widget.playbackService.skipBackward
+                                  : null,
+                              icon: const Icon(Icons.replay_5_rounded),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filled(
+                              key: const Key('recordingDetailPlayButton'),
+                              tooltip: playing ? '暂停播放' : '播放录音',
+                              iconSize: 48,
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(64, 64),
+                              ),
+                              onPressed: loading || failed || scrubbing
+                                  ? null
+                                  : () => widget.playbackService.toggle(
+                                      widget.recording,
+                                    ),
+                              icon: Icon(
+                                playing
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              key: const Key('recordingDetailSkipForward'),
+                              tooltip: '快进 5 秒',
+                              iconSize: 36,
+                              style: IconButton.styleFrom(
+                                minimumSize: const Size(56, 56),
+                              ),
+                              onPressed:
+                                  active &&
+                                      !loading &&
+                                      !failed &&
+                                      !scrubbing &&
+                                      total > Duration.zero
+                                  ? widget.playbackService.skipForward
+                                  : null,
+                              icon: const Icon(Icons.forward_5_rounded),
+                            ),
+                          ],
                         ),
-                        IconButton.filled(
-                          key: const Key('recordingDetailPlayButton'),
-                          tooltip: playing ? '暂停播放' : '播放录音',
-                          iconSize: 48,
-                          onPressed: loading || failed || scrubbing
-                              ? null
-                              : () => widget.playbackService.toggle(
-                                  widget.recording,
-                                ),
-                          icon: Icon(
-                            playing
-                                ? Icons.pause_rounded
-                                : Icons.play_arrow_rounded,
-                          ),
-                        ),
-                        IconButton(
-                          key: const Key('recordingDetailSkipForward'),
-                          tooltip: '快进 5 秒',
-                          iconSize: 36,
-                          onPressed:
-                              active &&
-                                  !loading &&
-                                  !failed &&
-                                  !scrubbing &&
-                                  total > Duration.zero
-                              ? widget.playbackService.skipForward
-                              : null,
-                          icon: const Icon(Icons.forward_5_rounded),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '播放倍速',
-                        border: OutlineInputBorder(),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<double>(
+                        PopupMenuButton<double>(
                           key: const Key('recordingDetailSpeed'),
-                          isExpanded: true,
-                          value: active ? status.speed : 1,
-                          items: [
+                          tooltip: '播放倍速',
+                          initialValue: active ? status.speed : 1,
+                          enabled:
+                              active &&
+                              !loading &&
+                              !failed &&
+                              !scrubbing &&
+                              !_changingSpeed,
+                          onSelected: _setSpeed,
+                          itemBuilder: (context) => [
                             for (final speed
                                 in AudioPlaybackService.supportedSpeeds)
-                              DropdownMenuItem(
+                              CheckedPopupMenuItem<double>(
                                 value: speed,
-                                child: Text(
-                                  '${speed == speed.roundToDouble() ? speed.toInt() : speed}×',
-                                ),
+                                checked: speed == (active ? status.speed : 1),
+                                child: Text(_formatSpeed(speed)),
                               ),
                           ],
-                          onChanged:
-                              active &&
-                                  !loading &&
-                                  !failed &&
-                                  !scrubbing &&
-                                  !_changingSpeed
-                              ? (speed) {
-                                  if (speed != null) _setSpeed(speed);
-                                }
-                              : null,
+                          child: Semantics(
+                            button: true,
+                            label: '播放倍速',
+                            value: _formatSpeed(active ? status.speed : 1),
+                            excludeSemantics: true,
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                minWidth: 64,
+                                minHeight: 56,
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _formatSpeed(active ? status.speed : 1),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.arrow_drop_down, size: 20),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -222,4 +287,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
   }
 
   String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  String _formatSpeed(double speed) =>
+      '${speed == speed.roundToDouble() ? speed.toInt() : speed}×';
 }
