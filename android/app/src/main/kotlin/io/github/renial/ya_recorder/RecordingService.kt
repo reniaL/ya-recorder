@@ -7,7 +7,6 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.media.MediaMetadataRetriever
-import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -18,7 +17,8 @@ import java.util.UUID
 class RecordingService : Service() {
     private val handler = Handler()
 
-    private var recorder: MediaRecorder? = null
+    private val backendFactory = RecordingBackendFactory()
+    private var backend: RecordingBackend? = null
     private var session: ActiveSession? = null
     private var state = State.IDLE
 
@@ -46,7 +46,7 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        releaseRecorder()
+        releaseBackend()
         super.onDestroy()
     }
 
@@ -92,23 +92,16 @@ class RecordingService : Service() {
 
         try {
             activeSession.temporaryFile.delete()
-            val newRecorder = MediaRecorder()
-            recorder = newRecorder
-            newRecorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-            newRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            newRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            newRecorder.setAudioEncodingBitRate(AUDIO_BIT_RATE)
-            newRecorder.setAudioSamplingRate(AUDIO_SAMPLE_RATE)
-            newRecorder.setOutputFile(activeSession.temporaryFile.absolutePath)
-            newRecorder.prepare()
+            val newBackend = backendFactory.create(activeSession.format)
+            backend = newBackend
+            newBackend.prepare(activeSession.temporaryFile)
             startForeground(NOTIFICATION_ID, createNotification())
-            newRecorder.start()
+            newBackend.start()
             activeSession.segmentStartedAtMs = SystemClock.elapsedRealtime()
             state = State.RECORDING
             publishState()
             handler.post(ticker)
         } catch (error: Exception) {
-            releaseRecorder()
             fail("recording-start-failed", error.message ?: "Unable to start recording.")
         }
     }
@@ -120,7 +113,7 @@ class RecordingService : Service() {
         }
 
         try {
-            recorder?.pause()
+            requireBackend().pause()
             session?.accumulateElapsedTime()
             state = State.PAUSED
             handler.removeCallbacks(ticker)
@@ -137,7 +130,7 @@ class RecordingService : Service() {
         }
 
         try {
-            recorder?.resume()
+            requireBackend().resume()
             session?.segmentStartedAtMs = SystemClock.elapsedRealtime()
             state = State.RECORDING
             publishState()
@@ -166,14 +159,13 @@ class RecordingService : Service() {
         }
 
         try {
-            recorder?.stop()
-            releaseRecorder()
+            requireBackend().stop()
+            releaseBackend()
             val durationMs = readDuration(activeSession.completedFile, activeSession.temporaryFile)
             moveToCompletedFile(activeSession)
             publishSaved(activeSession, durationMs)
             resetToIdle()
         } catch (error: Exception) {
-            releaseRecorder()
             fail("recording-save-failed", error.message ?: "Unable to save recording.")
         }
     }
@@ -184,21 +176,19 @@ class RecordingService : Service() {
             return
         }
 
-        val wasPreparing = state == State.PREPARING
         state = State.DISCARDING
         handler.removeCallbacks(ticker)
         publishState()
         try {
-            if (!wasPreparing) {
-                recorder?.stop()
-            }
-        } catch (_: RuntimeException) {
-            // A short recording may not have enough samples to be stopped cleanly.
+            backend?.cancel()
+        } catch (error: Exception) {
+            fail("recording-cancel-failed", error.message ?: "Unable to cancel recording.")
+            return
         } finally {
-            releaseRecorder()
-            session?.temporaryFile?.delete()
-            resetToIdle()
+            releaseBackend()
         }
+        session?.temporaryFile?.delete()
+        resetToIdle()
     }
 
     private fun moveToCompletedFile(activeSession: ActiveSession) {
@@ -227,20 +217,22 @@ class RecordingService : Service() {
         }
     }
 
-    private fun releaseRecorder() {
-        recorder?.run {
-            try {
-                reset()
-            } catch (_: RuntimeException) {
-                // The recorder may already be in an error state.
-            }
-            release()
+    private fun requireBackend(): RecordingBackend =
+        checkNotNull(backend) { "The active recording backend was lost." }
+
+    private fun releaseBackend() {
+        val activeBackend = backend
+        backend = null
+        try {
+            activeBackend?.release()
+        } catch (_: RuntimeException) {
+            // Cleanup must not hide the operation failure or prevent idle reset.
         }
-        recorder = null
     }
 
     private fun fail(code: String, message: String) {
         handler.removeCallbacks(ticker)
+        releaseBackend()
         state = State.FAILED
         publishState()
         publishError(code, message)
@@ -401,8 +393,6 @@ class RecordingService : Service() {
         private const val NOTIFICATION_CHANNEL_ID = "active_recording"
         private const val NOTIFICATION_ID = 1001
         private const val STATUS_INTERVAL_MS = 250L
-        private const val AUDIO_BIT_RATE = 128000
-        private const val AUDIO_SAMPLE_RATE = 44100
 
         @Volatile
         private var latestStatus: Map<String, Any?> = idleStatus()
