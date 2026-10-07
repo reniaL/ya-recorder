@@ -1051,6 +1051,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   enabled: !_isSubmitting,
                   onChanged: _setSearchQuery,
                   decoration: InputDecoration(
+                    hintStyle: TextStyle(
+                      color: Theme.of(context).colorScheme.outline,
+                    ),
                     hintText: _selectedFolderName == null
                         ? '搜索全部录音'
                         : '搜索「$_selectedFolderName」中的录音',
