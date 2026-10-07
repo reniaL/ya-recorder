@@ -15,8 +15,8 @@ import sys
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[2]
-CPP = ROOT / "android/mp3-prototype/src/main/cpp"
-ARCHIVE = ROOT / "android/mp3-prototype/third_party/lame/lame-4.0.tar.gz"
+CPP = ROOT / "android/mp3-encoder/src/main/cpp"
+ARCHIVE = ROOT / "android/mp3-encoder/third_party/lame/lame-4.0.tar.gz"
 SHA256 = "3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb"
 SOURCES = "bitstream encoder fft gain_analysis id3tag lame newmdct presets psymodel quantize quantize_pvt reservoir set_get tables takehiro util vbrquantize version mpglib_interface".split()
 

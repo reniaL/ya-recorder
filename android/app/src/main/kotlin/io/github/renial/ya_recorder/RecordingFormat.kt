@@ -12,9 +12,9 @@ enum class RecordingFormat(val wireName: String, val extension: String, val mime
 
     fun temporaryFileName(id: String): String = "${completedFileName(id)}.part"
 
-    fun requireRecordingEncoder() {
-        // The isolated MP3 experiment is not a production recording backend.
-        if (this == MP3) throw UnsupportedOperationException("当前版本暂不支持 MP3 录音。")
+    fun requireRecordingEncoder(mp3Enabled: Boolean = false) {
+        // Release stays gated until candidate parameters pass device acceptance.
+        if (this == MP3 && !mp3Enabled) throw UnsupportedOperationException("当前版本暂不支持 MP3 录音。")
     }
 
     companion object {

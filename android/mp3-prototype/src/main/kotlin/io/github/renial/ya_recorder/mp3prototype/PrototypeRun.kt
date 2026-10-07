@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Debug
 import android.os.Process
 import android.os.SystemClock
+import io.github.renial.ya_recorder.mp3.LameEncoder
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean

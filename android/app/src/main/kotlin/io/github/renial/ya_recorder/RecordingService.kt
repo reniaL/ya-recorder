@@ -10,34 +10,42 @@ import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import java.io.File
 import java.util.UUID
 
 class RecordingService : Service() {
-    private val handler = Handler()
+    private val handler = Handler(Looper.getMainLooper())
+    private val commands = SerialRecordingCommands()
 
-    private val backendFactory = RecordingBackendFactory()
+    private val backendFactory = RecordingBackendFactory(mp3Enabled = BuildConfig.REC07_MP3_ENABLED)
     private var backend: RecordingBackend? = null
     private var session: ActiveSession? = null
     private var state = State.IDLE
 
     private val ticker = object : Runnable {
         override fun run() {
-            if (state == State.RECORDING) {
-                publishState()
-                handler.postDelayed(this, STATUS_INTERVAL_MS)
+            commands.submit {
+                if (state == State.RECORDING) {
+                    publishState()
+                    handler.removeCallbacks(this)
+                    handler.postDelayed(this, STATUS_INTERVAL_MS)
+                }
             }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> startRecording(intent.getStringExtra(EXTRA_FORMAT))
-            ACTION_PAUSE -> pauseRecording()
-            ACTION_RESUME -> resumeRecording()
-            ACTION_STOP -> stopRecording()
-            ACTION_CANCEL -> cancelRecording()
+        commands.submit {
+            when (intent?.action) {
+                ACTION_START -> startRecording(intent.getStringExtra(EXTRA_FORMAT))
+                ACTION_PAUSE -> pauseRecording()
+                ACTION_RESUME -> resumeRecording()
+                ACTION_STOP -> stopRecording()
+                ACTION_CANCEL -> cancelRecording()
+            }
         }
         return START_NOT_STICKY
     }
@@ -46,7 +54,11 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
-        releaseBackend()
+        commands.close {
+            handler.removeCallbacksAndMessages(null)
+            releaseBackend()
+            latestStatus = idleStatus()
+        }
         super.onDestroy()
     }
 
@@ -57,7 +69,7 @@ class RecordingService : Service() {
         }
 
         val format = try {
-            RecordingFormat.fromWireValue(formatValue).also { it.requireRecordingEncoder() }
+            RecordingFormat.fromWireValue(formatValue).also { it.requireRecordingEncoder(BuildConfig.REC07_MP3_ENABLED) }
         } catch (error: IllegalArgumentException) {
             fail("recording-format-invalid", "录音格式无效。")
             return
@@ -91,18 +103,28 @@ class RecordingService : Service() {
         publishState()
 
         try {
+            // Enter foreground promptly, before native initialization can wait.
+            startForeground(NOTIFICATION_ID, createNotification())
             activeSession.temporaryFile.delete()
             val newBackend = backendFactory.create(activeSession.format)
             backend = newBackend
+            newBackend.setFailureListener { error ->
+                commands.submit {
+                    if (backend === newBackend && session === activeSession) {
+                        fail("recording-runtime-failed", "MP3 录音已中断，无法完成保存。", error)
+                    }
+                }
+            }
             newBackend.prepare(activeSession.temporaryFile)
-            startForeground(NOTIFICATION_ID, createNotification())
+            check(!commands.isClosed) { "Recording service was destroyed during preparation." }
             newBackend.start()
             activeSession.segmentStartedAtMs = SystemClock.elapsedRealtime()
             state = State.RECORDING
             publishState()
             handler.post(ticker)
         } catch (error: Exception) {
-            fail("recording-start-failed", error.message ?: "Unable to start recording.")
+            fail("recording-start-failed", if (format == RecordingFormat.MP3) "无法开始 MP3 录音。"
+                else error.message ?: "Unable to start recording.", error)
         }
     }
 
@@ -119,7 +141,8 @@ class RecordingService : Service() {
             handler.removeCallbacks(ticker)
             publishState()
         } catch (error: Exception) {
-            fail("recording-pause-failed", error.message ?: "Unable to pause recording.")
+            fail("recording-pause-failed", if (session?.format == RecordingFormat.MP3) "无法暂停 MP3 录音，录音已中断。"
+                else error.message ?: "Unable to pause recording.", error)
         }
     }
 
@@ -136,7 +159,8 @@ class RecordingService : Service() {
             publishState()
             handler.post(ticker)
         } catch (error: Exception) {
-            fail("recording-resume-failed", error.message ?: "Unable to resume recording.")
+            fail("recording-resume-failed", if (session?.format == RecordingFormat.MP3) "无法继续 MP3 录音，录音已中断。"
+                else error.message ?: "Unable to resume recording.", error)
         }
     }
 
@@ -160,13 +184,20 @@ class RecordingService : Service() {
 
         try {
             requireBackend().stop()
+            val acceptedDurationMs = requireBackend().elapsedMs
             releaseBackend()
             val durationMs = readDuration(activeSession.completedFile, activeSession.temporaryFile)
+            if (activeSession.format == RecordingFormat.MP3) {
+                check(acceptedDurationMs != null && acceptedDurationMs > 0 &&
+                    kotlin.math.abs(durationMs - acceptedDurationMs) <= 100) { "MP3 media duration does not match captured samples." }
+            }
+            check(!commands.isClosed) { "Recording service was destroyed before file commit." }
             moveToCompletedFile(activeSession)
             publishSaved(activeSession, durationMs)
             resetToIdle()
         } catch (error: Exception) {
-            fail("recording-save-failed", error.message ?: "Unable to save recording.")
+            fail("recording-save-failed", if (activeSession.format == RecordingFormat.MP3) "无法保存 MP3 录音。"
+                else error.message ?: "Unable to save recording.", error)
         }
     }
 
@@ -182,7 +213,8 @@ class RecordingService : Service() {
         try {
             backend?.cancel()
         } catch (error: Exception) {
-            fail("recording-cancel-failed", error.message ?: "Unable to cancel recording.")
+            fail("recording-cancel-failed", if (session?.format == RecordingFormat.MP3) "无法完成 MP3 录音清理。"
+                else error.message ?: "Unable to cancel recording.", error)
             return
         } finally {
             releaseBackend()
@@ -230,12 +262,13 @@ class RecordingService : Service() {
         }
     }
 
-    private fun fail(code: String, message: String) {
+    private fun fail(code: String, message: String, cause: Throwable? = null) {
+        if (cause != null) Log.e("RecordingService", code, cause)
         handler.removeCallbacks(ticker)
-        releaseBackend()
         state = State.FAILED
         publishState()
         publishError(code, message)
+        releaseBackend()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         session = null
@@ -252,10 +285,11 @@ class RecordingService : Service() {
     }
 
     private fun publishState() {
+        if (commands.isClosed) return
         val activeSession = session
         val status = mapOf(
             "state" to state.wireName,
-            "elapsedMs" to (activeSession?.elapsedMs(state) ?: 0L),
+            "elapsedMs" to (backend?.elapsedMs ?: activeSession?.elapsedMs(state) ?: 0L),
             "canResume" to (state == State.PAUSED),
             "sessionId" to activeSession?.id,
             "format" to activeSession?.format?.wireName,
@@ -299,6 +333,7 @@ class RecordingService : Service() {
     }
 
     private fun publish(event: String, extras: Intent) {
+        if (commands.isClosed) return
         sendBroadcast(
             extras.setAction(event).setPackage(packageName),
         )

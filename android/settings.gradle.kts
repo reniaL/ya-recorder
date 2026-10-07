@@ -20,10 +20,12 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.11.1" apply false
+    id("com.android.library") version "8.11.1" apply false
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
 }
 
 include(":app")
+include(":mp3-encoder")
 
 // REC-07 experiment: opt in to a separate APK without changing normal app builds.
 if (providers.gradleProperty("rec07Prototype").orNull == "true") {

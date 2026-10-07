@@ -1,0 +1,429 @@
+{
+  "date": "2026-10-07",
+  "stage": "REC-07 step 4; code integration behind a debug gate",
+  "candidate": {
+    "sampleRate": 44100,
+    "channels": 1,
+    "bitrateKbps": 64,
+    "lameQuality": 5,
+    "lameVersion": "4.0",
+    "deviceAccepted": false
+  },
+  "upstreamArchiveSha256": "3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb",
+  "configurationChecks": {
+    "normalBuildFlags": {
+      "debug": false,
+      "profile": false,
+      "release": false
+    },
+    "explicitOptInDebugFlagVerifiedTrueBeforeNormalBuild": true,
+    "profileAndReleaseVerifiedFalseEvenWithOptInProperty": true,
+    "fullProfileOrReleaseApkBuilt": false
+  },
+  "validation": {
+    "flutterAnalyze": "no issues",
+    "flutterTests": 129,
+    "nativeSuites": [
+      {
+        "module": "app",
+        "name": "io.github.renial.ya_recorder.M4aRecordingBackendTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "module": "app",
+        "name": "io.github.renial.ya_recorder.Mp3RecordingBackendTest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "module": "app",
+        "name": "io.github.renial.ya_recorder.RecordingFormatTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "module": "app",
+        "name": "io.github.renial.ya_recorder.SerialRecordingCommandsTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "module": "mp3-prototype",
+        "name": "io.github.renial.ya_recorder.mp3prototype.PcmQueueTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0
+      }
+    ],
+    "sharedModuleLint": "no issues",
+    "appLint": {
+      "defaultRun": "blocked by existing cross-drive plugin test-model generation",
+      "mainSourceRun": "passed with temporary build-directory init script",
+      "mainSourceErrors": 0,
+      "mainSourceWarnings": 7,
+      "testSourcesExcludedFromLint": true,
+      "existingChecksExcluded": [
+        "PropertyEscape",
+        "UnspecifiedRegisterReceiverFlag"
+      ],
+      "repositoryLintConfigurationChanged": false,
+      "newAudioRecordPermissionFailureHandledAndTested": true
+    }
+  },
+  "hostLifecycle": {
+    "samples": 220560,
+    "durationMs": 5001,
+    "sourceStarts": 2,
+    "sourceStops": 2,
+    "sourceReleases": 1,
+    "decodedSamples": 220560,
+    "correlation": 0.9999995992312158,
+    "minOneSecondRms": 8060.406307355719,
+    "maxOneSecondRms": 8060.996169291849,
+    "ffprobeDuration": "5.041633",
+    "evidence": "production Kotlin backend + real Linux JNI; accelerated synthetic PCM, not Android"
+  },
+  "hostCoreShortRegression": {
+    "cases": "1 sample, 10 seconds + 37 samples at two parameter sets, 10 seconds, native failure boundaries",
+    "newHourRun": false
+  },
+  "artifacts": {
+    "mp3OptInDebug": {
+      "path": "build/rec07-mp3/app-debug-mp3.apk",
+      "sha256": "d56cd9b32ebb017ae56f1202903063439793e605ca223cce69662cd43753ab0d",
+      "sourceAssetsVerified": 12,
+      "allNativeLibrariesAligned": true,
+      "sdkZipalignPassed": true,
+      "jniAbis": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86_64"
+      ],
+      "jniExports": [
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_close",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_encode",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_finish",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_open",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_version"
+      ],
+      "alignment": [
+        {
+          "library": "lib/arm64-v8a/libdartjni.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 21151744,
+          "passed": true
+        },
+        {
+          "library": "lib/arm64-v8a/libflutter.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 21250048,
+          "passed": true
+        },
+        {
+          "library": "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 58425344,
+          "passed": true
+        },
+        {
+          "library": "lib/arm64-v8a/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 5947392,
+          "passed": true
+        },
+        {
+          "library": "lib/armeabi-v7a/libdartjni.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6193152,
+          "passed": true
+        },
+        {
+          "library": "lib/armeabi-v7a/libflutter.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 73695232,
+          "passed": true
+        },
+        {
+          "library": "lib/armeabi-v7a/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6258688,
+          "passed": true
+        },
+        {
+          "library": "lib/x86_64/libdartjni.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6438912,
+          "passed": true
+        },
+        {
+          "library": "lib/x86_64/libflutter.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 155566080,
+          "passed": true
+        },
+        {
+          "library": "lib/x86_64/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6553600,
+          "passed": true
+        }
+      ]
+    },
+    "normalDebug": {
+      "path": "build/app/outputs/flutter-apk/app-debug.apk",
+      "sha256": "faf1f59e815d38c316d6a7f8d6686b21f82640dfb3285a029ce3c51f0951ab4a",
+      "sourceAssetsVerified": 12,
+      "allNativeLibrariesAligned": true,
+      "sdkZipalignPassed": true,
+      "jniAbis": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86_64"
+      ],
+      "jniExports": [
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_close",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_encode",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_finish",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_open",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_version"
+      ],
+      "alignment": [
+        {
+          "library": "lib/arm64-v8a/libdartjni.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 21151744,
+          "passed": true
+        },
+        {
+          "library": "lib/arm64-v8a/libflutter.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 21250048,
+          "passed": true
+        },
+        {
+          "library": "lib/arm64-v8a/libVkLayer_khronos_validation.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 58425344,
+          "passed": true
+        },
+        {
+          "library": "lib/arm64-v8a/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 5947392,
+          "passed": true
+        },
+        {
+          "library": "lib/armeabi-v7a/libdartjni.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6193152,
+          "passed": true
+        },
+        {
+          "library": "lib/armeabi-v7a/libflutter.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 73695232,
+          "passed": true
+        },
+        {
+          "library": "lib/armeabi-v7a/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6258688,
+          "passed": true
+        },
+        {
+          "library": "lib/x86_64/libdartjni.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6438912,
+          "passed": true
+        },
+        {
+          "library": "lib/x86_64/libflutter.so",
+          "loadAlignments": [
+            65536,
+            65536,
+            65536
+          ],
+          "compressed": false,
+          "zipDataOffset": 155566080,
+          "passed": true
+        },
+        {
+          "library": "lib/x86_64/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 6553600,
+          "passed": true
+        }
+      ]
+    },
+    "prototypeDebug": {
+      "path": "build/mp3-prototype/outputs/apk/debug/mp3-prototype-debug.apk",
+      "sha256": "1ad24aae0a58024d21647ddd34d9158b095e7c066c4464eddc91e1b904342279",
+      "sourceAssetsVerified": 12,
+      "allNativeLibrariesAligned": true,
+      "sdkZipalignPassed": true,
+      "jniAbis": [
+        "arm64-v8a",
+        "armeabi-v7a",
+        "x86_64"
+      ],
+      "jniExports": [
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_close",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_encode",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_finish",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_open",
+        "Java_io_github_renial_ya_1recorder_mp3_LameEncoder_version"
+      ],
+      "alignment": [
+        {
+          "library": "lib/arm64-v8a/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 1572864,
+          "passed": true
+        },
+        {
+          "library": "lib/armeabi-v7a/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 2621440,
+          "passed": true
+        },
+        {
+          "library": "lib/x86_64/librec07_lame.so",
+          "loadAlignments": [
+            16384,
+            16384,
+            16384
+          ],
+          "compressed": false,
+          "zipDataOffset": 3440640,
+          "passed": true
+        }
+      ]
+    }
+  },
+  "deviceEvidence": {
+    "connectedAndroidDevices": 0,
+    "microphone": false,
+    "androidJni": false,
+    "androidMediaValidation": false,
+    "hourRealtimeRecording": false,
+    "lockScreenBackground": false,
+    "16kbRuntime": false
+  },
+  "remaining": [
+    "device parameter gate",
+    "save protocol and drafts",
+    "partial-save/recovery and REC-06",
+    "settings and MP3 sharing",
+    "full Android acceptance"
+  ]
+}

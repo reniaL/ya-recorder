@@ -23,6 +23,19 @@ exists before applying this one-line change. All other upstream sources are
 compiled unchanged. The modification is maintained in the accompanying build
 scripts, dated 2026-10-07, by the ya-recorder project.
 
-The prototype packages the encoder and wrapper as `librec07_lame.so`. Keep this
-notice, license, full source archive and build instructions with the experiment.
-Production integration and distribution requirements are a later work item.
+The shared `android/mp3-encoder` module packages the encoder and JNI wrapper as
+`librec07_lame.so` for both the production application and the separate prototype.
+APKs include this module's source and build recipe under `assets/mp3-encoder/`:
+the full unchanged upstream archive and license, project C/JNI sources and
+CMake patch/configuration, Kotlin JNI declarations and Gradle configuration.
+In APK assets the archive is named `lame-4.0.tar.gz.bin` to prevent AAPT from
+expanding gzip assets. Rename it to `lame-4.0.tar.gz` after extracting the module
+source directory to restore the original repository/build layout; its contents
+and SHA-256 are unchanged.
+Repository: https://github.com/renial/ya-recorder
+
+Build from the repository with Android NDK 28.2.13676358 and CMake 3.22.1:
+`cd android && ./gradlew :mp3-encoder:assembleDebug`.
+The module has no prebuilt native dependency; the library can be rebuilt from
+the accompanying sources for armeabi-v7a, arm64-v8a and x86_64. JNI names are
+kept by `consumer-rules.pro` when application code is shrunk.

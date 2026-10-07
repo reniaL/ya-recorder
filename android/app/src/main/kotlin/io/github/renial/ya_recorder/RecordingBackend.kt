@@ -12,6 +12,9 @@ import java.io.File
  */
 interface RecordingBackend {
     val format: RecordingFormat
+    // MP3 uses accepted PCM samples; M4A continues to use the service clock.
+    val elapsedMs: Long? get() = null
+    fun setFailureListener(listener: (Throwable) -> Unit) {}
     fun prepare(temporaryFile: File)
     fun start()
     fun pause()
@@ -23,14 +26,18 @@ interface RecordingBackend {
 
 class RecordingBackendFactory(
     private val createM4a: () -> RecordingBackend = { M4aRecordingBackend() },
+    private val mp3Enabled: Boolean = false,
+    private val createMp3: () -> RecordingBackend = { Mp3RecordingBackend() },
 ) {
     fun create(format: RecordingFormat): RecordingBackend {
-        format.requireRecordingEncoder()
+        format.requireRecordingEncoder(mp3Enabled)
         return when (format) {
             RecordingFormat.M4A -> createM4a().also {
                 check(it.format == format) { "Recording backend format does not match the session" }
             }
-            RecordingFormat.MP3 -> throw UnsupportedOperationException("当前版本暂不支持 MP3 录音。")
+            RecordingFormat.MP3 -> createMp3().also {
+                check(it.format == format) { "Recording backend format does not match the session" }
+            }
         }
     }
 }

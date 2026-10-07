@@ -200,7 +200,7 @@ class M4aRecordingBackendTest {
         val recorder = FakeRecorder()
         val m4a = M4aRecordingBackend { recorder }
         var created = 0
-        val factory = RecordingBackendFactory { created++; m4a }
+        val factory = RecordingBackendFactory(createM4a = { created++; m4a })
         assertThrows(UnsupportedOperationException::class.java) { factory.create(RecordingFormat.MP3) }
         assertEquals(0, created)
         assertSame(m4a, factory.create(RecordingFormat.M4A))

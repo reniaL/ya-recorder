@@ -2,7 +2,7 @@
 #include <jni.h>
 #include <stdint.h>
 
-#define JNI_NAME(name) Java_io_github_renial_ya_1recorder_mp3prototype_LameEncoder_##name
+#define JNI_NAME(name) Java_io_github_renial_ya_1recorder_mp3_LameEncoder_##name
 
 JNIEXPORT jlong JNICALL JNI_NAME(open)(JNIEnv *env, jobject self, jstring path, jint bitrate, jint quality) {
     (void) self;

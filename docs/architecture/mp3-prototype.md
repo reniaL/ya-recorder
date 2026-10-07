@@ -12,7 +12,7 @@
 
 ## 来源与构建选择
 
-使用 [LAME 官方发布列表](https://sourceforge.net/projects/lame/files/lame/)中的 **4.0** 源码，采用项目自己的 C/JNI 封装与 CMake 构建。原始完整源码包、许可及来源记录随仓库保存，SHA-256 校验失败时停止构建；不依赖旧 Android 封装的预编译库，不在构建期间下载源码。详见 [依赖说明](../../android/mp3-prototype/third_party/lame/NOTICE.md)。
+使用 [LAME 官方发布列表](https://sourceforge.net/projects/lame/files/lame/)中的 **4.0** 源码，采用项目自己的 C/JNI 封装与 CMake 构建。原始完整源码包、许可及来源记录随仓库保存，SHA-256 校验失败时停止构建；不依赖旧 Android 封装的预编译库，不在构建期间下载源码。第四步将相同编码核心移入共享 `android/mp3-encoder`，原型依赖该模块，仍是独立 APK；JNI 类名随模块迁移。详见 [依赖说明](../../android/mp3-encoder/third_party/lame/NOTICE.md)。
 
 采用可移植 C 实现，关闭可选解码器、汇编/SSE 和分析功能。NDK Clang 发现 upstream `SHIFT_IN_BITS_VALUE` 对负数做左移；构建生成的 `VbrTag_project.c` 将位掩码改为无符号运算，原始归档不变。CMake 和桌面验证脚本都检查原表达式后再应用该单行修改，修改及日期记录在依赖说明中。上游仍有整数参数传给 `fabs` 的编译警告；项目封装启用 `-Wall -Wextra -Werror`。
 
@@ -95,4 +95,4 @@ Android 校验通过 MediaExtractor 确认 MP3、采样率、声道和时长，�
 - [ ] 在 Android 上验证 JNI/MediaCodec、锁屏/后台、提前停止及人为队列溢出的实际结果。
 - [ ] 在 16 KB 系统（设备或模拟器）运行原型；记录实际页大小并确认无兼容模式依赖。
 
-当前第一步的设备关口仍未通过。第二步的格式契约与旧索引迁移已实现，详见 [录音生命周期中的格式契约](recording-lifecycle.md#已实现的格式契约rec-07-第二步)；正式编码参数及生产后端不能视为已经验收，设备测试失败时应先修复本原型，再接入正式录音流程。
+当前第一步的设备关口仍未通过。格式契约、旧索引迁移、后端接口及 [第四步 MP3 后端代码](mp3-backend.md)已实现，MP3 仅在显式开启的 debug 中可调用，普通构建和主界面仍使用 M4A。正式参数及生产媒体验收不能视为通过；设备测试失败时应先修复原型/共享核心与后端，再解除产品入口的开关。上述本轮原型证据为第一步的历史记录，第四步的迁移与回归证据见后端记录。

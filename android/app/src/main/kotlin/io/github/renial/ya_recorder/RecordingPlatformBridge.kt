@@ -145,7 +145,7 @@ class RecordingPlatformBridge(
     private fun startRecording(call: MethodCall, result: MethodChannel.Result) {
         val value = (call.arguments as? Map<*, *>)?.get("format")
         val format = try {
-            RecordingFormat.fromWireValue(value).also { it.requireRecordingEncoder() }
+            RecordingFormat.fromWireValue(value).also { it.requireRecordingEncoder(BuildConfig.REC07_MP3_ENABLED) }
         } catch (error: IllegalArgumentException) {
             result.error("recording-format-invalid", "录音格式无效。", null)
             return
