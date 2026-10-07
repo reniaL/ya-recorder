@@ -56,6 +56,8 @@ UX-05 编译验证：Android debug APK 构建通过，产物为 `build/app/outpu
 
 搜索提示配色调整（2026-10-07）：搜索框的范围提示使用主题 `outline` 灰色，比输入内容的主要文字色更浅，突出实际输入的关键词；全部录音与文件夹搜索共用该样式。`flutter analyze` 无问题，`flutter test`（117 项）通过；实际视觉效果待真机确认。此项仅调整提示配色，不改变搜索行为及功能计数。
 
+应用显示名称调整（2026-10-07）：Android 应用标签改为字符串资源中的“丫丫录音”，用于桌面及系统应用信息；Flutter 应用标题已有相同名称。保留原应用 ID，更新安装沿用既有录音数据。`flutter analyze` 无问题，`flutter test`（117 项）及 Android debug APK 构建通过；使用 `aapt dump badging` 确认安装包应用标签为“丫丫录音”，产物为 `build/app/outputs/flutter-apk/app-debug.apk`。尚未安装到真机核对桌面名称；不改变功能范围及总览计数。
+
 ## 工程基础
 
 | 编号 | 工作项 | 状态 | 验证方式或完成条件 | 备注 |
