@@ -24,3 +24,8 @@ plugins {
 }
 
 include(":app")
+
+// REC-07 experiment: opt in to a separate APK without changing normal app builds.
+if (providers.gradleProperty("rec07Prototype").orNull == "true") {
+    include(":mp3-prototype")
+}

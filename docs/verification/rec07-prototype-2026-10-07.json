@@ -1,0 +1,147 @@
+{
+  "clientDate": "2026-10-07",
+  "scope": "REC-07 stage 1; build and accelerated Linux-host encoding only; Android runtime/device gate pending",
+  "sourceArchiveSha256": "3df5124d5ad3a98312ffd7ba6a9b36230e4f8a3e66d3ce0f425e336c32d216eb",
+  "prototypeApkSha256": "ba0da9dcb1c3e3e71f553e8de9f1bdca57b26e9de3ebc9323f7e28da6c6151a9",
+  "hostEnvironment": {
+    "cpu": "AMD Ryzen 7 8845H",
+    "kernel": "Linux 5.15.167.4-microsoft-standard-WSL2 x86_64",
+    "compiler": "GCC (Debian 12.2.0-14+deb12u1) 12.2.0",
+    "decoder": "FFmpeg 5.1.6-0+deb12u1",
+    "python": "3.11.2"
+  },
+  "hostCases": [
+    {
+      "lameVersion": "4.0",
+      "samples": 1,
+      "wallMs": 0.352,
+      "maxEncodeBlockMs": 0.34,
+      "flushSyncMs": 21.232,
+      "firstMaxRssKb": 18364,
+      "maxRssKb": 18364,
+      "bitrateKbps": 64,
+      "quality": 5,
+      "input": "accelerated synthetic tone on Linux host",
+      "fileBytes": 625,
+      "decodedSamples": 1,
+      "correlation": null,
+      "minOneSecondRms": null,
+      "maxOneSecondRms": 0.0,
+      "ffprobeDuration": "0.052245"
+    },
+    {
+      "lameVersion": "4.0",
+      "samples": 441037,
+      "wallMs": 40.504,
+      "maxEncodeBlockMs": 0.888,
+      "flushSyncMs": 23.125,
+      "firstMaxRssKb": 18364,
+      "maxRssKb": 18364,
+      "bitrateKbps": 64,
+      "quality": 5,
+      "input": "accelerated synthetic tone on Linux host",
+      "fileBytes": 80456,
+      "decodedSamples": 441037,
+      "correlation": 0.9999988606790692,
+      "minOneSecondRms": 8060.364046376155,
+      "maxOneSecondRms": 8060.996169291849,
+      "ffprobeDuration": "10.031020"
+    },
+    {
+      "lameVersion": "4.0",
+      "samples": 441037,
+      "wallMs": 79.769,
+      "maxEncodeBlockMs": 1.803,
+      "flushSyncMs": 2.947,
+      "firstMaxRssKb": 18364,
+      "maxRssKb": 18364,
+      "bitrateKbps": 96,
+      "quality": 2,
+      "input": "accelerated synthetic tone on Linux host",
+      "fileBytes": 120685,
+      "decodedSamples": 441037,
+      "correlation": 0.9999999300673779,
+      "minOneSecondRms": 8060.741466705233,
+      "maxOneSecondRms": 8060.987369807155,
+      "ffprobeDuration": "10.031020"
+    },
+    {
+      "lameVersion": "4.0",
+      "samples": 158760000,
+      "wallMs": 14079.922,
+      "maxEncodeBlockMs": 8.265,
+      "flushSyncMs": 22.363,
+      "firstMaxRssKb": 18364,
+      "maxRssKb": 18364,
+      "bitrateKbps": 64,
+      "quality": 5,
+      "input": "accelerated synthetic tone on Linux host",
+      "fileBytes": 28800521,
+      "decodedSamples": 158760000,
+      "correlation": 0.9999999943992427,
+      "minOneSecondRms": 8060.794962194466,
+      "maxOneSecondRms": 8060.996169291849,
+      "ffprobeDuration": "3600.039184"
+    }
+  ],
+  "apkAlignment": [
+    {
+      "library": "lib/arm64-v8a/librec07_lame.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "compressed": false,
+      "zipDataOffset": 835584,
+      "passed": true
+    },
+    {
+      "library": "lib/armeabi-v7a/librec07_lame.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "compressed": false,
+      "zipDataOffset": 1081344,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/librec07_lame.so",
+      "loadAlignments": [
+        16384,
+        16384,
+        16384
+      ],
+      "compressed": false,
+      "zipDataOffset": 1261568,
+      "passed": true
+    }
+  ],
+  "jniExports": [
+    "Java_io_github_renial_ya_1recorder_mp3prototype_LameEncoder_open",
+    "Java_io_github_renial_ya_1recorder_mp3prototype_LameEncoder_encode",
+    "Java_io_github_renial_ya_1recorder_mp3prototype_LameEncoder_finish",
+    "Java_io_github_renial_ya_1recorder_mp3prototype_LameEncoder_close",
+    "Java_io_github_renial_ya_1recorder_mp3prototype_LameEncoder_version"
+  ],
+  "androidBuild": {
+    "ndk": "28.2.13676358",
+    "cmake": "3.22.1",
+    "agp": "8.11.1",
+    "jvmTests": 6,
+    "lintErrors": 0,
+    "lintWarnings": 4,
+    "sdkZipalign16Kb": "passed"
+  },
+  "existingApp": {
+    "flutterAnalyze": "passed",
+    "flutterTests": 117,
+    "debugApk": "passed"
+  },
+  "androidRuntime": {
+    "status": "not run",
+    "reason": "adb: no devices/emulators found"
+  }
+}

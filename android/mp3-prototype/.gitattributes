@@ -1,0 +1,2 @@
+# Preserve the upstream license verbatim, including its whitespace-only line.
+third_party/lame/COPYING -whitespace
