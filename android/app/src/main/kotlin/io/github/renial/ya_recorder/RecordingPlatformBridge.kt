@@ -36,6 +36,7 @@ class RecordingPlatformBridge(
                     "elapsedMs" to intent.getLongExtra(RecordingService.EXTRA_ELAPSED_MS, 0L),
                     "canResume" to intent.getBooleanExtra(RecordingService.EXTRA_CAN_RESUME, false),
                     "sessionId" to intent.getStringExtra(RecordingService.EXTRA_SESSION_ID),
+                    "format" to intent.getStringExtra(RecordingService.EXTRA_FORMAT),
                 )
                 RecordingService.EVENT_SAVED -> mapOf(
                     "type" to "saved",
@@ -46,6 +47,7 @@ class RecordingPlatformBridge(
                         "durationMs" to intent.getLongExtra(RecordingService.EXTRA_DURATION_MS, 0L),
                         "fileSizeBytes" to intent.getLongExtra(RecordingService.EXTRA_FILE_SIZE_BYTES, 0L),
                         "wasInterrupted" to intent.getBooleanExtra(RecordingService.EXTRA_WAS_INTERRUPTED, false),
+                        "format" to intent.getStringExtra(RecordingService.EXTRA_FORMAT),
                     ),
                 )
                 RecordingService.EVENT_ERROR -> mapOf(
@@ -69,7 +71,7 @@ class RecordingPlatformBridge(
             "requestMicrophonePermission" -> requestMicrophonePermission(result)
             "openAppSettings" -> openAppSettings(result)
             "getStatus" -> result.success(RecordingService.currentStatus())
-            "start" -> sendRecordingCommand(RecordingService.ACTION_START, result)
+            "start" -> startRecording(call, result)
             "pause" -> sendRecordingCommand(RecordingService.ACTION_PAUSE, result)
             "resume" -> sendRecordingCommand(RecordingService.ACTION_RESUME, result)
             "stop" -> sendRecordingCommand(RecordingService.ACTION_STOP, result)
@@ -140,14 +142,28 @@ class RecordingPlatformBridge(
         }
     }
 
-    private fun sendRecordingCommand(action: String, result: MethodChannel.Result) {
+    private fun startRecording(call: MethodCall, result: MethodChannel.Result) {
+        val value = (call.arguments as? Map<*, *>)?.get("format")
+        val format = try {
+            RecordingFormat.fromWireValue(value).also { it.requireRecordingEncoder() }
+        } catch (error: IllegalArgumentException) {
+            result.error("recording-format-invalid", "录音格式无效。", null)
+            return
+        } catch (error: UnsupportedOperationException) {
+            result.error("recording-format-unavailable", error.message, null)
+            return
+        }
+        sendRecordingCommand(RecordingService.ACTION_START, result, format)
+    }
+
+    private fun sendRecordingCommand(action: String, result: MethodChannel.Result, format: RecordingFormat? = null) {
         if (action == RecordingService.ACTION_START && !hasMicrophonePermission()) {
             result.error("microphone-permission-required", "Microphone permission is required to record.", null)
             return
         }
 
         try {
-            val commandIntent = RecordingService.commandIntent(activity, action)
+            val commandIntent = RecordingService.commandIntent(activity, action, format)
             if (action == RecordingService.ACTION_START && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 activity.startForegroundService(commandIntent)
             } else {

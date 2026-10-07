@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/recently_deleted_page.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
@@ -15,6 +16,7 @@ class _TrashStore extends RecordingStore {
 
   List<Recording> deleted = [
     Recording(
+      format: RecordingFormat.m4a,
       id: 'one',
       title: '会议录音',
       filePath: '/private/one.m4a',

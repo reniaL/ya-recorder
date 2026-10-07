@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
 
@@ -38,6 +39,7 @@ void main() {
       final audio = File(path.join(directory.path, 'audio.m4a'));
       await audio.writeAsBytes([1, 2, 3]);
       final recording = Recording(
+        format: RecordingFormat.m4a,
         id: 'recording',
         title: 'Original',
         filePath: audio.path,
@@ -93,6 +95,7 @@ void main() {
     final audio = File(path.join(directory.path, 'legacy.m4a'));
     await audio.writeAsBytes([4, 5, 6]);
     final recording = Recording(
+      format: RecordingFormat.m4a,
       id: 'legacy',
       title: 'Legacy recording',
       filePath: audio.path,
@@ -128,7 +131,10 @@ void main() {
             'name': 'Bravo',
             'created_at': 3,
           });
-          await db.insert('recordings', recording.toDatabaseMap());
+          await db.insert(
+            'recordings',
+            recording.toDatabaseMap()..remove('format'),
+          );
         },
       ),
     );

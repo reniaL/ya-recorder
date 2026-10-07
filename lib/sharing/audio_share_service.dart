@@ -4,6 +4,7 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../recording/recording_format.dart';
 import '../storage/models/recording.dart';
 
 typedef TemporaryDirectoryProvider = Future<Directory> Function();
@@ -46,7 +47,9 @@ class SharePlusAudioSharePlatform implements AudioSharePlatform {
         ShareParams(
           title: title,
           subject: title,
-          files: [XFile(stagedFile.path, mimeType: 'audio/mp4')],
+          files: [
+            XFile(stagedFile.path, mimeType: RecordingFormat.m4a.mimeType),
+          ],
         ),
       );
     } finally {
@@ -64,6 +67,10 @@ class AudioShareService {
   final AudioSharePlatform _platform;
 
   Future<void> shareRecording(Recording recording) {
+    // Until REC-07's sharing step is integrated, never label MP3 data as M4A.
+    if (recording.format != RecordingFormat.m4a) {
+      throw UnsupportedError('当前版本暂不支持分享 MP3 录音。');
+    }
     return _platform.shareM4a(
       filePath: recording.filePath,
       fileName: _sharedFileName(recording.title),

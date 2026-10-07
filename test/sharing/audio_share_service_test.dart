@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:share_plus/share_plus.dart';
+import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/sharing/audio_share_service.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 
@@ -13,6 +14,7 @@ void main() {
       final platform = _FakeAudioSharePlatform();
       final service = AudioShareService(platform: platform);
       final recording = Recording(
+        format: RecordingFormat.m4a,
         id: 'recording-1',
         title: '项目讨论',
         filePath: '/private/recording-1.m4a',
@@ -63,6 +65,27 @@ void main() {
       isTrue,
     );
   });
+
+  test(
+    'MP3 is explicitly rejected until sharing integration, never mislabeled',
+    () {
+      final platform = _FakeAudioSharePlatform();
+      final recording = Recording(
+        id: 'mp3',
+        title: 'MP3',
+        filePath: '/private/mp3.mp3',
+        format: RecordingFormat.mp3,
+        createdAt: DateTime.utc(2026, 10, 7),
+        duration: const Duration(seconds: 1),
+        fileSizeBytes: 20,
+      );
+      expect(
+        () => AudioShareService(platform: platform).shareRecording(recording),
+        throwsUnsupportedError,
+      );
+      expect(platform.filePath, isNull);
+    },
+  );
 }
 
 class _FakeAudioSharePlatform implements AudioSharePlatform {

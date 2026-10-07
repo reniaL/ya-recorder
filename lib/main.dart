@@ -7,12 +7,13 @@ import 'package:flutter/services.dart';
 import 'playback/audio_playback_service.dart';
 import 'playback/playback_progress.dart';
 import 'playback/recording_detail_page.dart';
+import 'recording/recording_format.dart';
 import 'recording/recording_service.dart';
 import 'sharing/audio_share_service.dart';
-import 'storage/recently_deleted_page.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
+import 'storage/recently_deleted_page.dart';
 import 'storage/recording_store.dart';
 
 void main() {
@@ -740,11 +741,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       setState(() {
         _status = const RecordingSessionStatus(
           state: RecordingLifecycleState.preparing,
+          format: RecordingFormat.m4a,
           elapsed: Duration.zero,
           canResume: false,
         );
       });
-      await widget.recordingService.start();
+      await widget.recordingService.start(format: RecordingFormat.m4a);
     } on PlatformException catch (error) {
       _setServiceError(error.message ?? '无法开始录音。');
     } finally {
@@ -817,6 +819,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         elapsed: _status.elapsed,
         canResume: false,
         sessionId: _status.sessionId,
+        format: _status.format,
       );
     });
     try {
@@ -942,6 +945,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           createdAt: savedRecording.createdAt,
           duration: savedRecording.duration,
           fileSizeBytes: savedRecording.fileSizeBytes,
+          format: savedRecording.format,
           wasInterrupted: savedRecording.wasInterrupted,
         ),
       );

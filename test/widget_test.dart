@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/main.dart';
 import 'package:ya_recorder/playback/audio_playback_service.dart';
+import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
 import 'package:ya_recorder/sharing/audio_share_service.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
@@ -40,12 +41,15 @@ void main() {
         case 'getStatus':
           return {
             'state': initialState,
+            'format': initialState == 'idle' ? null : 'm4a',
             'elapsedMs': 0,
             'canResume': initialCanResume,
           };
         case 'requestMicrophonePermission':
           return permissionGranted;
         case 'start':
+          expect(call.arguments, {'format': 'm4a'});
+          return null;
         case 'pause':
         case 'resume':
         case 'cancel':
@@ -105,6 +109,7 @@ void main() {
       const RecordingStateChanged(
         RecordingSessionStatus(
           state: RecordingLifecycleState.recording,
+          format: RecordingFormat.m4a,
           elapsed: Duration.zero,
           canResume: false,
         ),
@@ -195,6 +200,7 @@ void main() {
     final recordingStore = _RecordingStoreSpy()
       ..recordings = [
         Recording(
+          format: RecordingFormat.m4a,
           id: 'recording-1',
           title: '项目讨论',
           filePath: '/private/recording-1.m4a',
@@ -251,6 +257,7 @@ void main() {
     final recordingStore = _RecordingStoreSpy()
       ..recordings = [
         Recording(
+          format: RecordingFormat.m4a,
           id: 'project',
           title: '项目讨论',
           filePath: '/private/project.m4a',
@@ -259,6 +266,7 @@ void main() {
           fileSizeBytes: 1024,
         ),
         Recording(
+          format: RecordingFormat.m4a,
           id: 'interview',
           title: '客户访谈',
           filePath: '/private/interview.m4a',
@@ -424,6 +432,7 @@ void main() {
           final longTitle = List.filled(12, '很长的会议录音标题').join();
           final base = _recording('one');
           final recording = Recording(
+            format: base.format,
             id: base.id,
             title: longTitle,
             filePath: base.filePath,
@@ -1264,6 +1273,7 @@ void main() {
       ]
       ..recordings = [
         Recording(
+          format: RecordingFormat.m4a,
           id: 'recording-in-folder',
           title: 'Interview',
           filePath: '/private/recording-in-folder.m4a',
@@ -1273,6 +1283,7 @@ void main() {
           folderId: 'folder-interviews',
         ),
         Recording(
+          format: RecordingFormat.m4a,
           id: 'recording-all',
           title: 'Inbox note',
           filePath: '/private/recording-all.m4a',
@@ -1650,6 +1661,7 @@ void main() {
       ]
       ..recordings = [
         Recording(
+          format: RecordingFormat.m4a,
           id: 'recording-1',
           title: 'Interview',
           filePath: '/private/recording-1.m4a',
@@ -1700,6 +1712,7 @@ void main() {
         ]
         ..recordings = [
           Recording(
+            format: RecordingFormat.m4a,
             id: 'recording-1',
             title: 'Project update',
             filePath: '/private/recording-1.m4a',
@@ -1784,6 +1797,7 @@ void main() {
         ..recordings = [
           _recording('one'),
           Recording(
+            format: RecordingFormat.m4a,
             id: 'two',
             title: '其他录音',
             filePath: '/private/two.m4a',
@@ -2064,6 +2078,29 @@ void main() {
     expect(store.recordings.single.wasInterrupted, isTrue);
   });
 
+  testWidgets('saved MP3 result retains its format in the local index', (
+    tester,
+  ) async {
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    final store = _RecordingStoreSpy();
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('mp3-result', format: RecordingFormat.mp3));
+    await tester.pumpAndSettle();
+    expect(store.savedRecording!.format, RecordingFormat.mp3);
+    expect(store.savedRecording!.filePath, '/private/mp3-result.mp3');
+    await tester.pump(const Duration(seconds: 4));
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -2091,6 +2128,7 @@ void main() {
     recordingEvents.add(
       RecordingSaved(
         SavedNativeRecording(
+          format: RecordingFormat.m4a,
           id: 'recording-1',
           filePath: '/private/recording-1.m4a',
           createdAt: DateTime.utc(2026, 9, 30, 8, 15),
@@ -2147,6 +2185,7 @@ void main() {
         const RecordingStateChanged(
           RecordingSessionStatus(
             state: RecordingLifecycleState.discarding,
+            format: RecordingFormat.m4a,
             elapsed: Duration.zero,
             canResume: false,
           ),
@@ -2207,6 +2246,7 @@ class _RecordingStoreSpy extends RecordingStore {
       for (final r in recordings)
         if (r.id == recordingId)
           Recording(
+            format: r.format,
             id: r.id,
             title: r.title,
             filePath: r.filePath,
@@ -2292,6 +2332,7 @@ class _RecordingStoreSpy extends RecordingStore {
       for (final recording in recordings)
         if (recording.id == recordingId)
           Recording(
+            format: recording.format,
             id: recording.id,
             title: recording.title,
             filePath: recording.filePath,
@@ -2353,6 +2394,7 @@ class _RecordingStoreSpy extends RecordingStore {
       for (final recording in recordings)
         if (recording.folderId == folderId && !recording.isDeleted)
           Recording(
+            format: recording.format,
             id: recording.id,
             title: recording.title,
             filePath: recording.filePath,
@@ -2387,6 +2429,7 @@ class _RecordingStoreSpy extends RecordingStore {
       for (final recording in recordings)
         if (recording.id == recordingId)
           Recording(
+            format: recording.format,
             id: recording.id,
             title: title.trim(),
             filePath: recording.filePath,
@@ -2411,6 +2454,7 @@ class _RecordingStoreSpy extends RecordingStore {
       for (final recording in recordings)
         if (recording.id == recordingId)
           Recording(
+            format: recording.format,
             id: recording.id,
             title: recording.title,
             filePath: recording.filePath,
@@ -2429,6 +2473,7 @@ class _RecordingStoreSpy extends RecordingStore {
 
 Recording _recording(String id) {
   return Recording(
+    format: RecordingFormat.m4a,
     id: id,
     title: '播放进度测试',
     filePath: '/private/$id.m4a',
@@ -2438,11 +2483,16 @@ Recording _recording(String id) {
   );
 }
 
-RecordingSaved _savedRecordingEvent(String id, {bool wasInterrupted = false}) {
+RecordingSaved _savedRecordingEvent(
+  String id, {
+  bool wasInterrupted = false,
+  RecordingFormat format = RecordingFormat.m4a,
+}) {
   return RecordingSaved(
     SavedNativeRecording(
+      format: format,
       id: id,
-      filePath: '/private/$id.m4a',
+      filePath: '/private/$id.${format.extension}',
       createdAt: DateTime.utc(2026, 10, 5),
       duration: const Duration(seconds: 12),
       fileSizeBytes: 1024,

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+import 'recording_format.dart';
+
 enum RecordingLifecycleState {
   idle,
   preparing,
@@ -18,19 +20,31 @@ class RecordingSessionStatus {
     required this.elapsed,
     required this.canResume,
     this.sessionId,
+    this.format,
   });
 
   final RecordingLifecycleState state;
   final Duration elapsed;
   final bool canResume;
   final String? sessionId;
+  final RecordingFormat? format;
 
   factory RecordingSessionStatus.fromMap(Map<Object?, Object?> map) {
+    final state = _parseState(map['state']);
+    final sessionId = map['sessionId'] as String?;
+    final needsFormat =
+        sessionId != null ||
+        (state != RecordingLifecycleState.idle &&
+            state != RecordingLifecycleState.failed);
+    final format = map['format'] == null && !needsFormat
+        ? null
+        : RecordingFormat.fromWireValue(map['format']);
     return RecordingSessionStatus(
-      state: _parseState(map['state']),
+      state: state,
       elapsed: Duration(milliseconds: _readInt(map, 'elapsedMs')),
       canResume: _readBool(map, 'canResume'),
-      sessionId: map['sessionId'] as String?,
+      sessionId: sessionId,
+      format: format,
     );
   }
 }
@@ -43,6 +57,7 @@ class SavedNativeRecording {
     required this.duration,
     required this.fileSizeBytes,
     required this.wasInterrupted,
+    required this.format,
   });
 
   final String id;
@@ -51,11 +66,20 @@ class SavedNativeRecording {
   final Duration duration;
   final int fileSizeBytes;
   final bool wasInterrupted;
+  final RecordingFormat format;
 
   factory SavedNativeRecording.fromMap(Map<Object?, Object?> map) {
+    final format = RecordingFormat.fromWireValue(map['format']);
+    final filePath = _readString(map, 'filePath');
+    if (!format.matchesCompletedPath(filePath)) {
+      throw const FormatException(
+        'Saved path does not match recording format.',
+      );
+    }
     return SavedNativeRecording(
       id: _readString(map, 'id'),
-      filePath: _readString(map, 'filePath'),
+      filePath: filePath,
+      format: format,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         _readInt(map, 'createdAtMs'),
         isUtc: true,
@@ -154,7 +178,9 @@ class RecordingService {
     return RecordingSessionStatus.fromMap(Map<Object?, Object?>.from(response));
   }
 
-  Future<void> start() => _sendCommand('start');
+  Future<void> start({required RecordingFormat format}) async {
+    await _commands.invokeMethod<void>('start', {'format': format.wireName});
+  }
 
   Future<void> pause() => _sendCommand('pause');
 

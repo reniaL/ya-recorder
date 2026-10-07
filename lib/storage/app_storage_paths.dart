@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
+import '../recording/recording_format.dart';
+
 class AppStoragePaths {
   AppStoragePaths(this.rootDirectory);
 
@@ -35,12 +37,28 @@ class AppStoragePaths {
     ]);
   }
 
-  File completedRecordingFile(String recordingId) {
-    return File(path.join(recordingsDirectory.path, '${_fileStem(recordingId)}.m4a'));
+  File completedRecordingFile(
+    String recordingId, {
+    required RecordingFormat format,
+  }) {
+    return File(
+      path.join(
+        recordingsDirectory.path,
+        '${_fileStem(recordingId)}.${format.extension}',
+      ),
+    );
   }
 
-  File temporaryRecordingFile(String recordingId) {
-    return File(path.join(recoveryDirectory.path, '${_fileStem(recordingId)}.m4a.part'));
+  File temporaryRecordingFile(
+    String recordingId, {
+    required RecordingFormat format,
+  }) {
+    return File(
+      path.join(
+        recoveryDirectory.path,
+        '${_fileStem(recordingId)}.${format.extension}.part',
+      ),
+    );
   }
 
   String _fileStem(String recordingId) {

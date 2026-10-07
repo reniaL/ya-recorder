@@ -1,3 +1,5 @@
+import '../../recording/recording_format.dart';
+
 class Recording {
   const Recording({
     required this.id,
@@ -6,6 +8,7 @@ class Recording {
     required this.createdAt,
     required this.duration,
     required this.fileSizeBytes,
+    required this.format,
     this.folderId,
     this.deletedAt,
     this.wasInterrupted = false,
@@ -17,6 +20,7 @@ class Recording {
   final DateTime createdAt;
   final Duration duration;
   final int fileSizeBytes;
+  final RecordingFormat format;
   final String? folderId;
   final DateTime? deletedAt;
   final bool wasInterrupted;
@@ -31,6 +35,7 @@ class Recording {
       'created_at': createdAt.toUtc().millisecondsSinceEpoch,
       'duration_ms': duration.inMilliseconds,
       'file_size_bytes': fileSizeBytes,
+      'format': format.wireName,
       'folder_id': folderId,
       'deleted_at': deletedAt?.toUtc().millisecondsSinceEpoch,
       'was_interrupted': wasInterrupted ? 1 : 0,
@@ -48,6 +53,7 @@ class Recording {
       ),
       duration: Duration(milliseconds: map['duration_ms']! as int),
       fileSizeBytes: map['file_size_bytes']! as int,
+      format: RecordingFormat.fromWireValue(map['format']),
       folderId: map['folder_id'] as String?,
       deletedAt: _dateTimeOrNull(map['deleted_at']),
       wasInterrupted: (map['was_interrupted']! as int) == 1,

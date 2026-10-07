@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/storage/app_storage_paths.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
@@ -43,6 +44,7 @@ void main() {
         );
         await store.saveRecording(
           Recording(
+            format: RecordingFormat.m4a,
             id: 'recording-active',
             title: 'Planning session',
             filePath: '/private/recording-active.m4a',
@@ -54,6 +56,7 @@ void main() {
         );
         await store.saveRecording(
           Recording(
+            format: RecordingFormat.m4a,
             id: 'recording-deleted',
             title: 'Discarded take',
             filePath: '/private/recording-deleted.m4a',
@@ -103,6 +106,7 @@ void main() {
           await File(audioPath).writeAsBytes(List.filled(512, 1));
           await store.saveRecording(
             Recording(
+              format: RecordingFormat.m4a,
               id: id,
               title: id,
               filePath: audioPath,
@@ -190,6 +194,7 @@ void main() {
 
     test('rejects recording data that references a missing folder', () async {
       final recording = Recording(
+        format: RecordingFormat.m4a,
         id: 'orphaned-recording',
         title: 'Unassigned',
         filePath: '/private/orphaned-recording.m4a',
@@ -223,6 +228,7 @@ void main() {
       final createdAt = DateTime.utc(2026, 9, 29, 8);
       await store.saveRecording(
         Recording(
+          format: RecordingFormat.m4a,
           id: 'recording-1',
           title: 'Original title',
           filePath: '/private/recording-1.m4a',
@@ -252,6 +258,7 @@ void main() {
         final deletedAt = createdAt.add(const Duration(days: 1));
         await store.saveRecording(
           Recording(
+            format: RecordingFormat.m4a,
             id: 'recording-1',
             title: 'Planning session',
             filePath: '/private/recording-1.m4a',
@@ -284,6 +291,7 @@ void main() {
         await store.createFolder(id: 'folder-work', name: 'Work');
         await store.saveRecording(
           Recording(
+            format: RecordingFormat.m4a,
             id: 'recording-1',
             title: 'Planning session',
             filePath: '/private/recording-1.m4a',
@@ -322,6 +330,7 @@ void main() {
         );
         await store.saveRecording(
           Recording(
+            format: RecordingFormat.m4a,
             id: 'recording-1',
             title: 'Project update',
             filePath: '/private/recording-1.m4a',
@@ -379,7 +388,9 @@ void main() {
       expect(await paths.recordingsDirectory.exists(), isTrue);
       expect(await paths.recoveryDirectory.exists(), isTrue);
       expect(
-        paths.completedRecordingFile('recording-1').path,
+        paths
+            .completedRecordingFile('recording-1', format: RecordingFormat.m4a)
+            .path,
         path.join(
           temporaryDirectory.path,
           'recordings',
@@ -387,7 +398,9 @@ void main() {
         ),
       );
       expect(
-        paths.temporaryRecordingFile('recording-1').path,
+        paths
+            .temporaryRecordingFile('recording-1', format: RecordingFormat.m4a)
+            .path,
         path.join(
           temporaryDirectory.path,
           'recovery',
@@ -395,7 +408,10 @@ void main() {
         ),
       );
       expect(
-        () => paths.completedRecordingFile('../recording'),
+        () => paths.completedRecordingFile(
+          '../recording',
+          format: RecordingFormat.m4a,
+        ),
         throwsArgumentError,
       );
     },

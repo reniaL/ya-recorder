@@ -33,7 +33,7 @@ class RecordingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> startRecording()
+            ACTION_START -> startRecording(intent.getStringExtra(EXTRA_FORMAT))
             ACTION_PAUSE -> pauseRecording()
             ACTION_RESUME -> resumeRecording()
             ACTION_STOP -> stopRecording()
@@ -50,9 +50,19 @@ class RecordingService : Service() {
         super.onDestroy()
     }
 
-    private fun startRecording() {
+    private fun startRecording(formatValue: String?) {
         if (state != State.IDLE && state != State.FAILED) {
             publishState()
+            return
+        }
+
+        val format = try {
+            RecordingFormat.fromWireValue(formatValue).also { it.requireRecordingEncoder() }
+        } catch (error: IllegalArgumentException) {
+            fail("recording-format-invalid", "录音格式无效。")
+            return
+        } catch (error: UnsupportedOperationException) {
+            fail("recording-format-unavailable", error.message ?: "录音编码器不可用。")
             return
         }
 
@@ -72,8 +82,9 @@ class RecordingService : Service() {
         val activeSession = ActiveSession(
             id = recordingId,
             createdAtMs = System.currentTimeMillis(),
-            temporaryFile = File(recoveryDirectory, "recording-$recordingId.m4a.part"),
-            completedFile = File(recordingsDirectory, "recording-$recordingId.m4a"),
+            format = format,
+            temporaryFile = File(recoveryDirectory, format.temporaryFileName(recordingId)),
+            completedFile = File(recordingsDirectory, format.completedFileName(recordingId)),
         )
         session = activeSession
         state = State.PREPARING
@@ -255,6 +266,7 @@ class RecordingService : Service() {
             "elapsedMs" to (activeSession?.elapsedMs(state) ?: 0L),
             "canResume" to (state == State.PAUSED),
             "sessionId" to activeSession?.id,
+            "format" to activeSession?.format?.wireName,
         )
         latestStatus = status
         publish(
@@ -264,6 +276,7 @@ class RecordingService : Service() {
                 putExtra(EXTRA_ELAPSED_MS, status["elapsedMs"] as Long)
                 putExtra(EXTRA_CAN_RESUME, status["canResume"] as Boolean)
                 putExtra(EXTRA_SESSION_ID, status["sessionId"] as String?)
+                putExtra(EXTRA_FORMAT, activeSession?.format?.wireName)
             },
         )
     }
@@ -278,6 +291,7 @@ class RecordingService : Service() {
                 putExtra(EXTRA_DURATION_MS, durationMs)
                 putExtra(EXTRA_FILE_SIZE_BYTES, activeSession.completedFile.length())
                 putExtra(EXTRA_WAS_INTERRUPTED, false)
+                putExtra(EXTRA_FORMAT, activeSession.format.wireName)
             },
         )
     }
@@ -324,6 +338,7 @@ class RecordingService : Service() {
     private data class ActiveSession(
         val id: String,
         val createdAtMs: Long,
+        val format: RecordingFormat,
         val temporaryFile: File,
         val completedFile: File,
         var accumulatedMs: Long = 0L,
@@ -370,6 +385,7 @@ class RecordingService : Service() {
         const val EXTRA_ELAPSED_MS = "elapsedMs"
         const val EXTRA_CAN_RESUME = "canResume"
         const val EXTRA_SESSION_ID = "sessionId"
+        const val EXTRA_FORMAT = "format"
         const val EXTRA_ID = "id"
         const val EXTRA_FILE_PATH = "filePath"
         const val EXTRA_CREATED_AT_MS = "createdAtMs"
@@ -391,8 +407,11 @@ class RecordingService : Service() {
         @Volatile
         private var latestStatus: Map<String, Any?> = idleStatus()
 
-        fun commandIntent(context: Context, action: String): Intent {
-            return Intent(context, RecordingService::class.java).setAction(action)
+        fun commandIntent(context: Context, action: String, format: RecordingFormat? = null): Intent {
+            if (action == ACTION_START) require(format != null) { "Start requires a recording format" }
+            return Intent(context, RecordingService::class.java).setAction(action).apply {
+                if (format != null) putExtra(EXTRA_FORMAT, format.wireName)
+            }
         }
 
         fun currentStatus(): Map<String, Any?> = latestStatus
@@ -403,6 +422,7 @@ class RecordingService : Service() {
                 "elapsedMs" to 0L,
                 "canResume" to false,
                 "sessionId" to null,
+                "format" to null,
             )
         }
     }

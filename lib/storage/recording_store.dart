@@ -18,7 +18,7 @@ class RecordingStore {
   }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
        _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
 
-  static const _schemaVersion = 2;
+  static const _schemaVersion = 3;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -445,6 +445,13 @@ class RecordingStore {
               );
             }
           }
+          if (oldVersion < 3) {
+            // Versions 1 and 2 only produced M4A. Preserve every existing field
+            // and file; this migration changes the index, never the audio.
+            await database.execute(
+              "ALTER TABLE recordings ADD COLUMN format TEXT NOT NULL DEFAULT 'm4a' CHECK(format IN ('m4a', 'mp3'))",
+            );
+          }
         },
       ),
     );
@@ -477,6 +484,7 @@ class RecordingStore {
         created_at INTEGER NOT NULL,
         duration_ms INTEGER NOT NULL CHECK(duration_ms >= 0),
         file_size_bytes INTEGER NOT NULL CHECK(file_size_bytes >= 0),
+        format TEXT NOT NULL DEFAULT 'm4a' CHECK(format IN ('m4a', 'mp3')),
         folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
         deleted_at INTEGER,
         was_interrupted INTEGER NOT NULL DEFAULT 0
@@ -517,6 +525,13 @@ class RecordingStore {
     _requireNonEmpty(recording.id, 'recording.id');
     _requireNonEmpty(recording.title.trim(), 'recording.title');
     _requireNonEmpty(recording.filePath, 'recording.filePath');
+    if (!recording.format.matchesCompletedPath(recording.filePath)) {
+      throw ArgumentError.value(
+        recording.filePath,
+        'recording.filePath',
+        'must match the recording format',
+      );
+    }
     if (recording.duration.isNegative) {
       throw ArgumentError.value(
         recording.duration,

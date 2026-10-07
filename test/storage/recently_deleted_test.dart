@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
 
@@ -30,6 +31,7 @@ void main() {
     await file.writeAsBytes([1, 2, 3]);
     await store.saveRecording(
       Recording(
+        format: RecordingFormat.m4a,
         id: id,
         title: id,
         filePath: file.path,

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ya_recorder/playback/audio_playback_service.dart';
+import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 
 void main() {
@@ -667,6 +668,7 @@ Recording _recording(
   Duration duration = const Duration(seconds: 1),
 }) {
   return Recording(
+    format: RecordingFormat.m4a,
     id: id,
     title: id,
     filePath: '/private/$id.m4a',
