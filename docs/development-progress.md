@@ -58,6 +58,8 @@ UX-05 编译验证：Android debug APK 构建通过，产物为 `build/app/outpu
 
 应用显示名称调整（2026-10-07）：Android 应用标签改为字符串资源中的“丫丫录音”，用于桌面及系统应用信息；Flutter 应用标题已有相同名称。保留原应用 ID，更新安装沿用既有录音数据。`flutter analyze` 无问题，`flutter test`（117 项）及 Android debug APK 构建通过；使用 `aapt dump badging` 确认安装包应用标签为“丫丫录音”，产物为 `build/app/outputs/flutter-apk/app-debug.apk`。尚未安装到真机核对桌面名称；不改变功能范围及总览计数。
 
+应用图标替换（2026-10-07）：保存用户提供的 1024 × 1024 PNG 至 `assets/branding/app-icon.png`，保留原始图案并以高质量缩放替换 Android 五档启动图标（48、72、96、144、192 像素）；`tools/generate-launcher-icons.ps1` 可重新生成资源。已查看最小及最大尺寸预览，确认 APK 包含五档新图标，并提取已编译图标核对图案。`flutter analyze` 无问题，`flutter test`（117 项）及 Android debug APK 构建通过，产物为 `build/app/outputs/flutter-apk/app-debug.apk`。当前无连接 Android 设备，桌面实际显示效果待真机确认；不改变功能范围及总览计数。
+
 ## 工程基础
 
 | 编号 | 工作项 | 状态 | 验证方式或完成条件 | 备注 |
