@@ -70,6 +70,66 @@ void main() {
     messenger.setMockMethodCallHandler(eventChannel, null);
   });
 
+  testWidgets('light pages keep dark status bar icons when recording starts', (
+    WidgetTester tester,
+  ) async {
+    final recordingEvents = StreamController<RecordingEvent>.broadcast();
+    addTearDown(recordingEvents.close);
+    await tester.pumpWidget(
+      MyApp(
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: recordingEvents.stream,
+        ),
+        recordingStore: _RecordingStoreSpy(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    void expectReadableStatusBar() {
+      final regions = tester.widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(
+        find.byWidgetPredicate(
+          (widget) => widget is AnnotatedRegion<SystemUiOverlayStyle>,
+        ),
+      );
+      expect(regions, isNotEmpty);
+      for (final region in regions) {
+        expect(region.value.statusBarIconBrightness, Brightness.dark);
+        expect(region.value.statusBarBrightness, Brightness.light);
+        expect(region.value.statusBarColor, Colors.transparent);
+      }
+    }
+
+    expectReadableStatusBar();
+    recordingEvents.add(
+      const RecordingStateChanged(
+        RecordingSessionStatus(
+          state: RecordingLifecycleState.recording,
+          elapsed: Duration.zero,
+          canResume: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<AppBar>(find.byType(AppBar)).backgroundColor,
+      Colors.transparent,
+    );
+    expectReadableStatusBar();
+
+    recordingEvents.add(
+      const RecordingStateChanged(
+        RecordingSessionStatus(
+          state: RecordingLifecycleState.idle,
+          elapsed: Duration.zero,
+          canResume: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expectReadableStatusBar();
+  });
+
   testWidgets('denied microphone permission can be requested again', (
     WidgetTester tester,
   ) async {

@@ -43,6 +43,15 @@ class MyApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         scaffoldBackgroundColor: const Color(0xfff2f7f4),
+        appBarTheme: const AppBarTheme(
+          // Every page has a light background, including the recording page's
+          // transparent app bar. Do not infer icon contrast from transparency.
+          systemOverlayStyle: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
+        ),
         useMaterial3: true,
       ),
       home: RecordingHomePage(
