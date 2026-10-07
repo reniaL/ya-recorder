@@ -1,6 +1,6 @@
 """Run an isolated prototype on an authorized Android device and collect evidence.
 
-Example: python tools/mp3-prototype/run_device.py --seconds 3600 --source microphone
+Example: python tools/mp3-prototype/run_device.py --seconds 300 --source microphone
 Use --apk to install/update ONLY the prototype package. No normal app data is touched.
 """
 import argparse

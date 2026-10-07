@@ -1,6 +1,8 @@
 # REC-07 第一步：实时 MP3 原型
 
-日期：2026-10-07。当前阶段为**原型实现和构建/桌面验证完成，Android 运行与长录音验证待完成**。这份记录不代表 REC-07 或 REC-06 已验收。
+日期：2026-10-07。当前阶段为**原型实现和构建/桌面验证完成，Android 运行与几分钟录音验证待完成**。这份记录不代表 REC-07 或 REC-06 已验收。
+
+测试范围按 [产品基线](../product/feature-list.md#产品目标)调整：以 1–5 分钟录音及极短边界为主，一小时压力测试暂缓，不再是第一步或 REC-07 的必过关口。已有 3600 秒桌面结果保留为历史证据，不要求重跑；测试取样时长不限制应用实际录音时长。
 
 ## 实验范围
 
@@ -47,20 +49,20 @@ APK：`build/mp3-prototype/outputs/apk/debug/mp3-prototype-debug.apk`。安装�
 Linux/WSL 桌面测试需 `cc`、Python 3.9+、`ffmpeg`、`ffprobe`。在 Linux 的仓库目录运行：
 
 ```sh
-python3 tools/mp3-prototype/host_smoke.py --long-seconds 3600
+python3 tools/mp3-prototype/host_smoke.py --long-seconds 300
 ```
 
-脚本编译同一份原生 C 编码封装，逐块产生测试音，并通过 FFmpeg 完整解码核对样本数、信号相关性和每秒 RMS。不会写 PCM/WAV 中间文件。这里的 3600 秒指**音频长度**，输入在桌面加速生成，不能作为一小时 Android 实时录音证据。
+脚本编译同一份原生 C 编码封装，逐块产生测试音，并通过 FFmpeg 完整解码核对样本数、信号相关性和每秒 RMS。不会写 PCM/WAV 中间文件。这里的 300 秒指**音频长度**，输入在桌面加速生成，不能作为 Android 实时录音证据。`--long-seconds` 是沿用的参数名；当前指引始终显式传入 `300`，脚本原有默认值仍为 `3600`，不要省略此参数触发历史长测。
 
 连接并授权 Android 设备后，在仓库根目录执行：
 
 ```powershell
 # 首次安装；确认设备上可正常初始化 JNI/编码器、录制并解码。
 python tools/mp3-prototype/run_device.py --apk build/mp3-prototype/outputs/apk/debug/mp3-prototype-debug.apk --seconds 10 --source microphone
-# 同一编码链路的实时合成音长测。
-python tools/mp3-prototype/run_device.py --seconds 3600 --source tone
-# 真实采集的一小时长测；期间手动锁屏、切换应用并返回。
-python tools/mp3-prototype/run_device.py --seconds 3600 --source microphone
+# 真实采集的五分钟代表性录音；期间手动锁屏、切换应用并返回。
+python tools/mp3-prototype/run_device.py --seconds 300 --source microphone
+# 排查信号/采集差异时，可补充同一编码链路的几分钟实时合成音。
+python tools/mp3-prototype/run_device.py --seconds 300 --source tone
 # 对比参数（应分别改变码率、quality，而非仅比较两个组合）。
 python tools/mp3-prototype/run_device.py --seconds 10 --source microphone --bitrate 96 --quality 5
 python tools/mp3-prototype/run_device.py --seconds 10 --source microphone --bitrate 64 --quality 2
@@ -72,7 +74,7 @@ python tools/mp3-prototype/run_device.py --seconds 10 --source tone --encoder-de
 
 结果写入 `build/mp3-prototype/device/<run-id>`：设备/API/ABI/页大小信息、每 5 秒采集的进度 JSONL、最终结果、MP3/失败残留和测试前后电量状态。应用每秒刷新观测值，包括 PSS、Java/native heap、累计进程 CPU 时间、采样数、编码线程 CPU 时间、块编码最大耗时、队列观测高水位、排空/收尾耗时和输出大小。`drainAndFinishMs` 排除随后的完整媒体解码耗时；`wallMs` 包括检查。电量快照只是辅助记录，不能单独据此归因编码耗电。
 
-Android 校验通过 MediaExtractor 确认 MP3、采样率、声道和时长，再用 MediaCodec 完整解码。媒体时长与接受样本时长允许 100 ms 偏差；解码样本数允许不超过一个 PCM 块的偏差，以容纳 Android 解码器处理编码延迟/尾部填充的差异。桌面解码则要求与输入样本数完全一致。命令脚本还要求实际接受的样本数达到指定完整时长，提前停止不会被当作一小时通过。
+Android 校验通过 MediaExtractor 确认 MP3、采样率、声道和时长，再用 MediaCodec 完整解码。媒体时长与接受样本时长允许 100 ms 偏差；解码样本数允许不超过一个 PCM 块的偏差，以容纳 Android 解码器处理编码延迟/尾部填充的差异。桌面解码则要求与输入样本数完全一致。命令脚本还要求实际接受的样本数达到指定完整时长，提前停止只作为边界测试，不能算指定时长用例通过。
 
 ## 本轮验证证据
 
@@ -85,13 +87,13 @@ Android 校验通过 MediaExtractor 确认 MP3、采样率、声道和时长，�
 
 ## 第一步通过条件及后续衔接
 
-以下检查全部完成后，才能认为第一步的技术验证关口通过：
+以下检查按当前短录音范围全部完成后，才能认为第一步的技术验证关口通过。一小时录音和长期 CPU/耗电趋势不在当前清单中；历史证据不因此变更为真机证据。
 
 - [x] 固定源码来源、校验值、许可和可重现构建。
 - [x] 验证目标 ABI 编译、原生接口导出及 16 KB ELF/APK 静态对齐。
-- [x] 桌面短/长音频解码、样本数和失败边界验证。
+- [x] 桌面音频解码、样本数和失败边界验证（已含历史 3600 秒结果，无需为本次范围调整重跑）。
 - [ ] 在目标 Android 真机录制短语音，试听并比较参数，记录选定参数的理由。
-- [ ] 完成至少一小时真机连续采集和实时编码，检查音频连续性、时长、内存趋势、CPU、耗电、队列积压和停止耗时。
+- [ ] 完成 1–5 分钟真机连续采集和实时编码，检查音频连续性、时长、内存/队列积压和停止耗时。
 - [ ] 在 Android 上验证 JNI/MediaCodec、锁屏/后台、提前停止及人为队列溢出的实际结果。
 - [ ] 在 16 KB 系统（设备或模拟器）运行原型；记录实际页大小并确认无兼容模式依赖。
 

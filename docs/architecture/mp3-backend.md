@@ -2,6 +2,8 @@
 
 2026-10-07：`Mp3RecordingBackend` 已接入正式应用的后端工厂和原生通道，普通构建仍只开放 M4A。第一步的 Android 设备关口尚未通过，MP3 暂用原型候选参数，仅在显式开启的 debug 构建中可调用；不视为正式参数或媒体验收通过。设置与分享入口、完整保存协议和异常恢复属于后续步骤。
 
+当前测试范围以 [产品基线](../product/feature-list.md#产品目标)的几分钟录音为准：真机采用 1–5 分钟代表性录音，合并暂停/继续、锁屏/后台及停止验证，另保留极短录音与失败边界。一小时录音及长期 CPU/耗电趋势测试暂缓，不阻挡当前阶段验收；已有机器快照中的未运行记录保留原样，不表示仍有一小时测试待办。
+
 ## 构建与范围
 
 ```powershell
@@ -38,11 +40,11 @@ NDK 28.2.13676358 / CMake 3.22.1 构建 armeabi-v7a、arm64-v8a、x86_64，保�
 - 正式应用 37 项 JVM 测试通过，其中新增 17 项 MP3 后端及 2 项串行调度测试；覆盖短块与暂停边界、样本计时、同一编码器继续、排空等待、取消期间写入、溢出、缺失原生库、初始化/采集/编码/flush/清理失败、超时、空录音、debug 工厂选择与队列关闭。测试使用替身录音器/编码器，不运行 Android 麦克风。
 - 共享模块 Android lint 无问题；共享核心迁移后原型 6 项 JVM 测试及 APK 构建通过。
 - 追加应用 Android lint 时，默认任务因工作区在 D 盘、Pub 缓存在 C 盘而无法生成 `audio_session` 的单元测试模型。临时 init 脚本仅在检查时忽略依赖测试源，并排除既有 `PropertyEscape`（本地 `local.properties`）和 `UnspecifiedRegisterReceiverFlag`（未改动的 Android 33 以下接收器分支）后，应用主源码 lint 为 0 errors / 7 warnings，余下为既有资源/图标提示。新 AudioRecord 入口显式处理 `SecurityException`，权限撤销的后端测试通过。没有给仓库加入 lint 禁用项/基线或修改上述旧接收器；默认完整应用 lint 不记为通过。
-- 桌面真实 JNI 检查运行正式 Kotlin 后端、正式 `AndroidMp3Encoder` 和同一 C/JNI：输入两段连续合成音，中间暂停，停止后独立 FFmpeg 完整解码 220,560 样本，与输入精确一致；PCM 源开始/停止各 2 次、释放 1 次，显示样本时长 5001 ms，暂停时长不增长，信号相关性约 0.9999996。此检查是 Linux 加速合成输入，不能替代 Android 录音、耗电或长录音性能。
+- 桌面真实 JNI 检查运行正式 Kotlin 后端、正式 `AndroidMp3Encoder` 和同一 C/JNI：输入两段连续合成音，中间暂停，停止后独立 FFmpeg 完整解码 220,560 样本，与输入精确一致；PCM 源开始/停止各 2 次、释放 1 次，显示样本时长 5001 ms，暂停时长不增长，信号相关性约 0.9999996。此检查是 Linux 加速合成输入，不能替代 Android 几分钟真实录音与运行性能验证。
 - 桌面 C 核心的短音频、非整块尾部、两组候选参数及失败边界回归通过。本步没有新增一小时设备或桌面长录音证据，第一步的历史长合成音记录保留。
 - 启用开关的正式 debug APK、普通 Flutter debug APK 与原型 APK 构建通过；正式 APK 全部 10 个原生库与原型 3 个库的 16 KB ELF/APK 静态对齐及 SDK zipalign 检查通过。三个 ABI 的新 JNI 导出、源码材料及原始归档校验值核对通过。profile/release 开关在传入 `rec07Mp3=true` 时仍为假，此处检查配置生成，未构建完整 profile/release APK。
 - `flutter analyze` 无问题，全量 129 项 Flutter 测试通过。普通产物为 `build/app/outputs/flutter-apk/app-debug.apk`，启用原生 MP3 的调试产物保存在 `build/rec07-mp3/app-debug-mp3.apk`。
-- 没有连接 Android 设备。JNI/AudioRecord/MediaMetadataRetriever 在 Android 上的执行、实际麦克风录音及暂停恢复、一小时实时采集、后台/锁屏和 16 KB 运行均未验收。
+- 没有连接 Android 设备。JNI/AudioRecord/MediaMetadataRetriever 在 Android 上的执行、1–5 分钟实际麦克风录音及暂停恢复、后台/锁屏和 16 KB 运行均未验收。一小时实时采集已按当前测试范围暂缓。
 
 机器可读证据见 [本轮快照](../verification/rec07-backend-2026-10-07.json)。
 
