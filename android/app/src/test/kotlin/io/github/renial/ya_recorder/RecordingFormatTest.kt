@@ -4,6 +4,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RecordingFormatTest {
+    @Test fun normalBuildOffersAndAcceptsMp3WithoutAnOptIn() {
+        assertTrue(BuildConfig.REC07_MP3_ENABLED)
+        assertEquals(listOf(RecordingFormat.M4A, RecordingFormat.MP3),
+            RecordingFormat.availableForRecording(BuildConfig.REC07_MP3_ENABLED))
+        RecordingFormat.MP3.requireRecordingEncoder(BuildConfig.REC07_MP3_ENABLED)
+    }
     @Test fun availableFormatsFollowTheNativeGate() {
         assertEquals(listOf(RecordingFormat.M4A), RecordingFormat.availableForRecording(false))
         assertEquals(listOf(RecordingFormat.M4A, RecordingFormat.MP3), RecordingFormat.availableForRecording(true))

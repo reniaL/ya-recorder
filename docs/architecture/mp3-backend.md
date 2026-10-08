@@ -4,15 +4,15 @@
 
 本文件保留第四步的实现与验证边界。2026-10-08 第五步已接入持久化草稿、文件就绪/索引确认、取消标记与异常恢复，详见 [保存与恢复记录](recording-save-recovery.md)；下文“未实现”描述为第四步当时状态。
 
-第六步已接入 [设置与分享](recording-format-settings-sharing.md)：同一 debug 开关现在控制设置中的 MP3 选择与主界面开始命令；普通构建仍不开放 MP3 录制，分享已保存的 MP3 不受录音开关限制。
+第六步已接入 [设置与分享](recording-format-settings-sharing.md)。2026-10-08 用户确认真机基本功能正常并明确授权正式开放，普通 debug/profile/release 现均支持 MP3，无需额外开关；当前状态见 [正式开放记录](mp3-availability.md)。下文开关和候选参数关口说明为第四步历史状态，不再描述当前可用性。
 
 当前测试范围以 [产品基线](../product/feature-list.md#产品目标)的几分钟录音为准：真机采用 1–5 分钟代表性录音，合并暂停/继续、锁屏/后台及停止验证，另保留极短录音与失败边界。一小时录音及长期 CPU/耗电趋势测试暂缓，不阻挡当前阶段验收；已有机器快照中的未运行记录保留原样，不表示仍有一小时测试待办。
 
-## 构建与范围
+## 构建与第四步历史范围
 
 ```powershell
 cd android
-.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest -Prec07Mp3=true
+.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest
 # 同时回归独立原型
 .\gradlew.bat :mp3-prototype:assembleDebug :mp3-prototype:testDebugUnitTest -Prec07Prototype=true
 ```

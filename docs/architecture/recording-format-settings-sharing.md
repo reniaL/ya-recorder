@@ -1,6 +1,6 @@
 # REC-07 第六步：默认格式设置与分享
 
-日期：2026-10-08。设置、偏好持久化、下次会话格式读取、录音页格式显示及 MP3/M4A 分享已接入。第一步 Android 设备关口尚未通过，MP3 仍受原生 debug 开关限制；此步不解除发布开关，也不视为 REC-07 整体验收完成。
+日期：2026-10-08。设置、偏好持久化、下次会话格式读取、录音页格式显示及 MP3/M4A 分享已接入。用户确认真机基本功能正常并授权正式开放后，普通 debug/profile/release 均可选择并录制 MP3。当前开放状态见 [正式开放记录](mp3-availability.md)；整体专项验收继续跟踪。
 
 ## 设置与会话
 
@@ -10,42 +10,31 @@
 - 授权成功后、开始命令前读取偏好，固定为本次格式并显式传入原生通道；读取失败不开始录音。当前会话的原生状态仍为格式事实来源，录音页显示“录音格式：M4A/MP3”；修改偏好不调用开始/停止/转换，不改变当前会话格式。
 - 开始命令同步拒绝时清除没有会话 ID 的本地 preparing 状态，使用户能重试。原生以 `recording-format-unavailable` 拒绝 MP3 时显示“无法开始 MP3 录音，请在设置中选择 M4A 后重试”，保留 MP3 偏好，不自动切换。
 
-## 调试开关
+## 正式开放与构建
 
-`getAvailableFormats` 返回原生本次构建开放的格式，与开始命令共用 `BuildConfig.REC07_MP3_ENABLED`。普通 debug、profile 和 release 的设置面板将 MP3 标为“MP3 暂不可用”并禁止选择；`-Prec07Mp3=true` 的 debug 可选择 MP3 并从主界面开始录制。界面不显示构建参数或编码参数。
+`getAvailableFormats` 与开始命令共用 `BuildConfig.REC07_MP3_ENABLED`，该值现由 Android defaultConfig 统一设为 true，普通 debug、profile、release 均可选择 MP3。`rec07Mp3` 临时属性不再控制开放状态；普通 `flutter run` 或 APK 构建不会再把 MP3 禁用。初始默认仍为 M4A，已有用户偏好保持原值。运行时编码不可用或失败仍准确反馈、不自动切换格式。
 
-已有 MP3 偏好在普通构建中仍显示 MP3；用户可主动选择 M4A，开始 MP3 则准确拒绝。可分享已保存 MP3 的能力不受录音开关限制，因为分享只读取录音自身格式。原型参数、几分钟真实采集及 16 KB 运行验收通过后再调整产品开放策略，不能用组件测试或编译成功代替该关口。
-
-### 真机测试包
-
-看到“MP3 暂不可用”表示当前构建没有开放 MP3 录制。测试时应安装开启开关的 debug 包；普通 `flutter run` / `flutter build apk --debug` 不传该原生开关，重新安装普通包会恢复禁用状态。
-
-已有第六步测试包可在仓库根目录安装（设备没有活动录音时执行，`-r` 保留应用数据）：
+在仓库根目录生成当前产物：
 
 ```powershell
-& 'D:/data/app/android_sdk/platform-tools/adb.exe' install -r build/rec07-settings/app-debug-mp3.apk
+flutter build apk --debug
+flutter build apk --release
 ```
 
-代码更改后需重新生成测试包，在 `android/` 中执行：
-
-```powershell
-.\gradlew.bat :app:assembleDebug -Prec07Mp3=true --console=plain
-```
-
-该命令新产物为 `build/app/outputs/apk/debug/app-debug.apk`（相对仓库根目录），不会自动更新之前归档的 `build/rec07-settings/app-debug-mp3.apk`；安装应使用新产物。2026-10-08 已在 M2102K1AC / Android 13（4096 字节页）覆盖安装归档的启用包，确认设置中 MP3 实际可点击，选择后默认显示 MP3；只验证设置入口，没有开始实际录音，完整设备验收仍待进行。
+产物为 `build/app/outputs/flutter-apk/app-debug.apk` 和 `app-release.apk`。之前归档的 `build/rec07-settings/app-debug-m4a.apk` / `app-debug-mp3.apk` 是第六步历史验证产物，不随新代码自动更新，应使用本次新产物。此前普通包显示“MP3 暂不可用”、用 `-Prec07Mp3=true` 开启测试包及 4096 字节页设备设置入口检查均为正式开放前的历史过程。
 
 ## 分享
 
 - 分享接口从 `shareM4a` 改为 `shareAudio`，显式传递该录音的格式。M4A 使用 `.m4a` / `audio/mp4`；MP3 使用 `.mp3` / `audio/mpeg`。分享从不读取默认偏好，不转换文件。
 - 拒绝最近删除条目、临时文件和格式/路径不匹配的记录。不可读文件的复制失败会准确向调用方报告，不调用系统分享。
 - 每次分享创建独立临时目录，将原件复制成标题命名附件，对路径分隔符及文件名非法字符做替换；空标题使用“录音”。标题已带同格式扩展名时不重复追加；标题带不同扩展名时保留标题并追加实际格式，例如 MP3 的“旧标题.m4a”分享为 `旧标题.m4a.mp3`。
-- 系统分享返回成功、取消或失败后清理应用创建的临时目录，原件、标题、归属及播放状态保持原值；使用现有 share_plus 的只读内容 URI 授权路径。系统面板、真实接收应用的附件与授权仍需 Android 真机验收。
+- 系统分享返回成功、取消或失败后清理应用创建的临时目录，原件、标题、归属及播放状态保持原值；使用现有 share_plus 的只读内容 URI 授权路径。2026-10-08 用户确认真机 MP3 分享正常；接收应用未指定，不把该反馈扩展为所有接收应用兼容性通过。
 
-## 验证与后续
+## 第六步历史验证与后续
 
 - 新增 28 项 Flutter 测试：设置 9 项、偏好/版本 3 迁移 4 项、原生能力协议 1 项、分享 9 项、主界面衔接 5 项；原版本 1、2 升级、混合格式管理、播放与保存恢复测试共同回归。
 - `flutter analyze` 无问题，全量 `flutter test` 174 项通过。设置测试覆盖 320 × 640、两倍字体、浅色/深色、当前选择语义及至少 48 像素触控面积。主界面测试覆盖调试开放的 MP3 开始、活动会话修改设置、不可用反馈与主动切回 M4A、偏好读取失败、MP3 分享不依赖默认 M4A。
 - 原生新增 1 项开关一致性测试，正式应用 JVM 测试共 60 项通过。构建及静态对齐证据见 [验证快照](../verification/rec07-settings-2026-10-08.json)。编码核心、原型和媒体恢复算法未改，本次不重复桌面编码/原型测试；应用完整 lint 的既有跨盘模型限制沿用第五步记录，未重跑或修改 lint 配置。
 - 普通与 `-Prec07Mp3=true` 的 debug APK 构建成功，生成的 `BuildConfig.REC07_MP3_ENABLED` 分别为 false/true；两份 APK 的全部 10 个原生库通过 16 KB ELF/APK 静态对齐及 SDK zipalign。产物分别为 `build/rec07-settings/app-debug-m4a.apk`、`build/rec07-settings/app-debug-mp3.apk`，构建成功不代表实际麦克风或 JNI/媒体运行通过。
 - `adb devices -l` 无设备。设置重启保持与旧版本升级、两种格式的极短/1–5 分钟录音、当前会话修改设置、暂停/继续/停止/取消、锁屏/后台、系统分享面板与接收附件、实际恢复及 16 KB 运行仍需验收。一小时压力测试暂缓。
-- 下一阶段与 REC-06 协同完成系统中断策略及两种格式端到端设备验收；REC-07 与 MGT-03 保持“进行中”。
+- 上述检查为第六步当时证据；正式开放后的用户真机反馈与本轮构建证据见 [开放记录](mp3-availability.md)。MGT-03 已完成；REC-07 与 REC-06 的专项工作继续跟踪。

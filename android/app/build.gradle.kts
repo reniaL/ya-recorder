@@ -21,6 +21,8 @@ android {
     }
 
     defaultConfig {
+        // MP3 is available in every build after the device smoke test.
+        buildConfigField("boolean", "REC07_MP3_ENABLED", "true")
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "io.github.renial.ya_recorder"
         // You can update the following values to match your application needs.
@@ -32,15 +34,7 @@ android {
     }
 
     buildTypes {
-        getByName("debug") {
-            // Candidate parameters are gated until REC-07 device acceptance.
-            buildConfigField("boolean", "REC07_MP3_ENABLED", (providers.gradleProperty("rec07Mp3").orNull == "true").toString())
-        }
-        getByName("profile") {
-            buildConfigField("boolean", "REC07_MP3_ENABLED", "false")
-        }
         release {
-            buildConfigField("boolean", "REC07_MP3_ENABLED", "false")
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")

@@ -1,0 +1,132 @@
+{
+  "date": "2026-10-08",
+  "stage": "REC-07 MP3 available by default in all build types",
+  "userReportedDeviceEvidence": {
+    "deviceFromPriorSession": "M2102K1AC",
+    "api": 33,
+    "pageSizeBytes": 4096,
+    "source": "user report after previous enabled-debug APK installation",
+    "settings": "normal",
+    "mp3Recording": "normal",
+    "mp3Playback": "normal",
+    "mp3Sharing": "normal",
+    "durationAndParameterComparisonMeasurementsProvided": false,
+    "receiverApplicationSpecified": false,
+    "explicitMp3OpeningRequested": true
+  },
+  "validation": {
+    "flutterAnalyze": "no issues",
+    "flutterTests": 174,
+    "nativeTests": 61,
+    "newNativeTests": 1,
+    "nativeSuites": [
+      {
+        "name": "io.github.renial.ya_recorder.M4aRecordingBackendTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.Mp3FrameRecoveryTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.Mp3RecordingBackendTest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.RecordingFormatTest",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.RecordingSaveProtocolTest",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.SerialRecordingCommandsTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0
+      }
+    ],
+    "generatedBuildConfigMp3Enabled": {
+      "debug": true,
+      "profile": true,
+      "release": true
+    },
+    "apks": [
+      {
+        "path": "build/app/outputs/flutter-apk/app-debug.apk",
+        "sha256": "c5cce062c8f78bb2f63b2522643db38aed53594b0f109f58d7d7d60afa9db789",
+        "nativeLibraries": 10,
+        "elfAndApk16KbStaticAlignment": true,
+        "sdkZipalign16Kb": "passed",
+        "newDeviceInstall": false
+      },
+      {
+        "path": "build/app/outputs/flutter-apk/app-release.apk",
+        "sha256": "075ccf3f4a359047a71e663f4f944ba17d753bf5914f08df1d1c36f198c921fe",
+        "nativeLibraries": 12,
+        "elfAndApk16KbStaticAlignment": true,
+        "sdkZipalign16Kb": "passed",
+        "newDeviceInstall": false
+      }
+    ],
+    "fullProfileApkBuilt": false,
+    "gitDiffCheck": "passed",
+    "releaseBuildEnvironmentNote": "Existing cross-drive Kotlin incremental cache diagnostics; final release build succeeded; no cache deletion or repository configuration workaround"
+  },
+  "commands": [
+    "flutter analyze",
+    "flutter test --reporter expanded",
+    "android/gradlew.bat :app:testDebugUnitTest :app:generateProfileBuildConfig :app:generateReleaseBuildConfig --console=plain",
+    "flutter build apk --debug",
+    "flutter build apk --release",
+    "python tools/mp3-prototype/check_apk_alignment.py <apk> --report <report>",
+    "Android SDK 36.0.0 zipalign -c -P 16 4 <apk>"
+  ],
+  "configuration": {
+    "mp3EnabledInDefaultConfig": true,
+    "optInPropertyRequired": false,
+    "initialDefaultFormat": "m4a",
+    "existingPreferencesChanged": false,
+    "encoderParametersChanged": false,
+    "mp3Parameters": {
+      "sampleRate": 44100,
+      "channels": 1,
+      "bitrateKbps": 64,
+      "lameQuality": 5
+    }
+  },
+  "status": {
+    "REC-07": "in progress: implementation and basic device functionality confirmed; specific boundary acceptance remains",
+    "MGT-03": "complete based on user sharing report and existing MIME/attachment/original-file automated evidence",
+    "overview": {
+      "notStarted": 0,
+      "inProgress": 14,
+      "complete": 15,
+      "blocked": 0,
+      "total": 29
+    }
+  },
+  "notRepeated": [
+    "Prototype/host encoder tests: encoding core unchanged",
+    "Full application lint: existing cross-drive model limitation, configuration unchanged",
+    "Hour stress tests: deferred by current product scope"
+  ],
+  "remainingSpecificEvidence": [
+    "REC-06 focus/call interruption implementation and device outcomes",
+    "Explicit very short/1-5 minute boundaries, background and recovery checks",
+    "Restart/upgrade device evidence",
+    "16 KB runtime; current reported device uses 4 KB pages"
+  ],
+  "deviceAtEndOfTurn": "disconnected; no new installation or capture performed"
+}

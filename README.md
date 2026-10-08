@@ -6,12 +6,12 @@
 
 ## 项目状态
 
-核心录音、播放与管理功能已实现，部分功能仍待 Android 真机验收，详见 [开发进度](docs/development-progress.md)。普通构建和主界面当前录制 M4A；实时 MP3 后端及共用的草稿/提交/恢复流程已接入，MP3 仅显式开启的 debug 原生通道可调用。正式参数与真机验收、默认格式设置、MP3 分享和系统中断处理仍待完成，保存与恢复边界见 [实现记录](docs/architecture/recording-save-recovery.md)。
+核心录音、播放与管理功能已实现，部分专项仍待 Android 真机回归，详见 [开发进度](docs/development-progress.md)。普通 debug、profile、release 均支持在“更多 → 设置”选择 M4A 或 MP3，初始默认 M4A；偏好即时保存并从下一次录音生效。用户已在真机确认设置及 MP3 录制、播放、分享正常，MP3 无需额外构建开关。系统中断策略、后台/恢复及 16 KB 运行等专项继续跟踪；详见 [正式开放记录](docs/architecture/mp3-availability.md)和 [保存与恢复边界](docs/architecture/recording-save-recovery.md)。
 
 ## 首版目标
 
 - 开始、暂停、继续、停止和取消录音。
-- 支持 MP3、M4A 录音，并可在设置中选择默认格式（待实现）。
+- 支持 MP3、M4A 录音，并可在设置中选择默认格式。
 - 浏览、搜索、播放、重命名、删除和分享录音文件。
 - 通过文件夹对录音进行分类管理。
 - 提供播放进度控制和倍速回放，便于检查录音内容。
