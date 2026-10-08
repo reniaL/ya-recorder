@@ -4,6 +4,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RecordingFormatTest {
+    @Test fun availableFormatsFollowTheNativeGate() {
+        assertEquals(listOf(RecordingFormat.M4A), RecordingFormat.availableForRecording(false))
+        assertEquals(listOf(RecordingFormat.M4A, RecordingFormat.MP3), RecordingFormat.availableForRecording(true))
+        for (enabled in listOf(false, true)) {
+            for (format in RecordingFormat.availableForRecording(enabled)) format.requireRecordingEncoder(enabled)
+        }
+    }
     @Test fun protocolAndPathsMatchBothFormats() {
         assertEquals("audio/mp4", RecordingFormat.fromWireValue("m4a").mimeType)
         assertEquals("audio/mpeg", RecordingFormat.fromWireValue("mp3").mimeType)

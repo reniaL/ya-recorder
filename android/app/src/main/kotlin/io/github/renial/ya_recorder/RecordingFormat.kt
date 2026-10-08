@@ -18,6 +18,9 @@ enum class RecordingFormat(val wireName: String, val extension: String, val mime
     }
 
     companion object {
+        fun availableForRecording(mp3Enabled: Boolean): List<RecordingFormat> =
+            if (mp3Enabled) listOf(M4A, MP3) else listOf(M4A)
+
         fun fromWireValue(value: Any?): RecordingFormat {
             return entries.firstOrNull { it.wireName == value }
                 ?: throw IllegalArgumentException("Unsupported recording format: $value")

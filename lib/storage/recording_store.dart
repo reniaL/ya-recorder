@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:sqflite/sqflite.dart' as sqflite;
 
+import '../recording/recording_format.dart';
 import 'models/recording.dart';
 import 'models/recording_folder.dart';
 
@@ -18,7 +19,7 @@ class RecordingStore {
   }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
        _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
 
-  static const _schemaVersion = 3;
+  static const _schemaVersion = 4;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -30,6 +31,23 @@ class RecordingStore {
 
   Future<void> open() async {
     await _openDatabase();
+  }
+
+  Future<RecordingFormat> getDefaultRecordingFormat() async {
+    final database = await _openDatabase();
+    final rows = await database.query('recording_preferences', where: 'id = 1');
+    return rows.isEmpty
+        ? RecordingFormat.m4a
+        : RecordingFormat.fromWireValue(rows.single['default_format']);
+  }
+
+  Future<void> setDefaultRecordingFormat(RecordingFormat format) async {
+    final database = await _openDatabase();
+    await database.insert(
+      'recording_preferences',
+      {'id': 1, 'default_format': format.wireName},
+      conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
+    );
   }
 
   Future<void> close() async {
@@ -489,6 +507,9 @@ class RecordingStore {
               "ALTER TABLE recordings ADD COLUMN format TEXT NOT NULL DEFAULT 'm4a' CHECK(format IN ('m4a', 'mp3'))",
             );
           }
+          if (oldVersion < 4) {
+            await _createPreferencesSchema(database);
+          }
         },
       ),
     );
@@ -505,6 +526,7 @@ class RecordingStore {
   }
 
   static Future<void> _createSchema(sqflite.Database database) async {
+    await _createPreferencesSchema(database);
     await database.execute('''
       CREATE TABLE folders (
         id TEXT PRIMARY KEY NOT NULL,
@@ -537,6 +559,14 @@ class RecordingStore {
       ON recordings(deleted_at DESC)
     ''');
   }
+
+  static Future<void> _createPreferencesSchema(sqflite.Database database) =>
+      database.execute('''
+    CREATE TABLE recording_preferences (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      default_format TEXT NOT NULL CHECK(default_format IN ('m4a', 'mp3'))
+    )
+  ''');
 
   static Future<void> _ensureFolderExists(
     sqflite.DatabaseExecutor executor,

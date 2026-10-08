@@ -208,6 +208,22 @@ class RecordingService {
     await _commands.invokeMethod<void>('start', {'format': format.wireName});
   }
 
+  Future<List<RecordingFormat>> getAvailableFormats() async {
+    final response = await _commands.invokeMethod<Object?>(
+      'getAvailableFormats',
+    );
+    if (response is! List || response.isEmpty) {
+      throw const FormatException(
+        'Available recording formats must be a list.',
+      );
+    }
+    final formats = response.map(RecordingFormat.fromWireValue).toList();
+    if (formats.toSet().length != formats.length) {
+      throw const FormatException('Duplicate available recording formats.');
+    }
+    return formats;
+  }
+
   Future<void> pause() => _sendCommand('pause');
 
   Future<void> resume() => _sendCommand('resume');

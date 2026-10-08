@@ -5,6 +5,34 @@ import 'package:ya_recorder/recording/recording_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'available formats come from native gate; malformed responses fail',
+    () async {
+      const channel = MethodChannel('available-formats-test');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      Object? response = ['m4a'];
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        expect(call.method, 'getAvailableFormats');
+        return response;
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final service = RecordingService(commands: channel);
+      expect(await service.getAvailableFormats(), [RecordingFormat.m4a]);
+      response = ['m4a', 'mp3'];
+      expect(await service.getAvailableFormats(), RecordingFormat.values);
+      for (final invalid in [
+        null,
+        [],
+        ['wav'],
+        ['m4a', 'm4a'],
+        'mp3',
+      ]) {
+        response = invalid;
+        await expectLater(service.getAvailableFormats(), throwsFormatException);
+      }
+    },
+  );
   test('parses a native recording state event', () {
     final event = RecordingEvent.fromMap({
       'type': 'state',

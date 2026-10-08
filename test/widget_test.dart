@@ -37,6 +37,8 @@ void main() {
   late List<String> invokedMethods;
   late List<Map<String, Object?>> recoveryRows;
   late int unresolvedRecoveries;
+  late RecordingFormat expectedStartFormat;
+  late bool mp3Available;
 
   setUpAll(sqfliteFfiInit);
 
@@ -47,6 +49,8 @@ void main() {
     invokedMethods = [];
     recoveryRows = [];
     unresolvedRecoveries = 0;
+    expectedStartFormat = RecordingFormat.m4a;
+    mp3Available = false;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(commandChannel, (call) async {
@@ -62,8 +66,13 @@ void main() {
         case 'requestMicrophonePermission':
           return permissionGranted;
         case 'start':
-          expect(call.arguments, {'format': 'm4a'});
+          expect(call.arguments, {'format': expectedStartFormat.wireName});
+          if (expectedStartFormat == RecordingFormat.mp3 && !mp3Available) {
+            throw PlatformException(code: 'recording-format-unavailable');
+          }
           return null;
+        case 'getAvailableFormats':
+          return ['m4a', if (mp3Available) 'mp3'];
         case 'recoverRecordings':
           return {
             'recordings': recoveryRows,
@@ -162,6 +171,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MyApp(
+        recordingStore: _RecordingStoreSpy(),
         recordingService: RecordingService(
           commands: commandChannel,
           events: const EventChannel(
@@ -188,6 +198,111 @@ void main() {
     await tester.pump();
 
     expect(find.text('正在准备录音'), findsOneWidget);
+    expect(invokedMethods, contains('start'));
+  });
+
+  testWidgets('settings choice starts the next session using MP3', (
+    tester,
+  ) async {
+    final store = _RecordingStoreSpy();
+    permissionGranted = true;
+    mp3Available = true;
+    expectedStartFormat = RecordingFormat.mp3;
+    await tester.pumpWidget(MyApp(recordingStore: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('更多'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
+    await tester.pumpAndSettle();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始录音'));
+    await tester.pumpAndSettle();
+    expect(invokedMethods.where((m) => m == 'start').length, 1);
+    expect(find.text('录音格式：MP3'), findsOneWidget);
+  });
+
+  testWidgets(
+    'changing default during an active session preserves its format',
+    (tester) async {
+      final store = _RecordingStoreSpy();
+      initialState = 'paused';
+      initialCanResume = true;
+      mp3Available = true;
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      expect(find.text('录音格式：M4A'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('recordingSettingsMenu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(store.defaultFormat, RecordingFormat.mp3);
+      expect(find.text('录音格式：M4A'), findsOneWidget);
+      expect(invokedMethods, isNot(contains('start')));
+      await tester.tap(find.text('继续录音'));
+      await tester.pumpAndSettle();
+      expect(invokedMethods, contains('resume'));
+      expect(find.text('录音格式：M4A'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'unavailable MP3 reports guidance without fallback and allows retry',
+    (tester) async {
+      final store = _RecordingStoreSpy()..defaultFormat = RecordingFormat.mp3;
+      permissionGranted = true;
+      expectedStartFormat = RecordingFormat.mp3;
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始录音'));
+      await tester.pumpAndSettle();
+      expect(find.text('无法开始 MP3 录音，请在设置中选择 M4A 后重试'), findsOneWidget);
+      expect(store.defaultFormat, RecordingFormat.mp3);
+      expect(find.text('开始录音'), findsOneWidget);
+      expect(invokedMethods.where((m) => m == 'start').length, 1);
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('chooseFormat-m4a')));
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expectedStartFormat = RecordingFormat.m4a;
+      await tester.tap(find.text('开始录音'));
+      await tester.pumpAndSettle();
+      expect(find.text('录音格式：M4A'), findsOneWidget);
+      expect(invokedMethods.where((m) => m == 'start').length, 2);
+    },
+  );
+
+  testWidgets('preference read failure does not start or silently choose M4A', (
+    tester,
+  ) async {
+    final store = _RecordingStoreSpy()..failPreferenceRead = true;
+    permissionGranted = true;
+    await tester.pumpWidget(MyApp(recordingStore: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始录音'));
+    await tester.pumpAndSettle();
+    expect(invokedMethods, isNot(contains('start')));
+    expect(find.text('无法读取默认录音格式，请在设置中重试。'), findsOneWidget);
+    expect(find.text('开始录音'), findsOneWidget);
+    store.failPreferenceRead = false;
+    await tester.tap(find.text('开始录音'));
+    await tester.pumpAndSettle();
     expect(invokedMethods, contains('start'));
   });
 
@@ -1230,6 +1345,39 @@ void main() {
 
     expect(sharePlatform.filePath, '/private/recording-1.m4a');
     expect(sharePlatform.fileName, '播放进度测试.m4a');
+  });
+
+  testWidgets('shares indexed MP3 using its format despite the M4A default', (
+    tester,
+  ) async {
+    final original = Recording(
+      id: 'mp3-share',
+      title: '访谈',
+      filePath: '/private/mp3-share.mp3',
+      format: RecordingFormat.mp3,
+      createdAt: DateTime.utc(2026, 10, 8),
+      duration: const Duration(seconds: 2),
+      fileSizeBytes: 32,
+      folderId: 'work',
+    );
+    final store = _RecordingStoreSpy()..recordings = [original];
+    final platform = _WidgetFakeAudioSharePlatform();
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        audioShareService: AudioShareService(platform: platform),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('录音操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('分享'));
+    await tester.pumpAndSettle();
+    expect(platform.fileName, '访谈.mp3');
+    expect(platform.format, RecordingFormat.mp3);
+    expect(platform.filePath, original.filePath);
+    expect(store.recordings.single, same(original));
+    expect(store.defaultFormat, RecordingFormat.m4a);
   });
 
   testWidgets('moves a recording to recently deleted after confirmation', (
@@ -2348,6 +2496,19 @@ class _RecordingStoreSpy extends RecordingStore {
   bool failFolderReorder = false;
   Future<void>? folderReorderGate;
   int folderReorderCalls = 0;
+  RecordingFormat defaultFormat = RecordingFormat.m4a;
+  bool failPreferenceRead = false;
+
+  @override
+  Future<RecordingFormat> getDefaultRecordingFormat() async {
+    if (failPreferenceRead) throw StateError('Cannot read preference');
+    return defaultFormat;
+  }
+
+  @override
+  Future<void> setDefaultRecordingFormat(RecordingFormat format) async {
+    defaultFormat = format;
+  }
 
   @override
   Future<void> reorderFolders(List<String> ids) async {
@@ -2635,15 +2796,18 @@ RecordingFileReady _savedRecordingEvent(
 class _WidgetFakeAudioSharePlatform implements AudioSharePlatform {
   String? filePath;
   String? fileName;
+  RecordingFormat? format;
 
   @override
-  Future<void> shareM4a({
+  Future<void> shareAudio({
     required String filePath,
     required String fileName,
     required String title,
+    required RecordingFormat format,
   }) async {
     this.filePath = filePath;
     this.fileName = fileName;
+    this.format = format;
   }
 }
 

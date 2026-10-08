@@ -1,0 +1,111 @@
+{
+  "date": "2026-10-08",
+  "stage": "REC-07 step 6: default recording format settings and MP3/M4A sharing",
+  "validation": {
+    "flutterAnalyze": "no issues",
+    "flutterTests": 174,
+    "newFlutterTests": 28,
+    "nativeSuites": [
+      {
+        "name": "io.github.renial.ya_recorder.M4aRecordingBackendTest",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.Mp3FrameRecoveryTest",
+        "tests": 4,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.Mp3RecordingBackendTest",
+        "tests": 17,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.RecordingFormatTest",
+        "tests": 5,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.RecordingSaveProtocolTest",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0
+      },
+      {
+        "name": "io.github.renial.ya_recorder.SerialRecordingCommandsTest",
+        "tests": 2,
+        "failures": 0,
+        "errors": 0
+      }
+    ],
+    "nativeTests": 60,
+    "newNativeTests": 1,
+    "apks": [
+      {
+        "path": "build/rec07-settings/app-debug-m4a.apk",
+        "mp3Enabled": false,
+        "sha256": "8be9235d2efa0c1017860e63c84623b60dc8fa9d240d887c6ff1ba796d22b99e",
+        "nativeLibraries": 10,
+        "elfAndApk16KbStaticAlignment": true,
+        "sdkZipalign16Kb": "passed",
+        "deviceRuntimeVerified": false
+      },
+      {
+        "path": "build/rec07-settings/app-debug-mp3.apk",
+        "mp3Enabled": true,
+        "sha256": "45ef711d91f3315fa921ee7ea966c3e1ebfc45613f9fee00ed82a8396e375a47",
+        "nativeLibraries": 10,
+        "elfAndApk16KbStaticAlignment": true,
+        "sdkZipalign16Kb": "passed",
+        "deviceRuntimeVerified": false
+      }
+    ],
+    "buildConfigGateChecked": {
+      "normalDebug": false,
+      "explicitMp3Debug": true,
+      "profileAndReleaseConfigurationUnchanged": true
+    },
+    "gitDiffCheck": "passed"
+  },
+  "commands": [
+    "flutter analyze",
+    "flutter test --reporter expanded",
+    "android/gradlew.bat :app:testDebugUnitTest --console=plain",
+    "flutter build apk --debug",
+    "android/gradlew.bat :app:assembleDebug -Prec07Mp3=true --console=plain",
+    "python tools/mp3-prototype/check_apk_alignment.py <apk> --report <report>",
+    "Android SDK 36.0.0 zipalign -c -P 16 4 <apk>",
+    "adb devices -l"
+  ],
+  "scope": {
+    "schemaVersion": 4,
+    "mp3NewSelection": "explicitly enabled debug only",
+    "mp3Sharing": "saved recording format, independent of recording gate or default preference",
+    "hourStressRequired": false,
+    "encoderAndPrototypeUnchanged": true
+  },
+  "device": {
+    "connectedAndroidDevices": 0,
+    "settingsRestartUpgradeVerified": false,
+    "systemShareAndReceiverAttachmentsVerified": false,
+    "realRecordingAndRecoveryVerified": false,
+    "runtime16KbVerified": false
+  },
+  "notRepeated": [
+    "prototype builds or host encoder/recovery runs: no encoder, prototype or recovery changes",
+    "application lint: existing cross-drive model limitation; no lint configuration changes",
+    "hour stress tests: deferred by current product scope"
+  ],
+  "remaining": [
+    "REC-06 system focus/call interruption strategy",
+    "prototype device gate and final MP3 parameters",
+    "Android short/1-5 minute recordings, pause/resume/stop/cancel, background/lockscreen and recovery",
+    "settings persistence/upgrade and actual sharing receivers on Android",
+    "16 KB runtime acceptance"
+  ]
+}

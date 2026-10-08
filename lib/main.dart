@@ -11,6 +11,7 @@ import 'recording/recording_format.dart';
 import 'recording/recording_service.dart';
 import 'recording/recording_save_coordinator.dart';
 import 'sharing/audio_share_service.dart';
+import 'settings/recording_settings_page.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
@@ -243,6 +244,23 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       if (mounted) await _loadRecordings();
     } catch (_) {
       _setLibraryError('无法打开最近删除。');
+    }
+  }
+
+  Future<void> _openRecordingSettings() async {
+    try {
+      final store = await _getRecordingStore();
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => RecordingSettingsPage(
+            store: store,
+            service: widget.recordingService,
+          ),
+        ),
+      );
+    } catch (_) {
+      _setServiceError('无法打开设置，请重试。');
     }
   }
 
@@ -770,17 +788,41 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         return;
       }
 
+      final RecordingFormat format;
+      try {
+        format = await (await _getRecordingStore()).getDefaultRecordingFormat();
+      } catch (_) {
+        _setServiceError('无法读取默认录音格式，请在设置中重试。');
+        return;
+      }
+      if (!mounted) return;
       setState(() {
-        _status = const RecordingSessionStatus(
+        _status = RecordingSessionStatus(
           state: RecordingLifecycleState.preparing,
-          format: RecordingFormat.m4a,
+          format: format,
           elapsed: Duration.zero,
           canResume: false,
         );
       });
-      await widget.recordingService.start(format: RecordingFormat.m4a);
+      await widget.recordingService.start(format: format);
     } on PlatformException catch (error) {
-      _setServiceError(error.message ?? '无法开始录音。');
+      if (mounted &&
+          _status.state == RecordingLifecycleState.preparing &&
+          _status.sessionId == null) {
+        setState(() => _status = _idleStatus);
+      }
+      _setServiceError(
+        error.code == 'recording-format-unavailable'
+            ? '无法开始 MP3 录音，请在设置中选择 M4A 后重试'
+            : error.message ?? '无法开始录音。',
+      );
+    } catch (_) {
+      if (mounted &&
+          _status.state == RecordingLifecycleState.preparing &&
+          _status.sessionId == null) {
+        setState(() => _status = _idleStatus);
+      }
+      _setServiceError('无法开始录音，请重试。');
     } finally {
       if (mounted) {
         setState(() {
@@ -1182,6 +1224,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   _openFolderManagement();
                 } else if (action == 'recentlyDeleted') {
                   _openRecentlyDeleted();
+                } else if (action == 'settings') {
+                  _openRecordingSettings();
                 }
               },
               itemBuilder: (context) => const [
@@ -1191,6 +1235,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   child: Text('文件夹管理'),
                 ),
                 PopupMenuItem(value: 'recentlyDeleted', child: Text('最近删除')),
+                PopupMenuItem(value: 'settings', child: Text('设置')),
               ],
             ),
           ],
@@ -1579,6 +1624,17 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         title: const Text('丫丫录音'),
         centerTitle: false,
         backgroundColor: Colors.transparent,
+        actions: [
+          PopupMenuButton<String>(
+            key: const Key('recordingSettingsMenu'),
+            tooltip: '更多',
+            enabled: !_isSubmitting,
+            onSelected: (_) => _openRecordingSettings(),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'settings', child: Text('设置')),
+            ],
+          ),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -1595,6 +1651,14 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   color: colorScheme.onSurfaceVariant,
                 ),
               ),
+              if (_status.format != null)
+                Text(
+                  '录音格式：${_status.format!.label}',
+                  key: const Key('sessionRecordingFormat'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
               const Spacer(),
               Center(
                 child: Column(

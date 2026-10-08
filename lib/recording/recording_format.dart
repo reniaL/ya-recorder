@@ -8,6 +8,7 @@ enum RecordingFormat {
   final String extension;
   final String mimeType;
   String get wireName => extension;
+  String get label => extension.toUpperCase();
 
   static RecordingFormat fromWireValue(Object? value) {
     for (final format in values) {

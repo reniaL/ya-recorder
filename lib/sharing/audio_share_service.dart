@@ -11,10 +11,11 @@ typedef TemporaryDirectoryProvider = Future<Directory> Function();
 typedef ShareInvoker = Future<ShareResult> Function(ShareParams params);
 
 abstract interface class AudioSharePlatform {
-  Future<void> shareM4a({
+  Future<void> shareAudio({
     required String filePath,
     required String fileName,
     required String title,
+    required RecordingFormat format,
   });
 }
 
@@ -30,10 +31,11 @@ class SharePlusAudioSharePlatform implements AudioSharePlatform {
   final ShareInvoker _share;
 
   @override
-  Future<void> shareM4a({
+  Future<void> shareAudio({
     required String filePath,
     required String fileName,
     required String title,
+    required RecordingFormat format,
   }) async {
     final temporaryDirectory = await _temporaryDirectoryProvider();
     final stagingDirectory = await temporaryDirectory.createTemp(
@@ -47,9 +49,7 @@ class SharePlusAudioSharePlatform implements AudioSharePlatform {
         ShareParams(
           title: title,
           subject: title,
-          files: [
-            XFile(stagedFile.path, mimeType: RecordingFormat.m4a.mimeType),
-          ],
+          files: [XFile(stagedFile.path, mimeType: format.mimeType)],
         ),
       );
     } finally {
@@ -67,22 +67,26 @@ class AudioShareService {
   final AudioSharePlatform _platform;
 
   Future<void> shareRecording(Recording recording) {
-    // Until REC-07's sharing step is integrated, never label MP3 data as M4A.
-    if (recording.format != RecordingFormat.m4a) {
-      throw UnsupportedError('当前版本暂不支持分享 MP3 录音。');
+    if (recording.isDeleted ||
+        !recording.format.matchesCompletedPath(recording.filePath)) {
+      throw StateError('只能分享格式正确的已完成录音。');
     }
-    return _platform.shareM4a(
+    return _platform.shareAudio(
       filePath: recording.filePath,
-      fileName: _sharedFileName(recording.title),
+      fileName: _sharedFileName(recording.title, recording.format),
       title: recording.title,
+      format: recording.format,
     );
   }
 
-  static String _sharedFileName(String title) {
+  static String _sharedFileName(String title, RecordingFormat format) {
     final sanitizedTitle = title
         .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_')
         .trim();
     final baseName = sanitizedTitle.isEmpty ? '录音' : sanitizedTitle;
-    return baseName.toLowerCase().endsWith('.m4a') ? baseName : '$baseName.m4a';
+    final extension = '.${format.extension}';
+    return baseName.toLowerCase().endsWith(extension)
+        ? baseName
+        : '$baseName$extension';
   }
 }

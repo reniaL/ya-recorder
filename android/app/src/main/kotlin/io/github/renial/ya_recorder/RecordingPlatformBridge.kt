@@ -76,6 +76,7 @@ class RecordingPlatformBridge(
             "requestMicrophonePermission" -> requestMicrophonePermission(result)
             "openAppSettings" -> openAppSettings(result)
             "getStatus" -> result.success(RecordingService.currentStatus())
+            "getAvailableFormats" -> result.success(RecordingFormat.availableForRecording(BuildConfig.REC07_MP3_ENABLED).map { it.wireName })
             "start" -> startRecording(call, result)
             "pause" -> sendRecordingCommand(RecordingService.ACTION_PAUSE, result)
             "resume" -> sendRecordingCommand(RecordingService.ACTION_RESUME, result)
