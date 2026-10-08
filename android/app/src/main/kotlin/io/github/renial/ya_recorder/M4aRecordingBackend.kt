@@ -21,6 +21,8 @@ class M4aRecordingBackend internal constructor(
     override val format = RecordingFormat.M4A
     private var recorder: M4aRecorder? = null
     private var state = State.NEW
+    private var releaseFailed = false
+    override val isQuiescent: Boolean get() = recorder == null && !releaseFailed
 
     override fun prepare(temporaryFile: File) {
         check(state == State.NEW) { "The recording backend has already been prepared" }
@@ -92,7 +94,8 @@ class M4aRecordingBackend internal constructor(
         } catch (_: RuntimeException) {
             // reset can fail after a platform recorder error; still release it.
         } finally {
-            activeRecorder.release()
+            try { activeRecorder.release() }
+            catch (error: Exception) { releaseFailed = true; throw error }
         }
     }
 

@@ -185,6 +185,43 @@ class RecordingStore {
     });
   }
 
+  /// Replayed native commits preserve mutable title/folder/deletion metadata.
+  /// A conflicting identity is an error, never an INSERT OR REPLACE.
+  Future<bool> commitNativeRecording(Recording recording) async {
+    _validateRecording(recording);
+    final database = await _openDatabase();
+    return database.transaction((txn) async {
+      final existing = await txn.query(
+        'recordings',
+        where: 'id = ?',
+        whereArgs: [recording.id],
+      );
+      if (existing.isNotEmpty) {
+        final old = Recording.fromDatabaseMap(existing.single);
+        if (old.filePath != recording.filePath ||
+            old.format != recording.format ||
+            old.createdAt != recording.createdAt ||
+            old.duration != recording.duration ||
+            old.fileSizeBytes != recording.fileSizeBytes ||
+            old.wasInterrupted != recording.wasInterrupted) {
+          throw StateError('Conflicting native recording identity.');
+        }
+        return false;
+      }
+      final file = File(recording.filePath);
+      final stat = await file.stat();
+      if (stat.type != FileSystemEntityType.file ||
+          stat.size <= 0 ||
+          stat.size != recording.fileSizeBytes ||
+          recording.duration <= Duration.zero) {
+        throw StateError('Validated recording file is missing or changed.');
+      }
+      await _ensureFolderExists(txn, recording.folderId);
+      await txn.insert('recordings', recording.toDatabaseMap());
+      return true;
+    });
+  }
+
   Future<List<Recording>> listRecordings({String? folderId}) async {
     final database = await _openDatabase();
     final whereClauses = <String>['deleted_at IS NULL'];

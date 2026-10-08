@@ -50,6 +50,7 @@ class Mp3RecordingBackend internal constructor(
 
     override val format = RecordingFormat.MP3
     override val elapsedMs: Long get() = acceptedSamples.get() * 1000 / config.sampleRate
+    override val isQuiescent: Boolean get() = captureThread?.isAlive != true && encoderThread?.isAlive != true
     internal val acceptedSamples = AtomicLong(0)
     internal val encodedSamples = AtomicLong(0)
     internal val queueHighWater = AtomicInteger(0)

@@ -26,7 +26,7 @@ void main() {
 
   test('parses a saved recording result', () {
     final event = RecordingEvent.fromMap({
-      'type': 'saved',
+      'type': 'fileReady',
       'recording': {
         'id': 'session-1',
         'filePath': '/data/recording-session-1.m4a',
@@ -38,8 +38,8 @@ void main() {
       },
     });
 
-    expect(event, isA<RecordingSaved>());
-    final saved = event as RecordingSaved;
+    expect(event, isA<RecordingFileReady>());
+    final saved = event as RecordingFileReady;
     expect(saved.recording.id, 'session-1');
     expect(saved.recording.format, RecordingFormat.m4a);
     expect(saved.recording.duration, const Duration(seconds: 3));
@@ -108,6 +108,74 @@ void main() {
         throwsFormatException,
       );
     }
+  });
+
+  test('recovery parses explicit formats and rejects malformed results', () {
+    final candidate = <Object?, Object?>{
+      'id': 'one',
+      'filePath': '/private/one.mp3',
+      'format': 'mp3',
+      'createdAtMs': 123,
+      'durationMs': 3000,
+      'fileSizeBytes': 128,
+      'wasInterrupted': true,
+    };
+    final batch = RecordingRecoveryBatch.fromMap({
+      'recordings': [candidate],
+      'unresolvedCount': 1,
+    });
+    expect(batch.recordings.single.format, RecordingFormat.mp3);
+    expect(batch.recordings.single.wasInterrupted, isTrue);
+    expect(batch.unresolvedCount, 1);
+    for (final bad in [
+      {
+        'recordings': [candidate],
+        'unresolvedCount': -1,
+      },
+      {
+        'recordings': [null],
+        'unresolvedCount': 0,
+      },
+      {
+        'recordings': [
+          {...candidate, 'format': null},
+        ],
+        'unresolvedCount': 0,
+      },
+      {
+        'recordings': [
+          {...candidate, 'durationMs': 0},
+        ],
+        'unresolvedCount': 0,
+      },
+    ]) {
+      expect(() => RecordingRecoveryBatch.fromMap(bad), throwsFormatException);
+    }
+  });
+
+  test('recovery and index acknowledgement use distinct commands', () async {
+    const channel = MethodChannel('recording-recovery-test');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return call.method == 'recoverRecordings'
+          ? {'recordings': [], 'unresolvedCount': 0}
+          : null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final service = RecordingService(commands: channel);
+    expect((await service.recoverRecordings()).recordings, isEmpty);
+    await service.acknowledgeRecording('one');
+    await service.deferRecording('two');
+    expect(calls.map((c) => c.method), [
+      'recoverRecordings',
+      'acknowledgeRecording',
+      'deferRecording',
+    ]);
+    expect(calls[1].arguments, {'id': 'one'});
+    expect(calls[2].arguments, {'id': 'two'});
   });
 
   test('start sends format and preserves native unavailable errors', () async {

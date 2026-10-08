@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -22,8 +21,10 @@ class RecordingService : Service() {
 
     private val backendFactory = RecordingBackendFactory(mp3Enabled = BuildConfig.REC07_MP3_ENABLED)
     private var backend: RecordingBackend? = null
+    private var writerQuiescent = true
     private var session: ActiveSession? = null
     private var state = State.IDLE
+    private val persistence by lazy { AndroidRecordingPersistence.get(this) }
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -45,6 +46,10 @@ class RecordingService : Service() {
                 ACTION_RESUME -> resumeRecording()
                 ACTION_STOP -> stopRecording()
                 ACTION_CANCEL -> cancelRecording()
+                ACTION_INDEX_FINISHED -> {
+                    if (session?.id == intent.getStringExtra(EXTRA_ID) && state == State.STOPPING) resetToIdle()
+                    else if (session == null) stopSelf()
+                }
             }
         }
         return START_NOT_STICKY
@@ -56,7 +61,7 @@ class RecordingService : Service() {
         handler.removeCallbacksAndMessages(null)
         commands.close {
             handler.removeCallbacksAndMessages(null)
-            releaseBackend()
+            if (releaseBackend()) session?.let { persistence.releaseLease(it.id) }
             latestStatus = idleStatus()
         }
         super.onDestroy()
@@ -99,19 +104,21 @@ class RecordingService : Service() {
             completedFile = File(recordingsDirectory, format.completedFileName(recordingId)),
         )
         session = activeSession
+        writerQuiescent = true
         state = State.PREPARING
         publishState()
 
         try {
             // Enter foreground promptly, before native initialization can wait.
             startForeground(NOTIFICATION_ID, createNotification())
-            activeSession.temporaryFile.delete()
+            persistence.begin(activeSession.id, activeSession.createdAtMs, activeSession.format)
             val newBackend = backendFactory.create(activeSession.format)
             backend = newBackend
+            writerQuiescent = false
             newBackend.setFailureListener { error ->
                 commands.submit {
                     if (backend === newBackend && session === activeSession) {
-                        fail("recording-runtime-failed", "MP3 录音已中断，无法完成保存。", error)
+                        fail("recording-runtime-failed", "MP3 录音已中断，正在检查已录内容。", error)
                     }
                 }
             }
@@ -185,16 +192,12 @@ class RecordingService : Service() {
         try {
             requireBackend().stop()
             val acceptedDurationMs = requireBackend().elapsedMs
-            releaseBackend()
-            val durationMs = readDuration(activeSession.completedFile, activeSession.temporaryFile)
-            if (activeSession.format == RecordingFormat.MP3) {
-                check(acceptedDurationMs != null && acceptedDurationMs > 0 &&
-                    kotlin.math.abs(durationMs - acceptedDurationMs) <= 100) { "MP3 media duration does not match captured samples." }
-            }
+            check(releaseBackend()) { "Recording cleanup failed" }
             check(!commands.isClosed) { "Recording service was destroyed before file commit." }
-            moveToCompletedFile(activeSession)
-            publishSaved(activeSession, durationMs)
-            resetToIdle()
+            val ready = persistence.finish(activeSession.id, acceptedDurationMs)
+            persistence.releaseLease(activeSession.id)
+            publishReady(ready)
+            // Remain STOPPING/foreground until Flutter's index attempt completes.
         } catch (error: Exception) {
             fail("recording-save-failed", if (activeSession.format == RecordingFormat.MP3) "无法保存 MP3 录音。"
                 else error.message ?: "Unable to save recording.", error)
@@ -207,59 +210,44 @@ class RecordingService : Service() {
             return
         }
 
+        try {
+            persistence.markDiscarding(checkNotNull(session).id)
+        } catch (error: Exception) {
+            Log.e("RecordingService", "Discard intent could not be persisted", error)
+            publishError("recording-cancel-failed", "无法确认放弃录音，请重试。")
+            return
+        }
         state = State.DISCARDING
         handler.removeCallbacks(ticker)
         publishState()
         try {
             backend?.cancel()
+            check(releaseBackend()) { "Recording cleanup failed" }
+            persistence.releaseLease(checkNotNull(session).id)
+            persistence.discard(checkNotNull(session).id)
         } catch (error: Exception) {
             fail("recording-cancel-failed", if (session?.format == RecordingFormat.MP3) "无法完成 MP3 录音清理。"
                 else error.message ?: "Unable to cancel recording.", error)
             return
-        } finally {
-            releaseBackend()
         }
-        session?.temporaryFile?.delete()
         resetToIdle()
-    }
-
-    private fun moveToCompletedFile(activeSession: ActiveSession) {
-        if (!activeSession.temporaryFile.exists() || activeSession.temporaryFile.length() <= 0) {
-            throw IllegalStateException("The temporary recording file is unavailable.")
-        }
-        if (activeSession.completedFile.exists() && !activeSession.completedFile.delete()) {
-            throw IllegalStateException("Unable to replace the completed recording file.")
-        }
-        if (!activeSession.temporaryFile.renameTo(activeSession.completedFile)) {
-            throw IllegalStateException("Unable to finalize the recording file.")
-        }
-    }
-
-    private fun readDuration(completedFile: File, temporaryFile: File): Long {
-        val recordingFile = if (completedFile.exists()) completedFile else temporaryFile
-        val retriever = MediaMetadataRetriever()
-        try {
-            retriever.setDataSource(recordingFile.absolutePath)
-            val duration = retriever.extractMetadata(
-                MediaMetadataRetriever.METADATA_KEY_DURATION,
-            )?.toLongOrNull()
-            return duration ?: throw IllegalStateException("The recording has no readable duration.")
-        } finally {
-            retriever.release()
-        }
     }
 
     private fun requireBackend(): RecordingBackend =
         checkNotNull(backend) { "The active recording backend was lost." }
 
-    private fun releaseBackend() {
+    private fun releaseBackend(): Boolean {
         val activeBackend = backend
+        if (activeBackend == null) return writerQuiescent
         backend = null
-        try {
-            activeBackend?.release()
-        } catch (_: RuntimeException) {
-            // Cleanup must not hide the operation failure or prevent idle reset.
+        writerQuiescent = try {
+            activeBackend.release()
+            activeBackend.isQuiescent
+        } catch (error: Exception) {
+            Log.e("RecordingService", "Recording cleanup failed; lease retained", error)
+            false
         }
+        return writerQuiescent
     }
 
     private fun fail(code: String, message: String, cause: Throwable? = null) {
@@ -267,8 +255,23 @@ class RecordingService : Service() {
         handler.removeCallbacks(ticker)
         state = State.FAILED
         publishState()
-        publishError(code, message)
-        releaseBackend()
+        val activeSession = session
+        val quiescent = releaseBackend()
+        if (quiescent && activeSession != null) {
+            persistence.releaseLease(activeSession.id)
+            try {
+                val ready = persistence.recoverOne(activeSession.id)
+                if (ready != null && !commands.isClosed) {
+                    state = State.STOPPING
+                    publishState()
+                    publishReady(ready)
+                    return
+                }
+            } catch (recovery: Exception) {
+                Log.e("RecordingService", "Recording residual retained", recovery)
+            }
+        }
+        publishError(code, if (code == "recording-runtime-failed") "录音已中断，暂无法保存，残留文件已保留。" else message)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         session = null
@@ -307,17 +310,18 @@ class RecordingService : Service() {
         )
     }
 
-    private fun publishSaved(activeSession: ActiveSession, durationMs: Long) {
+    private fun publishReady(ready: ReadyRecording) {
+        val draft = ready.draft
         publish(
-            EVENT_SAVED,
+            EVENT_FILE_READY,
             Intent().apply {
-                putExtra(EXTRA_ID, activeSession.id)
-                putExtra(EXTRA_FILE_PATH, activeSession.completedFile.absolutePath)
-                putExtra(EXTRA_CREATED_AT_MS, activeSession.createdAtMs)
-                putExtra(EXTRA_DURATION_MS, durationMs)
-                putExtra(EXTRA_FILE_SIZE_BYTES, activeSession.completedFile.length())
-                putExtra(EXTRA_WAS_INTERRUPTED, false)
-                putExtra(EXTRA_FORMAT, activeSession.format.wireName)
+                putExtra(EXTRA_ID, draft.id)
+                putExtra(EXTRA_FILE_PATH, ready.file.absolutePath)
+                putExtra(EXTRA_CREATED_AT_MS, draft.createdAtMs)
+                putExtra(EXTRA_DURATION_MS, draft.durationMs)
+                putExtra(EXTRA_FILE_SIZE_BYTES, draft.fileSizeBytes)
+                putExtra(EXTRA_WAS_INTERRUPTED, draft.wasInterrupted)
+                putExtra(EXTRA_FORMAT, draft.format.wireName)
             },
         )
     }
@@ -403,9 +407,10 @@ class RecordingService : Service() {
         const val ACTION_RESUME = "io.github.renial.ya_recorder.action.RESUME_RECORDING"
         const val ACTION_STOP = "io.github.renial.ya_recorder.action.STOP_RECORDING"
         const val ACTION_CANCEL = "io.github.renial.ya_recorder.action.CANCEL_RECORDING"
+        const val ACTION_INDEX_FINISHED = "io.github.renial.ya_recorder.action.INDEX_FINISHED"
 
         const val EVENT_STATE = "io.github.renial.ya_recorder.event.RECORDING_STATE"
-        const val EVENT_SAVED = "io.github.renial.ya_recorder.event.RECORDING_SAVED"
+        const val EVENT_FILE_READY = "io.github.renial.ya_recorder.event.RECORDING_FILE_READY"
         const val EVENT_ERROR = "io.github.renial.ya_recorder.event.RECORDING_ERROR"
 
         const val EXTRA_STATE = "state"

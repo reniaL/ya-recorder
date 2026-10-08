@@ -9,6 +9,9 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import io.flutter.plugin.common.BinaryMessenger
@@ -26,6 +29,8 @@ class RecordingPlatformBridge(
     private var eventSink: EventChannel.EventSink? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var receiverRegistered = false
+    private val persistenceCommands = SerialRecordingCommands()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val eventReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -38,8 +43,8 @@ class RecordingPlatformBridge(
                     "sessionId" to intent.getStringExtra(RecordingService.EXTRA_SESSION_ID),
                     "format" to intent.getStringExtra(RecordingService.EXTRA_FORMAT),
                 )
-                RecordingService.EVENT_SAVED -> mapOf(
-                    "type" to "saved",
+                RecordingService.EVENT_FILE_READY -> mapOf(
+                    "type" to "fileReady",
                     "recording" to mapOf(
                         "id" to intent.getStringExtra(RecordingService.EXTRA_ID),
                         "filePath" to intent.getStringExtra(RecordingService.EXTRA_FILE_PATH),
@@ -76,6 +81,30 @@ class RecordingPlatformBridge(
             "resume" -> sendRecordingCommand(RecordingService.ACTION_RESUME, result)
             "stop" -> sendRecordingCommand(RecordingService.ACTION_STOP, result)
             "cancel" -> sendRecordingCommand(RecordingService.ACTION_CANCEL, result)
+            "recoverRecordings" -> persistenceCall(result) {
+                val batch = AndroidRecordingPersistence.get(activity).recover()
+                mapOf("recordings" to batch.recordings.map { it.toMap() }, "unresolvedCount" to batch.unresolvedIds.size)
+            }
+            "acknowledgeRecording", "deferRecording" -> persistenceCall(result) {
+                val id = (call.arguments as? Map<*, *>)?.get("id") as? String
+                    ?: throw IllegalArgumentException("Recording identity is required")
+                RecordingFormat.M4A.completedFileName(id)
+                try {
+                    if (call.method == "acknowledgeRecording") AndroidRecordingPersistence.get(activity).acknowledge(id)
+                } finally {
+                    mainHandler.post {
+                        if (RecordingService.currentStatus()["sessionId"] == id) {
+                            try {
+                                activity.startService(RecordingService.commandIntent(activity, RecordingService.ACTION_INDEX_FINISHED)
+                                    .putExtra(RecordingService.EXTRA_ID, id))
+                            } catch (error: Exception) {
+                                Log.e("RecordingBridge", "Unable to finish foreground index wait", error)
+                            }
+                        }
+                    }
+                }
+                null
+            }
             else -> result.notImplemented()
         }
     }
@@ -89,6 +118,17 @@ class RecordingPlatformBridge(
     override fun onCancel(arguments: Any?) {
         eventSink = null
         unregisterEventReceiver()
+    }
+
+    private fun persistenceCall(result: MethodChannel.Result, action: () -> Any?) {
+        persistenceCommands.submit {
+            try {
+                val value = action()
+                mainHandler.post { result.success(value) }
+            } catch (error: Exception) {
+                mainHandler.post { result.error("recording-persistence-failed", error.message, null) }
+            }
+        }
     }
 
     fun onRequestPermissionsResult(
@@ -110,6 +150,7 @@ class RecordingPlatformBridge(
         commands.setMethodCallHandler(null)
         events.setStreamHandler(null)
         unregisterEventReceiver()
+        persistenceCommands.close {}
     }
 
     private fun requestMicrophonePermission(result: MethodChannel.Result) {
@@ -188,7 +229,7 @@ class RecordingPlatformBridge(
         }
         val filter = IntentFilter().apply {
             addAction(RecordingService.EVENT_STATE)
-            addAction(RecordingService.EVENT_SAVED)
+            addAction(RecordingService.EVENT_FILE_READY)
             addAction(RecordingService.EVENT_ERROR)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

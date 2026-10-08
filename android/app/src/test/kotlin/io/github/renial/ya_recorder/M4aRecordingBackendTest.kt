@@ -163,6 +163,7 @@ class M4aRecordingBackendTest {
         })
         assertArrayEquals(arrayOf(cleanupFailure), failure.suppressed)
         backend.release()
+        assertFalse(backend.isQuiescent)
         assertEquals(1, recorder.calls.count { it == "release" })
     }
 

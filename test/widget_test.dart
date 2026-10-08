@@ -13,6 +13,16 @@ import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/models/recording_folder.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
 
+Map<String, Object?> _nativeReadyMap(SavedNativeRecording ready) => {
+  'id': ready.id,
+  'filePath': ready.filePath,
+  'createdAtMs': ready.createdAt.millisecondsSinceEpoch,
+  'durationMs': ready.duration.inMilliseconds,
+  'fileSizeBytes': ready.fileSizeBytes,
+  'wasInterrupted': ready.wasInterrupted,
+  'format': ready.format.wireName,
+};
+
 void main() {
   const commandChannel = MethodChannel(
     'io.github.renial.ya_recorder/recording_commands',
@@ -25,6 +35,8 @@ void main() {
   late String initialState;
   late bool initialCanResume;
   late List<String> invokedMethods;
+  late List<Map<String, Object?>> recoveryRows;
+  late int unresolvedRecoveries;
 
   setUpAll(sqfliteFfiInit);
 
@@ -33,6 +45,8 @@ void main() {
     initialState = 'idle';
     initialCanResume = false;
     invokedMethods = [];
+    recoveryRows = [];
+    unresolvedRecoveries = 0;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(commandChannel, (call) async {
@@ -49,6 +63,14 @@ void main() {
           return permissionGranted;
         case 'start':
           expect(call.arguments, {'format': 'm4a'});
+          return null;
+        case 'recoverRecordings':
+          return {
+            'recordings': recoveryRows,
+            'unresolvedCount': unresolvedRecoveries,
+          };
+        case 'acknowledgeRecording':
+        case 'deferRecording':
           return null;
         case 'pause':
         case 'resume':
@@ -2053,6 +2075,102 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'startup replays a recovered MP3 through the index before showing it',
+    (tester) async {
+      final ready = _savedRecordingEvent(
+        'recovered',
+        wasInterrupted: true,
+        format: RecordingFormat.mp3,
+      ).recording;
+      recoveryRows = [_nativeReadyMap(ready)];
+      final store = _RecordingStoreSpy();
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      expect(store.recordings.single.id, 'recovered');
+      expect(store.recordings.single.format, RecordingFormat.mp3);
+      expect(find.text('录音已中断，已录部分已保存。'), findsOneWidget);
+      expect(invokedMethods, contains('acknowledgeRecording'));
+      expect(find.text('录音已保存'), findsNothing);
+    },
+  );
+
+  testWidgets('file-ready duplicates never show success before index commit', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final store = _RecordingStoreSpy()..recordingCommitGate = gate.future;
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('one'));
+    events.add(_savedRecordingEvent('one'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('录音已保存'), findsNothing);
+    expect(invokedMethods, isNot(contains('acknowledgeRecording')));
+    expect(store.recordingCommitCalls, 1);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(store.recordings.length, 1);
+    expect(find.text('录音已保存'), findsOneWidget);
+    expect(invokedMethods.where((m) => m == 'acknowledgeRecording').length, 1);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('index failure keeps a retryable recording outside the list', (
+    tester,
+  ) async {
+    final store = _RecordingStoreSpy()..failRecordingCommit = true;
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('one'));
+    await tester.pumpAndSettle();
+    expect(store.recordings, isEmpty);
+    expect(find.text('录音已保存'), findsNothing);
+    expect(find.textContaining('文件已保留'), findsOneWidget);
+    expect(invokedMethods, contains('deferRecording'));
+    expect(invokedMethods, isNot(contains('acknowledgeRecording')));
+    store.failRecordingCommit = false;
+    events.add(_savedRecordingEvent('one'));
+    await tester.pumpAndSettle();
+    expect(store.recordings.length, 1);
+    expect(find.text('录音已保存'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets(
+    'unrecoverable drafts display an accurate retained-residual result',
+    (tester) async {
+      unresolvedRecoveries = 1;
+      final store = _RecordingStoreSpy();
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      expect(store.recordings, isEmpty);
+      expect(find.text('部分中断录音暂无法恢复，残留文件已保留。'), findsOneWidget);
+      expect(find.text('录音已保存'), findsNothing);
+    },
+  );
+
   testWidgets('interrupted save remains visible as an exception result', (
     tester,
   ) async {
@@ -2126,7 +2244,7 @@ void main() {
     expect(find.text('正在完成录音'), findsOneWidget);
 
     recordingEvents.add(
-      RecordingSaved(
+      RecordingFileReady(
         SavedNativeRecording(
           format: RecordingFormat.m4a,
           id: 'recording-1',
@@ -2219,6 +2337,9 @@ class _RecordingStoreSpy extends RecordingStore {
     : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
 
   Recording? savedRecording;
+  bool failRecordingCommit = false;
+  Future<void>? recordingCommitGate;
+  int recordingCommitCalls = 0;
   List<Recording> recordings = const [];
   List<RecordingFolder> folders = const [];
   bool failBatchDelete = false;
@@ -2415,6 +2536,16 @@ class _RecordingStoreSpy extends RecordingStore {
   }
 
   @override
+  Future<bool> commitNativeRecording(Recording recording) async {
+    recordingCommitCalls++;
+    if (recordingCommitGate != null) await recordingCommitGate;
+    if (failRecordingCommit) throw StateError('Index commit failed');
+    if (recordings.any((r) => r.id == recording.id)) return false;
+    await saveRecording(recording);
+    return true;
+  }
+
+  @override
   Future<void> saveRecording(Recording recording) async {
     savedRecording = recording;
     recordings = [recording, ...recordings];
@@ -2483,12 +2614,12 @@ Recording _recording(String id) {
   );
 }
 
-RecordingSaved _savedRecordingEvent(
+RecordingFileReady _savedRecordingEvent(
   String id, {
   bool wasInterrupted = false,
   RecordingFormat format = RecordingFormat.m4a,
 }) {
-  return RecordingSaved(
+  return RecordingFileReady(
     SavedNativeRecording(
       format: format,
       id: id,

@@ -9,6 +9,7 @@ import 'playback/playback_progress.dart';
 import 'playback/recording_detail_page.dart';
 import 'recording/recording_format.dart';
 import 'recording/recording_service.dart';
+import 'recording/recording_save_coordinator.dart';
 import 'sharing/audio_share_service.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
@@ -101,6 +102,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   bool _isSubmitting = false;
   bool _isDetailOpen = false;
   bool _isPersistingRecording = false;
+  int _pendingRecordingCommits = 0;
+  bool _isRecoveringRecordings = false;
+  late final RecordingSaveCoordinator _recordingSaveCoordinator;
   bool _isCancellingRecording = false;
   bool _isLoadingRecordings = true;
   bool _isSearching = false;
@@ -152,6 +156,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     _playbackService = widget.playbackService ?? AudioPlaybackService();
     _audioShareService = widget.audioShareService ?? AudioShareService();
     _playbackStatus = _playbackService.status;
+    _recordingSaveCoordinator = RecordingSaveCoordinator(
+      service: widget.recordingService,
+      getStore: _getRecordingStore,
+      titleFor: _defaultTitle,
+    );
     _playbackSubscription = _playbackService.statuses.listen(
       _handlePlaybackStatus,
     );
@@ -179,12 +188,35 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _cleanupExpiredRecordings();
+      unawaited(_recoverRecordings());
     }
   }
 
   Future<void> _initializeLibrary() async {
+    await _recoverRecordings();
     await _loadRecordings();
     await _cleanupExpiredRecordings();
+  }
+
+  Future<void> _recoverRecordings() async {
+    if (_isRecoveringRecordings) return;
+    _isRecoveringRecordings = true;
+    try {
+      final batch = await widget.recordingService.recoverRecordings();
+      var indexFailures = 0;
+      for (final ready in batch.recordings) {
+        if (!await _persistSavedRecording(ready)) indexFailures++;
+      }
+      if (indexFailures > 0) {
+        _setServiceError('部分录音未能写入本地索引，文件已保留，稍后可重试恢复。');
+      } else if (batch.unresolvedCount > 0) {
+        _setServiceError('部分中断录音暂无法恢复，残留文件已保留。');
+      }
+    } catch (_) {
+      _setServiceError('无法检查待恢复录音，请重新打开应用重试。');
+    } finally {
+      _isRecoveringRecordings = false;
+    }
   }
 
   Future<void> _cleanupExpiredRecordings() async {
@@ -895,7 +927,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               _isCancellingRecording &&
               status.state == RecordingLifecycleState.idle;
           _status = status;
-          if (status.state != RecordingLifecycleState.failed) {
+          if (status.state == RecordingLifecycleState.preparing) {
             _serviceError = null;
           }
           if (cancellationCompleted) {
@@ -903,7 +935,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             _updateSuccessMessage('本次录音已放弃');
           }
         });
-      case RecordingSaved(:final recording):
+      case RecordingFileReady(:final recording):
         unawaited(_persistSavedRecording(recording));
       case RecordingFailed(:final message):
         setState(() {
@@ -926,50 +958,53 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     });
   }
 
-  Future<void> _persistSavedRecording(
+  Future<bool> _persistSavedRecording(
     SavedNativeRecording savedRecording,
   ) async {
-    setState(() {
-      _isPersistingRecording = true;
-      _updateSuccessMessage(null);
-      _serviceError = null;
-    });
+    if (mounted) {
+      setState(() {
+        _pendingRecordingCommits++;
+        _isPersistingRecording = true;
+        _updateSuccessMessage(null);
+        _serviceError = null;
+      });
+    }
 
     try {
-      final store = await _getRecordingStore();
-      await store.saveRecording(
-        Recording(
-          id: savedRecording.id,
-          title: _defaultTitle(savedRecording.createdAt),
-          filePath: savedRecording.filePath,
-          createdAt: savedRecording.createdAt,
-          duration: savedRecording.duration,
-          fileSizeBytes: savedRecording.fileSizeBytes,
-          format: savedRecording.format,
-          wasInterrupted: savedRecording.wasInterrupted,
-        ),
-      );
+      final result = await _recordingSaveCoordinator.commit(savedRecording);
       if (!mounted) {
-        return;
+        return true;
       }
       setState(() {
-        _isPersistingRecording = false;
-        _status = _idleStatus;
-        if (savedRecording.wasInterrupted) {
+        if (_status.sessionId == null ||
+            _status.sessionId == savedRecording.id) {
+          _status = _idleStatus;
+        }
+        if (result.acknowledgementPending) {
+          _serviceError = '录音已入库，待下次打开应用清理保存记录。';
+        } else if (result.inserted && savedRecording.wasInterrupted) {
           _serviceError = '录音已中断，已录部分已保存。';
-        } else {
+        } else if (result.inserted) {
           _updateSuccessMessage('录音已保存');
         }
       });
       await _loadRecordings();
+      return true;
     } catch (_) {
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
-        _isPersistingRecording = false;
-        _serviceError = '无法将录音保存到本地索引。';
+        _serviceError = '无法将录音保存到本地索引，文件已保留，稍后可重试恢复。';
       });
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pendingRecordingCommits--;
+          _isPersistingRecording = _pendingRecordingCommits > 0;
+        });
+      }
     }
   }
 

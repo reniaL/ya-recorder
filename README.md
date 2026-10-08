@@ -6,7 +6,7 @@
 
 ## 项目状态
 
-核心录音、播放与管理功能已实现，部分功能仍待 Android 真机验收，详见 [开发进度](docs/development-progress.md)。普通构建和主界面当前录制 M4A；实时 MP3 后端已接入，仅显式开启的 debug 原生通道可调用，正式参数与真机验收、默认格式设置和完整保存/恢复仍待完成。
+核心录音、播放与管理功能已实现，部分功能仍待 Android 真机验收，详见 [开发进度](docs/development-progress.md)。普通构建和主界面当前录制 M4A；实时 MP3 后端及共用的草稿/提交/恢复流程已接入，MP3 仅显式开启的 debug 原生通道可调用。正式参数与真机验收、默认格式设置、MP3 分享和系统中断处理仍待完成，保存与恢复边界见 [实现记录](docs/architecture/recording-save-recovery.md)。
 
 ## 首版目标
 

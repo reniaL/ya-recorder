@@ -49,6 +49,7 @@ class RecordingSessionStatus {
   }
 }
 
+/// A validated final file awaiting an index commit; not yet a saved UI result.
 class SavedNativeRecording {
   const SavedNativeRecording({
     required this.id,
@@ -76,16 +77,19 @@ class SavedNativeRecording {
         'Saved path does not match recording format.',
       );
     }
+    final createdAtMs = _readInt(map, 'createdAtMs');
+    final durationMs = _readInt(map, 'durationMs');
+    final fileSizeBytes = _readInt(map, 'fileSizeBytes');
+    if (createdAtMs < 0 || durationMs <= 0 || fileSizeBytes <= 0) {
+      throw const FormatException('Ready recording has invalid metadata.');
+    }
     return SavedNativeRecording(
       id: _readString(map, 'id'),
       filePath: filePath,
       format: format,
-      createdAt: DateTime.fromMillisecondsSinceEpoch(
-        _readInt(map, 'createdAtMs'),
-        isUtc: true,
-      ),
-      duration: Duration(milliseconds: _readInt(map, 'durationMs')),
-      fileSizeBytes: _readInt(map, 'fileSizeBytes'),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(createdAtMs, isUtc: true),
+      duration: Duration(milliseconds: durationMs),
+      fileSizeBytes: fileSizeBytes,
       wasInterrupted: _readBool(map, 'wasInterrupted'),
     );
   }
@@ -98,12 +102,12 @@ sealed class RecordingEvent {
     switch (_readString(map, 'type')) {
       case 'state':
         return RecordingStateChanged(RecordingSessionStatus.fromMap(map));
-      case 'saved':
+      case 'fileReady':
         final recording = map['recording'];
         if (recording is! Map) {
           throw const FormatException('Saved event is missing its recording.');
         }
-        return RecordingSaved(
+        return RecordingFileReady(
           SavedNativeRecording.fromMap(Map<Object?, Object?>.from(recording)),
         );
       case 'error':
@@ -123,8 +127,8 @@ class RecordingStateChanged extends RecordingEvent {
   final RecordingSessionStatus status;
 }
 
-class RecordingSaved extends RecordingEvent {
-  const RecordingSaved(this.recording);
+class RecordingFileReady extends RecordingEvent {
+  const RecordingFileReady(this.recording);
 
   final SavedNativeRecording recording;
 }
@@ -134,6 +138,28 @@ class RecordingFailed extends RecordingEvent {
 
   final String code;
   final String message;
+}
+
+class RecordingRecoveryBatch {
+  const RecordingRecoveryBatch(this.recordings, this.unresolvedCount);
+
+  final List<SavedNativeRecording> recordings;
+  final int unresolvedCount;
+
+  factory RecordingRecoveryBatch.fromMap(Map<Object?, Object?> map) {
+    final raw = map['recordings'];
+    final count = _readInt(map, 'unresolvedCount');
+    if (raw is! List || count < 0) {
+      throw const FormatException('Invalid recovery result.');
+    }
+    return RecordingRecoveryBatch([
+      for (final value in raw)
+        if (value is Map)
+          SavedNativeRecording.fromMap(Map<Object?, Object?>.from(value))
+        else
+          throw const FormatException('Invalid recovered recording.'),
+    ], count);
+  }
 }
 
 class RecordingService {
@@ -189,6 +215,20 @@ class RecordingService {
   Future<void> stop() => _sendCommand('stop');
 
   Future<void> cancel() => _sendCommand('cancel');
+
+  Future<RecordingRecoveryBatch> recoverRecordings() async {
+    final response = await _commands.invokeMethod<Object?>('recoverRecordings');
+    if (response is! Map) {
+      throw const FormatException('Recovery result must be a map.');
+    }
+    return RecordingRecoveryBatch.fromMap(Map<Object?, Object?>.from(response));
+  }
+
+  Future<void> acknowledgeRecording(String id) =>
+      _commands.invokeMethod<void>('acknowledgeRecording', {'id': id});
+
+  Future<void> deferRecording(String id) =>
+      _commands.invokeMethod<void>('deferRecording', {'id': id});
 
   Future<void> _sendCommand(String command) async {
     await _commands.invokeMethod<void>(command);

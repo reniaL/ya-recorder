@@ -14,6 +14,7 @@ interface RecordingBackend {
     val format: RecordingFormat
     // MP3 uses accepted PCM samples; M4A continues to use the service clock.
     val elapsedMs: Long? get() = null
+    val isQuiescent: Boolean get() = true
     fun setFailureListener(listener: (Throwable) -> Unit) {}
     fun prepare(temporaryFile: File)
     fun start()
