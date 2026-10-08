@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/main.dart';
+import 'package:ya_recorder/l10n/localization.dart';
 import 'package:ya_recorder/playback/audio_playback_service.dart';
 import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
 import 'package:ya_recorder/sharing/audio_share_service.dart';
+import 'package:ya_recorder/settings/app_language.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/models/recording_folder.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
@@ -73,6 +75,9 @@ void main() {
           return null;
         case 'getAvailableFormats':
           return ['m4a', if (mp3Available) 'mp3'];
+        case 'setAppLanguage':
+          expect((call.arguments as Map)['language'], anyOf('zh', 'en'));
+          return null;
         case 'recoverRecordings':
           return {
             'recordings': recoveryRows,
@@ -171,7 +176,7 @@ void main() {
           mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
         );
       }
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('00:12'), findsOneWidget);
       expect(brightness(), Brightness.dark);
@@ -180,6 +185,100 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await open();
       expect(brightness(), Brightness.dark);
+    },
+  );
+
+  testWidgets(
+    'language switches active recording, visible errors and playback without resetting state',
+    (tester) async {
+      final store = _RecordingStoreSpy();
+      final backend = _FakePlaybackBackend();
+      final playback = AudioPlaybackService(backend: backend);
+      addTearDown(playback.dispose);
+      final recording = Recording(
+        id: 'language-test',
+        format: RecordingFormat.m4a,
+        title: '用户录音标题',
+        filePath: '/saved.m4a',
+        createdAt: DateTime.utc(2026, 10, 8),
+        duration: const Duration(seconds: 30),
+        fileSizeBytes: 10,
+      );
+      store.recordings = [recording];
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      Future<void> open() async {
+        await tester.pumpWidget(
+          MyApp(
+            recordingStore: store,
+            playbackService: playback,
+            recordingService: RecordingService(
+              commands: commandChannel,
+              eventStream: events.stream,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> language(String code, String settingsLabel) async {
+        await tester.tap(
+          find.byTooltip(settingsLabel == '设置' ? '更多' : 'More').first,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(settingsLabel));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('appLanguage')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(Key('chooseLanguage-$code')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+      }
+
+      await open();
+      await playback.play(recording);
+      await language('en', '设置');
+      expect(playback.status.state, PlaybackState.playing);
+      expect(playback.status.recordingId, recording.id);
+      expect(store.recordings.single.title, '用户录音标题');
+      expect(find.text('Start recording'), findsOneWidget);
+      events.add(
+        const RecordingStateChanged(
+          RecordingSessionStatus(
+            state: RecordingLifecycleState.recording,
+            format: RecordingFormat.m4a,
+            elapsed: Duration(seconds: 12),
+            canResume: false,
+          ),
+        ),
+      );
+      events.add(
+        const RecordingFailed(
+          code: 'storage-unavailable',
+          message: 'Never show raw native diagnostics',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Recording'), findsOneWidget);
+      expect(
+        find.text(
+          'Recording storage is unavailable. Check your available storage and try again.',
+        ),
+        findsOneWidget,
+      );
+      await language('zh', 'Settings');
+      expect(find.text('正在录音'), findsOneWidget);
+      expect(find.text('00:12'), findsOneWidget);
+      expect(find.text('无法访问录音存储空间，请检查可用空间后重试。'), findsOneWidget);
+      expect(invokedMethods, isNot(contains('start')));
+      expect(invokedMethods, isNot(contains('pause')));
+      expect(playback.status.state, PlaybackState.playing);
+      await language('en', '设置');
+      await tester.pumpWidget(const SizedBox());
+      await open();
+      expect(find.text('Start recording'), findsOneWidget);
+      expect(store.language, AppLanguage.english);
     },
   );
 
@@ -244,6 +343,98 @@ void main() {
     expectReadableStatusBar();
   });
 
+  testWidgets(
+    'queued saves retain localized titles after the page is disposed',
+    (tester) async {
+      final store = _RecordingStoreSpy()..language = AppLanguage.english;
+      final gate = Completer<void>();
+      store.recordingCommitGate = gate.future;
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: store,
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      events.add(_savedRecordingEvent('one'));
+      events.add(_savedRecordingEvent('two'));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.recordings.map((r) => r.id).toSet(), {'one', 'two'});
+      expect(
+        store.recordings.every((r) => r.title.startsWith('Recording ')),
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'English library, folders, trash and recording fit a narrow screen with large text',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final store = _RecordingStoreSpy()..language = AppLanguage.english;
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: store,
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('No recordings yet'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      Future<void> openMore(String label) async {
+        await tester.tap(find.byTooltip('More'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(label));
+        await tester.pumpAndSettle();
+      }
+
+      await openMore('Manage folders');
+      await tester.tap(find.text('Create folder'));
+      await tester.pumpAndSettle();
+      expect(find.text('Folder name'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await openMore('Recently Deleted');
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      events.add(
+        const RecordingStateChanged(
+          RecordingSessionStatus(
+            state: RecordingLifecycleState.paused,
+            format: RecordingFormat.mp3,
+            elapsed: Duration(seconds: 12),
+            canResume: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Recording paused'), findsOneWidget);
+      expect(find.text('Recording format: MP3'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('denied microphone permission can be requested again', (
     WidgetTester tester,
   ) async {
@@ -296,7 +487,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
     await tester.pumpAndSettle();
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始录音'));
     await tester.pumpAndSettle();
@@ -322,7 +513,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
       await tester.pumpAndSettle();
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(store.defaultFormat, RecordingFormat.mp3);
       expect(find.text('录音格式：M4A'), findsOneWidget);
@@ -356,7 +547,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('chooseFormat-m4a')));
       await tester.pumpAndSettle();
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expectedStartFormat = RecordingFormat.m4a;
       await tester.tap(find.text('开始录音'));
@@ -459,7 +650,7 @@ void main() {
       await tester.tap(find.text('恢复'));
       await tester.pumpAndSettle();
       expect(find.text('最近删除为空'), findsOneWidget);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('全部录音'), findsOneWidget);
       expect(find.text('播放进度测试'), findsOneWidget);
@@ -626,7 +817,7 @@ void main() {
       await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
       await tester.pumpAndSettle();
       expect(find.text('已暂停'), findsOneWidget);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(playback.status.recordingId, isNull);
       expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
@@ -634,130 +825,143 @@ void main() {
     },
   );
 
-  for (final width in [320.0, 390.0]) {
-    for (final scale in [1.0, 2.0]) {
-      testWidgets(
-        'detail title and centered controls fit ${width}px at scale $scale',
-        (tester) async {
-          await tester.binding.setSurfaceSize(Size(width, 640));
-          addTearDown(() => tester.binding.setSurfaceSize(null));
-          tester.platformDispatcher.textScaleFactorTestValue = scale;
-          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-          final semantics = tester.ensureSemantics();
-          final longTitle = List.filled(12, '很长的会议录音标题').join();
-          final base = _recording('one');
-          final recording = Recording(
-            format: base.format,
-            id: base.id,
-            title: longTitle,
-            filePath: base.filePath,
-            createdAt: base.createdAt,
-            duration: base.duration,
-            fileSizeBytes: base.fileSizeBytes,
-          );
-          final store = _RecordingStoreSpy()..recordings = [recording];
-          final playback = AudioPlaybackService(
-            backend: _FakePlaybackBackend(),
-          );
-          addTearDown(playback.dispose);
-          await tester.pumpWidget(
-            MyApp(recordingStore: store, playbackService: playback),
-          );
-          await tester.pumpAndSettle();
-          await tester.tap(find.byKey(const Key('recordingRow-one')));
-          await tester.pumpAndSettle();
-          final title = find.byKey(const Key('recordingDetailTitle'));
-          expect(find.text('录音详情'), findsNothing);
-          expect(find.text(longTitle), findsOneWidget);
-          expect(
-            find.ancestor(of: title, matching: find.byType(AppBar)),
-            findsOneWidget,
-          );
-          expect(tester.widget<Text>(title).maxLines, 1);
-          expect(tester.widget<Text>(title).overflow, TextOverflow.ellipsis);
-          await tester.tap(find.byKey(const Key('recordingDetailTitleButton')));
-          await tester.pumpAndSettle();
-          expect(
-            tester.widget<SelectableText>(find.byType(SelectableText)).data,
-            longTitle,
-          );
-          await tester.tap(find.text('关闭'));
-          await tester.pumpAndSettle();
-          expect(playback.status.state, PlaybackState.playing);
-          final backwardFinder = find.byKey(
-            const Key('recordingDetailSkipBackward'),
-          );
-          final forwardFinder = find.byKey(
-            const Key('recordingDetailSkipForward'),
-          );
-          final backward = tester.getRect(backwardFinder);
-          final forward = tester.getRect(forwardFinder);
-          final play = tester.getRect(
-            find.byKey(const Key('recordingDetailPlayButton')),
-          );
-          final speedFinder = find.byKey(const Key('recordingDetailSpeed'));
-          final speed = tester.getRect(speedFinder);
-          for (final rect in [backward, forward]) {
-            expect(rect.width, greaterThanOrEqualTo(56));
-            expect(rect.height, greaterThanOrEqualTo(56));
-            expect(rect.center.dy, play.center.dy);
-            expect(rect.overlaps(play), isFalse);
-          }
-          expect(play.width, greaterThanOrEqualTo(64));
-          expect(play.height, greaterThanOrEqualTo(64));
-          expect(speed.height, greaterThanOrEqualTo(56));
-          expect(speed.width, lessThan(160));
-          expect(speed.left, greaterThanOrEqualTo(24));
-          expect(speed.right, lessThanOrEqualTo(width - 24));
-          expect(speed.overlaps(forward), isFalse);
-          expect(play.center.dx, closeTo(width / 2, 0.01));
-          expect(play.left - backward.right, closeTo(24, 0.01));
-          expect(forward.left - play.right, closeTo(24, 0.01));
-          expect(
-            play.center.dx - backward.center.dx,
-            closeTo(forward.center.dx - play.center.dx, 0.01),
-          );
-          expect(speed.center.dx, closeTo(width / 2, 0.01));
-          expect(speed.top - play.bottom, closeTo(16, 0.01));
-          expect(tester.getSemantics(speedFinder).label, contains('播放倍速'));
-          semantics.dispose();
-          await playback.seek(const Duration(seconds: 20));
-          await tester.pumpAndSettle();
-          await tester.tapAt(backward.topLeft + const Offset(3, 3));
-          await tester.pumpAndSettle();
-          expect(playback.status.position.inSeconds, 15);
-          await tester.tapAt(forward.topLeft + const Offset(3, 3));
-          await tester.pumpAndSettle();
-          expect(playback.status.position.inSeconds, 20);
-          await tester.tap(speedFinder);
-          await tester.pumpAndSettle();
-          expect(find.byType(CheckedPopupMenuItem<double>), findsNWidgets(5));
-          await tester.tap(
-            find.ancestor(
-              of: find.text('1.25×'),
-              matching: find.byType(CheckedPopupMenuItem<double>),
-            ),
-          );
-          await tester.pumpAndSettle();
-          expect(playback.status.speed, 1.25);
-          expect(
-            tester.getRect(speedFinder).center.dx,
-            closeTo(width / 2, 0.01),
-          );
-          expect(
-            tester
-                .getRect(find.byKey(const Key('recordingDetailPlayButton')))
-                .center
-                .dx,
-            closeTo(width / 2, 0.01),
-          );
-          expect(
-            find.descendant(of: speedFinder, matching: find.text('1.25×')),
-            findsOneWidget,
-          );
-          expect(tester.takeException(), isNull);
-        },
-      );
+  for (final language in AppLanguage.values) {
+    for (final width in [320.0, 390.0]) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          '${language.code} detail title and centered controls fit ${width}px at scale $scale',
+          (tester) async {
+            await tester.binding.setSurfaceSize(Size(width, 640));
+            addTearDown(() => tester.binding.setSurfaceSize(null));
+            tester.platformDispatcher.textScaleFactorTestValue = scale;
+            addTearDown(
+              tester.platformDispatcher.clearTextScaleFactorTestValue,
+            );
+            final semantics = tester.ensureSemantics();
+            final longTitle = List.filled(12, '很长的会议录音标题').join();
+            final base = _recording('one');
+            final recording = Recording(
+              format: base.format,
+              id: base.id,
+              title: longTitle,
+              filePath: base.filePath,
+              createdAt: base.createdAt,
+              duration: base.duration,
+              fileSizeBytes: base.fileSizeBytes,
+            );
+            final store = _RecordingStoreSpy()
+              ..language = language
+              ..recordings = [recording];
+            final playback = AudioPlaybackService(
+              backend: _FakePlaybackBackend(),
+            );
+            addTearDown(playback.dispose);
+            await tester.pumpWidget(
+              MyApp(recordingStore: store, playbackService: playback),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(find.byKey(const Key('recordingRow-one')));
+            await tester.pumpAndSettle();
+            final title = find.byKey(const Key('recordingDetailTitle'));
+            expect(find.text('录音详情'), findsNothing);
+            expect(find.text(longTitle), findsOneWidget);
+            expect(
+              find.ancestor(of: title, matching: find.byType(AppBar)),
+              findsOneWidget,
+            );
+            expect(tester.widget<Text>(title).maxLines, 1);
+            expect(tester.widget<Text>(title).overflow, TextOverflow.ellipsis);
+            await tester.tap(
+              find.byKey(const Key('recordingDetailTitleButton')),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              tester.widget<SelectableText>(find.byType(SelectableText)).data,
+              longTitle,
+            );
+            await tester.tap(
+              find.text(l10n(tester.element(find.byType(AlertDialog))).close),
+            );
+            await tester.pumpAndSettle();
+            expect(playback.status.state, PlaybackState.playing);
+            final backwardFinder = find.byKey(
+              const Key('recordingDetailSkipBackward'),
+            );
+            final forwardFinder = find.byKey(
+              const Key('recordingDetailSkipForward'),
+            );
+            final backward = tester.getRect(backwardFinder);
+            final forward = tester.getRect(forwardFinder);
+            final play = tester.getRect(
+              find.byKey(const Key('recordingDetailPlayButton')),
+            );
+            final speedFinder = find.byKey(const Key('recordingDetailSpeed'));
+            final speed = tester.getRect(speedFinder);
+            for (final rect in [backward, forward]) {
+              expect(rect.width, greaterThanOrEqualTo(56));
+              expect(rect.height, greaterThanOrEqualTo(56));
+              expect(rect.center.dy, play.center.dy);
+              expect(rect.overlaps(play), isFalse);
+            }
+            expect(play.width, greaterThanOrEqualTo(64));
+            expect(play.height, greaterThanOrEqualTo(64));
+            expect(speed.height, greaterThanOrEqualTo(56));
+            expect(speed.width, lessThan(160));
+            expect(speed.left, greaterThanOrEqualTo(24));
+            expect(speed.right, lessThanOrEqualTo(width - 24));
+            expect(speed.overlaps(forward), isFalse);
+            expect(play.center.dx, closeTo(width / 2, 0.01));
+            expect(play.left - backward.right, closeTo(24, 0.01));
+            expect(forward.left - play.right, closeTo(24, 0.01));
+            expect(
+              play.center.dx - backward.center.dx,
+              closeTo(forward.center.dx - play.center.dx, 0.01),
+            );
+            expect(speed.center.dx, closeTo(width / 2, 0.01));
+            expect(speed.top - play.bottom, closeTo(16, 0.01));
+            expect(
+              tester.getSemantics(speedFinder).label,
+              contains(l10n(tester.element(speedFinder)).playbackSpeed),
+            );
+            semantics.dispose();
+            await playback.seek(const Duration(seconds: 20));
+            await tester.pumpAndSettle();
+            await tester.tapAt(backward.topLeft + const Offset(3, 3));
+            await tester.pumpAndSettle();
+            expect(playback.status.position.inSeconds, 15);
+            await tester.tapAt(forward.topLeft + const Offset(3, 3));
+            await tester.pumpAndSettle();
+            expect(playback.status.position.inSeconds, 20);
+            await tester.tap(speedFinder);
+            await tester.pumpAndSettle();
+            expect(find.byType(CheckedPopupMenuItem<double>), findsNWidgets(5));
+            await tester.tap(
+              find.ancestor(
+                of: find.text('1.25×'),
+                matching: find.byType(CheckedPopupMenuItem<double>),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(playback.status.speed, 1.25);
+            expect(
+              tester.getRect(speedFinder).center.dx,
+              closeTo(width / 2, 0.01),
+            );
+            expect(
+              tester
+                  .getRect(find.byKey(const Key('recordingDetailPlayButton')))
+                  .center
+                  .dx,
+              closeTo(width / 2, 0.01),
+            );
+            expect(
+              find.descendant(of: speedFinder, matching: find.text('1.25×')),
+              findsOneWidget,
+            );
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
     }
   }
 
@@ -815,7 +1019,7 @@ void main() {
       expect(playback.status.position.inSeconds, 20);
       expect(playback.status.speed, 0.75);
       expect(backend.filePaths.length, 1);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(playback.status.speed, 1);
       expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
@@ -860,7 +1064,7 @@ void main() {
       expect(playback.status.state, PlaybackState.playing);
       expect(backend.filePaths.length, 1);
       expect(tester.takeException(), isNull);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
     },
   );
@@ -904,7 +1108,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('无法调整播放倍速，请重试。'), findsNothing);
       expect(playback.status.speed, 2);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
     },
   );
@@ -944,7 +1148,7 @@ void main() {
       expect(playback.status.position.inSeconds, 30);
       expect(playback.status.state, PlaybackState.playing);
       expect(backend.filePaths.length, 2);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
     },
   );
@@ -971,7 +1175,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(playback.status.recordingId, 'two');
     expect(backend.filePaths, ['/private/one.m4a', '/private/two.m4a']);
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(playback.status.recordingId, isNull);
     expect(
@@ -1046,7 +1250,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(playback.status.state, PlaybackState.paused);
       expect(tester.takeException(), isNull);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
     },
   );
@@ -1108,7 +1312,7 @@ void main() {
     expect(position, greaterThan(0));
     await tester.tap(find.byKey(const Key('recordingRow-item-20')));
     await tester.pumpAndSettle();
-    await tester.pageBack();
+    await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(find.text('测试目录'), findsOneWidget);
     expect(
@@ -1284,7 +1488,7 @@ void main() {
       expect(find.text('未播放'), findsOneWidget);
       expect(playback.status.position, Duration.zero);
       expect(find.byKey(const Key('recordingDetailTitle')), findsOneWidget);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('libraryPlaybackControls')), findsNothing);
     },
@@ -1339,7 +1543,7 @@ void main() {
             .onPressed,
         isNotNull,
       );
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
     },
   );
@@ -1372,7 +1576,7 @@ void main() {
       expect(backward.overlaps(play), isFalse);
       expect(forward.overlaps(play), isFalse);
       expect(tester.takeException(), isNull);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
     },
   );
@@ -1746,7 +1950,7 @@ void main() {
         'folder-2',
         'folder-0',
       ]);
-      await tester.pageBack();
+      await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('folderScopeSelector')));
       await tester.pumpAndSettle();
@@ -2216,9 +2420,9 @@ void main() {
       await tester.tap(find.byTooltip('关闭提示'));
       await tester.pumpAndSettle();
       expect(find.text('录音已保存'), findsNothing);
-      expect(find.text('录音服务错误'), findsOneWidget);
+      expect(find.text('操作失败，请重试。'), findsOneWidget);
       await tester.pump(const Duration(seconds: 5));
-      expect(find.text('录音服务错误'), findsOneWidget);
+      expect(find.text('操作失败，请重试。'), findsOneWidget);
       expect(store.recordings.single.id, 'one');
     },
   );
@@ -2561,6 +2765,12 @@ void main() {
 class _RecordingStoreSpy extends RecordingStore {
   _RecordingStoreSpy()
     : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
+
+  AppLanguage language = AppLanguage.simplifiedChinese;
+  @override
+  Future<AppLanguage> getAppLanguage() async => language;
+  @override
+  Future<void> setAppLanguage(AppLanguage value) async => language = value;
 
   Recording? savedRecording;
   bool failRecordingCommit = false;

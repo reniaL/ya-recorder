@@ -196,6 +196,10 @@ class RecordingService {
 
   Future<void> openAppSettings() => _sendCommand('openAppSettings');
 
+  /// Synchronize notification language without recreating the Activity/service.
+  Future<void> setAppLanguage(String code) =>
+      _commands.invokeMethod<void>('setAppLanguage', {'language': code});
+
   Future<RecordingSessionStatus> getStatus() async {
     final response = await _commands.invokeMethod<Object?>('getStatus');
     if (response is! Map) {

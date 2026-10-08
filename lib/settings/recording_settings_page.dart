@@ -1,8 +1,10 @@
+import '../l10n/localization.dart';
 import 'package:flutter/material.dart';
 
 import '../recording/recording_format.dart';
 import '../recording/recording_service.dart';
 import '../storage/recording_store.dart';
+import 'app_language.dart';
 
 class RecordingSettingsPage extends StatefulWidget {
   const RecordingSettingsPage({
@@ -10,11 +12,13 @@ class RecordingSettingsPage extends StatefulWidget {
     required this.store,
     required this.service,
     this.onThemeChanged,
+    this.onLanguageChanged,
   });
 
   final RecordingStore store;
   final RecordingService service;
   final ValueChanged<ThemeMode>? onThemeChanged;
+  final ValueChanged<AppLanguage>? onLanguageChanged;
 
   @override
   State<RecordingSettingsPage> createState() => _RecordingSettingsPageState();
@@ -22,7 +26,7 @@ class RecordingSettingsPage extends StatefulWidget {
 
 class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   RecordingFormat? _format;
-  List<RecordingFormat> _available = const [];
+  List<RecordingFormat> _available = [];
   bool _loading = true;
   String? _error;
 
@@ -31,6 +35,84 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     super.initState();
     _load();
     _loadTheme();
+    _loadLanguage();
+  }
+
+  AppLanguage? _language;
+  bool _savingLanguage = false;
+  String? _languageError;
+
+  Future<void> _loadLanguage() async {
+    try {
+      final language = await widget.store.getAppLanguage();
+      await widget.service.setAppLanguage(language.code);
+      if (!mounted) return;
+      setState(() {
+        _language = language;
+        _languageError = null;
+      });
+      widget.onLanguageChanged?.call(language);
+    } catch (_) {
+      if (mounted) setState(() => _languageError = 'languageReadFailed');
+    }
+  }
+
+  Future<void> _chooseLanguage() async {
+    final selected = await showModalBottomSheet<AppLanguage>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(l10n(context).language),
+              ),
+              for (final language in AppLanguage.values)
+                Semantics(
+                  checked: language == _language,
+                  inMutuallyExclusiveGroup: true,
+                  child: ListTile(
+                    key: Key('chooseLanguage-${language.code}'),
+                    title: Text(language.nativeName),
+                    selected: language == _language,
+                    trailing: language == _language
+                        ? const Icon(Icons.check)
+                        : null,
+                    onTap: () => Navigator.pop(context, language),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null || selected == _language) return;
+    final previous = _language!;
+    setState(() {
+      _savingLanguage = true;
+      _languageError = null;
+    });
+    try {
+      // Native notifications and Flutter UI must agree. Roll back native
+      // preferences if the authoritative SQLite write fails.
+      await widget.service.setAppLanguage(selected.code);
+      await widget.store.setAppLanguage(selected);
+      if (!mounted) return;
+      setState(() => _language = selected);
+      widget.onLanguageChanged?.call(selected);
+    } catch (_) {
+      try {
+        await widget.service.setAppLanguage(previous.code);
+      } catch (_) {
+        // Startup will resynchronize from SQLite on the next launch.
+      }
+      if (mounted) setState(() => _languageError = 'languageSaveFailed');
+    } finally {
+      if (mounted) setState(() => _savingLanguage = false);
+    }
   }
 
   ThemeMode? _themeMode;
@@ -47,7 +129,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       });
       widget.onThemeChanged?.call(mode);
     } catch (_) {
-      if (mounted) setState(() => _themeError = '无法读取主题设置，请重试。');
+      if (mounted) setState(() => _themeError = 'themeReadFailed');
     }
   }
 
@@ -60,7 +142,10 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(padding: EdgeInsets.all(16), child: Text('主题')),
+              Padding(
+                padding: EdgeInsets.all(16),
+                child: Text(l10n(context).theme),
+              ),
               for (final mode in ThemeMode.values)
                 ListTile(
                   key: Key('chooseTheme-${mode.name}'),
@@ -85,16 +170,16 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       setState(() => _themeMode = selected);
       widget.onThemeChanged?.call(selected);
     } catch (_) {
-      if (mounted) setState(() => _themeError = '无法保存主题，请重试。');
+      if (mounted) setState(() => _themeError = 'themeSaveFailed');
     } finally {
       if (mounted) setState(() => _savingTheme = false);
     }
   }
 
-  static String _themeLabel(ThemeMode mode) => switch (mode) {
-    ThemeMode.system => '跟随系统',
-    ThemeMode.light => '浅色模式',
-    ThemeMode.dark => '深色模式',
+  String _themeLabel(ThemeMode mode) => switch (mode) {
+    ThemeMode.system => l10n(context).systemTheme,
+    ThemeMode.light => l10n(context).lightTheme,
+    ThemeMode.dark => l10n(context).darkTheme,
   };
 
   Future<void> _load() async {
@@ -112,7 +197,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _error = '无法读取录音格式设置，请重试。');
+        setState(() => _error = 'formatReadFailed');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -137,25 +222,57 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_savingTheme,
+      canPop: !_savingTheme && !_savingLanguage,
       child: Scaffold(
-        appBar: AppBar(title: const Text('设置')),
+        appBar: AppBar(title: Text(l10n(context).settings)),
         body: SafeArea(
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? Center(child: CircularProgressIndicator())
               : ListView(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   children: [
+                    Semantics(
+                      value: _language?.nativeName,
+                      child: ListTile(
+                        key: const Key('appLanguage'),
+                        title: Text(l10n(context).language),
+                        subtitle: Text(
+                          _language?.nativeName ?? l10n(context).reading,
+                        ),
+                        trailing: _savingLanguage
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(),
+                              )
+                            : const Icon(Icons.chevron_right_rounded),
+                        onTap:
+                            _language == null || _savingLanguage || _savingTheme
+                            ? null
+                            : _chooseLanguage,
+                      ),
+                    ),
+                    if (_languageError != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(localizedMessage(context, _languageError!)),
+                      ),
+                      if (_language == null)
+                        TextButton(
+                          onPressed: _loadLanguage,
+                          child: Text(l10n(context).retryLanguage),
+                        ),
+                    ],
                     Semantics(
                       value: _themeMode == null
                           ? null
                           : _themeLabel(_themeMode!),
                       child: ListTile(
                         key: const Key('themeMode'),
-                        title: const Text('主题'),
+                        title: Text(l10n(context).theme),
                         subtitle: Text(
                           _themeMode == null
-                              ? '正在读取…'
+                              ? l10n(context).reading
                               : _themeLabel(_themeMode!),
                         ),
                         trailing: _savingTheme
@@ -165,7 +282,10 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                                 child: CircularProgressIndicator(),
                               )
                             : const Icon(Icons.chevron_right_rounded),
-                        onTap: _themeMode == null || _savingTheme
+                        onTap:
+                            _themeMode == null ||
+                                _savingTheme ||
+                                _savingLanguage
                             ? null
                             : _chooseTheme,
                       ),
@@ -173,34 +293,37 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                     if (_themeError != null) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(_themeError!),
+                        child: Text(localizedMessage(context, _themeError!)),
                       ),
                       if (_themeMode == null)
                         TextButton(
                           onPressed: _loadTheme,
-                          child: const Text('重试读取主题'),
+                          child: Text(l10n(context).retryTheme),
                         ),
                     ],
                     if (_error != null) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(_error!, semanticsLabel: _error),
+                        child: Text(localizedMessage(context, _error!)),
                       ),
-                      TextButton(onPressed: _load, child: const Text('重试')),
+                      TextButton(
+                        onPressed: _load,
+                        child: Text(l10n(context).retry),
+                      ),
                     ] else ...[
                       Semantics(
                         value: _format!.label,
                         child: ListTile(
                           key: const Key('defaultRecordingFormat'),
-                          title: const Text('默认录音格式'),
+                          title: Text(l10n(context).defaultFormat),
                           subtitle: Text(_format!.label),
                           trailing: const Icon(Icons.chevron_right_rounded),
                           onTap: _chooseFormat,
                         ),
                       ),
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Text('用于下一次录音，已有录音保持原格式'),
+                        child: Text(l10n(context).formatDescription),
                       ),
                     ],
                   ],
@@ -246,7 +369,7 @@ class _FormatChooserState extends State<_FormatChooser> {
       if (mounted) {
         setState(() {
           _saving = false;
-          _error = '无法保存录音格式，请重试。';
+          _error = 'formatSaveFailed';
         });
       }
       return;
@@ -265,7 +388,7 @@ class _FormatChooserState extends State<_FormatChooser> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const ListTile(title: Text('默认录音格式')),
+              ListTile(title: Text(l10n(context).defaultFormat)),
               for (final format in RecordingFormat.values)
                 Semantics(
                   checked: widget.current == format,
@@ -280,23 +403,23 @@ class _FormatChooserState extends State<_FormatChooser> {
                     title: Text(format.label),
                     subtitle: widget.available.contains(format)
                         ? null
-                        : Text('${format.label} 暂不可用'),
+                        : Text(l10n(context).formatUnavailable(format.label)),
                     enabled: !_saving && widget.available.contains(format),
                     onTap: () => _select(format),
                   ),
                 ),
               if (_saving) ...[
                 const CircularProgressIndicator(),
-                const Text('正在保存'),
+                Text(l10n(context).saving),
               ],
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text(_error!, semanticsLabel: _error),
+                  child: Text(localizedMessage(context, _error!)),
                 ),
               TextButton(
                 onPressed: _saving ? null : () => Navigator.pop(context),
-                child: const Text('取消'),
+                child: Text(l10n(context).cancel),
               ),
             ],
           ),

@@ -6,6 +6,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
 import 'package:ya_recorder/settings/recording_settings_page.dart';
+import 'package:ya_recorder/settings/app_language.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
 
 void main() {
@@ -59,6 +60,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(store.themeMode, ThemeMode.light);
   });
+
+  testWidgets(
+    'language writes persist; native and storage failures retain the old language',
+    (tester) async {
+      await open(tester);
+      Future<void> chooseEnglish() async {
+        await tester.tap(find.byKey(const Key('appLanguage')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('chooseLanguage-en')));
+        await tester.pumpAndSettle();
+      }
+
+      store.failWrite = true;
+      await chooseEnglish();
+      expect(store.language, AppLanguage.simplifiedChinese);
+      expect(service.language, 'zh');
+      expect(find.text('无法保存语言，请重试。'), findsOneWidget);
+      store.failWrite = false;
+      service.failLanguage = true;
+      await chooseEnglish();
+      expect(store.language, AppLanguage.simplifiedChinese);
+      service.failLanguage = false;
+      await chooseEnglish();
+      expect(store.language, AppLanguage.english);
+      expect(service.language, 'en');
+      expect(find.text('English'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await open(tester);
+      expect(find.text('English'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'language read failure retries and pending save blocks repeat choices and back',
+    (tester) async {
+      store.failLanguageRead = true;
+      await open(tester);
+      expect(find.text('无法读取语言设置，请重试。'), findsOneWidget);
+      store.failLanguageRead = false;
+      await tester.tap(find.text('重试读取语言'));
+      await tester.pumpAndSettle();
+      final gate = Completer<void>();
+      store.writeGate = gate.future;
+      await tester.tap(find.byKey(const Key('appLanguage')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('chooseLanguage-en')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      final row = tester.widget<ListTile>(find.byKey(const Key('appLanguage')));
+      expect(row.onTap, isNull);
+      expect(
+        tester.widget<PopScope>(find.byType(PopScope).first).canPop,
+        isFalse,
+      );
+      expect(store.language, AppLanguage.simplifiedChinese);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.language, AppLanguage.english);
+    },
+  );
 
   testWidgets(
     'choosing MP3 persists immediately; reopening reads the preference',
@@ -262,6 +323,21 @@ void main() {
 class _Store extends RecordingStore {
   _Store() : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
   ThemeMode themeMode = ThemeMode.system;
+  AppLanguage language = AppLanguage.simplifiedChinese;
+  bool failLanguageRead = false;
+  @override
+  Future<AppLanguage> getAppLanguage() async {
+    if (failLanguageRead) throw StateError('read failed');
+    return language;
+  }
+
+  @override
+  Future<void> setAppLanguage(AppLanguage value) async {
+    if (writeGate != null) await writeGate;
+    if (failWrite) throw StateError('write failed');
+    language = value;
+  }
+
   @override
   Future<ThemeMode> getThemeMode() async => themeMode;
   @override
@@ -292,6 +368,14 @@ class _Store extends RecordingStore {
 }
 
 class _Service extends RecordingService {
+  String language = 'zh';
+  bool failLanguage = false;
+  @override
+  Future<void> setAppLanguage(String code) async {
+    if (failLanguage) throw StateError('native synchronization failed');
+    language = code;
+  }
+
   List<RecordingFormat> available = RecordingFormat.values;
   bool failRead = false;
   @override

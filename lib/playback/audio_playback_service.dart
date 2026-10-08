@@ -432,7 +432,7 @@ class AudioPlaybackService {
           if (_isCurrent(generation)) _setFailed(_status.recordingId, error);
           return;
         }
-        errorMessage = '无法调整播放倍速，请重试。';
+        errorMessage = 'playbackSpeedFailed';
       }
       if (!_isCurrent(generation)) return;
       _setStatus(
@@ -530,7 +530,7 @@ class AudioPlaybackService {
         recordingId: recordingId,
         position: _status.position,
         speed: _status.speed,
-        errorMessage: '无法播放该录音。',
+        errorMessage: 'playbackLoadFailed',
       ),
     );
   }

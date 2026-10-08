@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/recording/recording_format.dart';
+import 'package:ya_recorder/settings/app_language.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
 
@@ -28,6 +29,63 @@ void main() {
   });
 
   Future<Database> database() => databaseFactoryFfi.openDatabase(databasePath);
+
+  test(
+    'language persists and concurrent writes preserve theme and format',
+    () async {
+      expect(await store.getAppLanguage(), AppLanguage.simplifiedChinese);
+      await store.setDefaultRecordingFormat(RecordingFormat.mp3);
+      await Future.wait([
+        store.setThemeMode(ThemeMode.dark),
+        store.setAppLanguage(AppLanguage.english),
+      ]);
+      await store.close();
+      expect(await store.getAppLanguage(), AppLanguage.english);
+      expect(await store.getThemeMode(), ThemeMode.dark);
+      expect(await store.getDefaultRecordingFormat(), RecordingFormat.mp3);
+      await store.setThemeMode(ThemeMode.light);
+      expect(await store.getAppLanguage(), AppLanguage.english);
+      await store.setAppLanguage(AppLanguage.simplifiedChinese);
+      expect(await store.getThemeMode(), ThemeMode.light);
+    },
+  );
+
+  test(
+    'v5 upgrade keeps theme, format, folder data; failed language update rolls back',
+    () async {
+      await store.setThemeMode(ThemeMode.dark);
+      await store.setDefaultRecordingFormat(RecordingFormat.mp3);
+      final folder = await store.createFolder(
+        id: 'language-upgrade',
+        name: 'Preserved',
+      );
+      var db = await database();
+      await db.execute('ALTER TABLE app_preferences DROP COLUMN language');
+      await db.setVersion(5);
+      await store.close();
+      expect(await store.getAppLanguage(), AppLanguage.simplifiedChinese);
+      expect(await store.getThemeMode(), ThemeMode.dark);
+      expect(await store.getDefaultRecordingFormat(), RecordingFormat.mp3);
+      expect(
+        (await store.listFolders()).single.toDatabaseMap(),
+        folder.toDatabaseMap(),
+      );
+      db = await database();
+      await db.execute(
+        "CREATE TRIGGER fail_language BEFORE UPDATE OF language ON app_preferences BEGIN SELECT RAISE(ABORT, 'write failed'); END",
+      );
+      await expectLater(
+        store.setAppLanguage(AppLanguage.english),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await store.getAppLanguage(), AppLanguage.simplifiedChinese);
+      expect(await store.getThemeMode(), ThemeMode.dark);
+      await db.execute('DROP TRIGGER fail_language');
+      await store.setAppLanguage(AppLanguage.english);
+      await store.close();
+      expect(await store.getAppLanguage(), AppLanguage.english);
+    },
+  );
 
   test(
     'theme defaults to system and persists independently of format',
@@ -159,7 +217,7 @@ void main() {
           [1, 2, 3],
         );
       }
-      expect(await (await database()).getVersion(), 5);
+      expect(await (await database()).getVersion(), 6);
     },
   );
 

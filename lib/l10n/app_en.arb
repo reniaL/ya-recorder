@@ -1,0 +1,305 @@
+{
+  "@@locale": "en",
+  "appTitle": "Yaya Recorder",
+  "settings": "Settings",
+  "theme": "Theme",
+  "systemTheme": "System default",
+  "lightTheme": "Light",
+  "darkTheme": "Dark",
+  "reading": "Loading…",
+  "retryTheme": "Retry loading theme",
+  "defaultFormat": "Default recording format",
+  "formatDescription": "Applies to new recordings. Existing recordings keep their format.",
+  "saving": "Saving…",
+  "cancel": "Cancel",
+  "retry": "Retry",
+  "selectScope": "Choose a recording folder",
+  "allRecordings": "All recordings",
+  "moveRecordingTo": "Move recording to",
+  "deleteRecordingTitle": "Move to Recently Deleted?",
+  "deleteRecordingDescription": "Deleted recordings stay in Recently Deleted and can be restored before they expire.",
+  "moveToDeleted": "Move to Recently Deleted",
+  "discardTitle": "Discard this recording?",
+  "discardDescription": "This unsaved recording will be deleted.",
+  "resumeRecording": "Resume recording",
+  "discard": "Discard",
+  "searchAll": "Search all recordings",
+  "exitSelection": "Exit selection mode",
+  "selectRecordings": "Select recordings",
+  "closeSearch": "Close search",
+  "searchRecordings": "Search recordings",
+  "more": "More",
+  "manageFolders": "Manage folders",
+  "recentlyDeleted": "Recently Deleted",
+  "openSystemSettings": "Open system settings",
+  "deselectAll": "Deselect all",
+  "selectAll": "Select all",
+  "move": "Move",
+  "delete": "Delete",
+  "startRecording": "Start recording",
+  "requestAgain": "Try again",
+  "reload": "Reload",
+  "noRecordings": "No recordings yet",
+  "noRecordingsDescription": "Tap “Start recording” to make your first recording.",
+  "noMatches": "No matching recordings",
+  "noMatchesDescription": "Try a different search term.",
+  "pausePlayback": "Pause playback",
+  "playRecording": "Play recording",
+  "recordingActions": "Recording options",
+  "rename": "Rename",
+  "moveToFolder": "Move to folder",
+  "share": "Share",
+  "newRecording": "New recording",
+  "pause": "Pause",
+  "stopAndSave": "Stop and save",
+  "discardRecording": "Discard recording",
+  "recordingIdle": "Ready to record",
+  "recordingPreparing": "Preparing to record…",
+  "recordingActive": "Recording",
+  "recordingPaused": "Recording paused",
+  "recordingStopping": "Finishing recording…",
+  "recordingDiscarding": "Discarding recording…",
+  "recordingFailed": "Please start a new recording",
+  "dismissMessage": "Dismiss message",
+  "renameRecording": "Rename recording",
+  "recordingTitle": "Recording title",
+  "save": "Save",
+  "moveUp": "Move up",
+  "moveDown": "Move down",
+  "folderActions": "Folder options",
+  "deleteFolder": "Delete folder",
+  "sortFolders": "Reorder folders",
+  "cancelSorting": "Cancel reordering",
+  "done": "Done",
+  "sort": "Reorder",
+  "sortingDescription": "Drag the handles on the right to reorder folders.",
+  "noFolders": "No folders yet.",
+  "createFolder": "Create folder",
+  "folderName": "Folder name",
+  "create": "Create",
+  "renameFolder": "Rename folder",
+  "deleteFolderTitle": "Delete this folder?",
+  "handleFolderRecordings": "Choose where to move the recordings",
+  "moveToAll": "Move to All recordings",
+  "close": "Close",
+  "viewFullTitle": "View full recording title",
+  "loadingPlayback": "Loading…",
+  "playbackFailed": "Playback failed",
+  "playing": "Playing",
+  "playbackPaused": "Paused",
+  "notPlaying": "Not playing",
+  "retryPlayback": "Retry playback",
+  "skipBackward": "Skip back 5 seconds",
+  "skipForward": "Skip forward 5 seconds",
+  "playbackSpeed": "Playback speed",
+  "playbackProgress": "Playback progress",
+  "permanentDeleteTitle": "Permanently delete this recording?",
+  "permanentDelete": "Delete permanently",
+  "deletedDescription": "Deleted recordings are kept for 30 days, then automatically removed. Restored recordings return to their original folder, or to All recordings if that folder no longer exists.",
+  "loadingDeleted": "Loading Recently Deleted…",
+  "deletedEmpty": "No recently deleted recordings",
+  "restore": "Restore",
+  "themeReadFailed": "Couldn't load your theme setting. Please try again.",
+  "themeSaveFailed": "Couldn't save your theme setting. Please try again.",
+  "formatReadFailed": "Couldn't load your recording format setting. Please try again.",
+  "formatSaveFailed": "Couldn't save your recording format setting. Please try again.",
+  "recoveryIndexFailed": "Some recordings couldn't be added to your library. Their audio files have been kept. You can try recovering them again later.",
+  "recoveryUnresolved": "Some interrupted recordings couldn't be recovered. Their remaining audio files have been kept.",
+  "recoveryCheckFailed": "Couldn't check for recordings to recover. Please reopen the app to try again.",
+  "expiredCleanupPartial": "Some expired recordings couldn't be removed. Please try again in Recently Deleted.",
+  "expiredCleanupFailed": "Couldn't remove expired recordings. Please try again in Recently Deleted.",
+  "openDeletedFailed": "Couldn't open Recently Deleted.",
+  "openSettingsFailed": "Couldn't open Settings. Please try again.",
+  "statusReadFailed": "Couldn't check the recording status.",
+  "libraryReadFailed": "Couldn't load your recordings.",
+  "foldersReadFailed": "Couldn't load your folders.",
+  "shareFailed": "Couldn't share this recording.",
+  "renameRecordingFailed": "Couldn't rename this recording.",
+  "createFolderFirst": "Create a folder before moving recordings.",
+  "moveRecordingFailed": "Couldn't move this recording.",
+  "deleteRecordingFailed": "Couldn't delete this recording.",
+  "batchDeleteFailed": "Couldn't delete the selected recordings. Please try again.",
+  "batchMoveFailed": "Couldn't move the selected recordings. Please try again.",
+  "foldersRefreshFailed": "Couldn't refresh your folders.",
+  "microphoneRequired": "Microphone access is required to record.",
+  "defaultFormatReadFailed": "Couldn't load the default recording format. Please try again in Settings.",
+  "mp3Unavailable": "MP3 recording is unavailable. Choose M4A in Settings and try again.",
+  "startFailed": "Couldn't start recording.",
+  "startRetryFailed": "Couldn't start recording. Please try again.",
+  "systemSettingsFailed": "Couldn't open system settings.",
+  "recordingUpdateFailed": "Couldn't update the recording state.",
+  "recordingStopFailed": "Couldn't stop recording.",
+  "discardFailed": "Couldn't discard this recording.",
+  "recordingDiscarded": "Recording discarded",
+  "serviceConnectionFailed": "Couldn't connect to the recording service.",
+  "savedCleanupPending": "Recording saved. Cleanup will finish the next time you open the app.",
+  "interruptedSaved": "Recording was interrupted. The captured audio has been saved.",
+  "recordingSaved": "Recording saved",
+  "saveIndexFailed": "Couldn't add the recording to your library. Its audio file has been kept. You can try recovering it again later.",
+  "folderOrderSaveFailed": "Couldn't save the folder order. Please try again.",
+  "createFolderFailed": "Couldn't create the folder. Enter a name that isn't empty or already in use.",
+  "renameFolderFailed": "Couldn't rename the folder. Enter a name that isn't empty or already in use.",
+  "deleteFolderFailed": "Couldn't delete this folder.",
+  "playbackSpeedFailed": "Couldn't change the playback speed. Please try again.",
+  "playbackLoadFailed": "Couldn't play this recording.",
+  "expiredCleanupRetry": "Some expired recordings couldn't be removed. Please try again.",
+  "deletedReadFailed": "Couldn't load Recently Deleted. Please try again.",
+  "recordingPermanentlyDeleted": "Recording permanently deleted",
+  "recordingRestored": "Recording restored",
+  "permanentDeleteFailed": "Couldn't delete the recording permanently. It is still in Recently Deleted. Please try again.",
+  "restoreFailed": "Couldn't restore the recording. Please try again.",
+  "deleteSelectedTitle": "{count, plural, =1{Move 1 recording to Recently Deleted?} other{Move {count} recordings to Recently Deleted?}}",
+  "@deleteSelectedTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "moveSelectedTitle": "{count, plural, =1{Move 1 recording to} other{Move {count} recordings to}}",
+  "@moveSelectedTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectedCount": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@selectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFolder": "Search recordings in “{name}”",
+  "@searchFolder": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "switchScope": "{name}, change recording folder",
+  "@switchScope": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "selectRecording": "Select {title}",
+  "@selectRecording": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "speedValue": "Playback speed: {speed}×",
+  "@speedValue": {
+    "placeholders": {
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "recordingFormat": "Recording format: {format}",
+  "@recordingFormat": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "moveFolderPosition": "Move {name}",
+  "@moveFolderPosition": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reorderFolder": "Reorder {name}",
+  "@reorderFolder": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "emptyFolderDelete": "“{name}” is empty. Deleting this folder cannot be undone.",
+  "@emptyFolderDelete": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "nonemptyFolderDelete": "“{name}” still contains recordings. Choose where to move them before deleting the folder.",
+  "@nonemptyFolderDelete": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "permanentDeleteDescription": "The audio file for “{title}” will be permanently deleted. This cannot be undone.",
+  "@permanentDeleteDescription": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "deletionInfo": "Deleted on {date}\n{days, plural, =1{1 day remaining} other{{days} days remaining}}",
+  "@deletionInfo": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "titleActions": "Options for {title}",
+  "@titleActions": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "formatUnavailable": "{format} is currently unavailable",
+  "@formatUnavailable": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRecordingTitle": "Recording {date}",
+  "@defaultRecordingTitle": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "language": "Language",
+  "languageReadFailed": "Couldn't load your language setting. Please try again.",
+  "languageSaveFailed": "Couldn't save your language setting. Please try again.",
+  "retryLanguage": "Retry loading language",
+  "genericError": "Something went wrong. Please try again.",
+  "recordingFormatInvalid": "The recording format is invalid.",
+  "recordingStorageUnavailable": "Recording storage is unavailable. Check your available storage and try again.",
+  "recordingInterruptedUnsaved": "Recording was interrupted and couldn't be saved. The remaining audio files have been kept.",
+  "recordingPauseFailed": "Couldn't pause recording. The recording was interrupted.",
+  "recordingResumeFailed": "Couldn't resume recording. The recording was interrupted.",
+  "recordingSessionMissing": "The active recording session was lost. Please check for recordings to recover.",
+  "recordingSaveFailed": "Couldn't save the recording. The remaining audio files have been kept.",
+  "permissionRequestActive": "A microphone permission request is already in progress.",
+  "shareInvalidRecording": "Only completed recordings with a valid format can be shared.",
+  "recordingBaseName": "Recording"
+}

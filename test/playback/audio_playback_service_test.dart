@@ -451,7 +451,7 @@ void main() {
       expect(service.status.speed, 1.25);
       expect(service.status.state, PlaybackState.playing);
       expect(service.status.position.inMilliseconds, 250);
-      expect(service.status.errorMessage, '无法调整播放倍速，请重试。');
+      expect(service.status.errorMessage, 'playbackSpeedFailed');
       backend.failSpeed = false;
       await service.setSpeed(2);
       expect(service.status.speed, 2);

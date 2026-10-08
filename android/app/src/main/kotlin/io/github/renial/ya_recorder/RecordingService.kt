@@ -46,6 +46,10 @@ class RecordingService : Service() {
                 ACTION_RESUME -> resumeRecording()
                 ACTION_STOP -> stopRecording()
                 ACTION_CANCEL -> cancelRecording()
+                ACTION_LANGUAGE_CHANGED -> {
+                    if (session != null) getSystemService(NotificationManager::class.java)
+                        .notify(NOTIFICATION_ID, createNotification())
+                }
                 ACTION_INDEX_FINISHED -> {
                     if (session?.id == intent.getStringExtra(EXTRA_ID) && state == State.STOPPING) resetToIdle()
                     else if (session == null) stopSelf()
@@ -344,12 +348,13 @@ class RecordingService : Service() {
     }
 
     private fun createNotification(): Notification {
+        val localizedContext = AppLanguagePreferences.localizedContext(this)
         val notificationManager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             notificationManager.createNotificationChannel(
                 NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
-                    getString(R.string.recording_notification_channel_name),
+                    localizedContext.getString(R.string.recording_notification_channel_name),
                     NotificationManager.IMPORTANCE_LOW,
                 ),
             )
@@ -360,7 +365,7 @@ class RecordingService : Service() {
             Notification.Builder(this)
         }
         return notificationBuilder
-            .setContentTitle(getString(R.string.recording_notification_title))
+            .setContentTitle(localizedContext.getString(R.string.recording_notification_title))
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setOngoing(true)
             .build()
@@ -407,6 +412,7 @@ class RecordingService : Service() {
         const val ACTION_RESUME = "io.github.renial.ya_recorder.action.RESUME_RECORDING"
         const val ACTION_STOP = "io.github.renial.ya_recorder.action.STOP_RECORDING"
         const val ACTION_CANCEL = "io.github.renial.ya_recorder.action.CANCEL_RECORDING"
+        const val ACTION_LANGUAGE_CHANGED = "io.github.renial.ya_recorder.action.LANGUAGE_CHANGED"
         const val ACTION_INDEX_FINISHED = "io.github.renial.ya_recorder.action.INDEX_FINISHED"
 
         const val EVENT_STATE = "io.github.renial.ya_recorder.event.RECORDING_STATE"

@@ -1,3 +1,4 @@
+import '../l10n/localization.dart';
 import 'package:flutter/material.dart';
 
 import 'models/recording.dart';
@@ -53,10 +54,10 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
                   r.deletedAt!.add(RecordingStore.retentionPeriod).isAfter(now),
             )
             .toList();
-        _error = failures.isEmpty ? null : '部分过期录音未能清理，请重试。';
+        _error = failures.isEmpty ? null : 'expiredCleanupRetry';
       });
     } catch (_) {
-      if (mounted) setState(() => _error = '无法读取最近删除，请重试。');
+      if (mounted) setState(() => _error = 'deletedReadFailed');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -70,17 +71,19 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: const Text('永久删除录音？'),
-            content: Text('“${recording.title}”的音频文件将被永久删除，无法恢复。'),
+            title: Text(l10n(context).permanentDeleteTitle),
+            content: Text(
+              l10n(context).permanentDeleteDescription(recording.title),
+            ),
             actions: [
               TextButton(
                 autofocus: true,
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
+                child: Text(l10n(context).cancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('永久删除'),
+                child: Text(l10n(context).permanentDelete),
               ),
             ],
           ),
@@ -101,13 +104,25 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
       await _load();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(permanently ? '录音已永久删除' : '录音已恢复')),
+          SnackBar(
+            content: Builder(
+              builder: (context) => Text(
+                localizedMessage(
+                  context,
+                  permanently
+                      ? 'recordingPermanentlyDeleted'
+                      : 'recordingRestored',
+                ),
+              ),
+            ),
+          ),
         );
       }
     } catch (_) {
       if (mounted) {
         setState(
-          () => _error = permanently ? '永久删除失败，录音仍保留在最近删除中，请重试。' : '恢复失败，请重试。',
+          () =>
+              _error = permanently ? 'permanentDeleteFailed' : 'restoreFailed',
         );
       }
     } finally {
@@ -127,79 +142,90 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
         '${deleted.day.toString().padLeft(2, '0')} '
         '${deleted.hour.toString().padLeft(2, '0')}:'
         '${deleted.minute.toString().padLeft(2, '0')}';
-    return '删除于 $date\n剩余 $remaining 天';
+    return l10n(context).deletionInfo(date, remaining);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('最近删除')),
+      appBar: AppBar(title: Text(l10n(context).recentlyDeleted)),
       body: SafeArea(
-        child: Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('删除的录音保留 30 天，过期后自动清理。恢复时放回原文件夹；文件夹已删除时放回全部录音。'),
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  children: [
-                    Text(_error!),
-                    TextButton(
-                      onPressed: _busy ? null : _load,
-                      child: const Text('重试'),
-                    ),
-                  ],
+        child: RefreshIndicator(
+          onRefresh: () async {
+            if (!_busy) await _load();
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(l10n(context).deletedDescription),
                 ),
               ),
-            if (_busy) const LinearProgressIndicator(),
-            Expanded(
-              child: _recordings.isEmpty
-                  ? Center(child: Text(_busy ? '正在读取最近删除…' : '最近删除为空'))
-                  : RefreshIndicator(
-                      onRefresh: () async {
-                        if (!_busy) await _load();
-                      },
-                      child: ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: _recordings.length,
-                        itemBuilder: (context, index) {
-                          final recording = _recordings[index];
-                          return ListTile(
-                            key: Key('deleted-${recording.id}'),
-                            title: Text(
-                              recording.title,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(_deletionInfo(recording)),
-                            isThreeLine: true,
-                            trailing: PopupMenuButton<String>(
-                              enabled: !_busy,
-                              tooltip: '${recording.title}的操作',
-                              onSelected: (action) => _apply(
-                                recording,
-                                permanently: action == 'delete',
-                              ),
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: 'restore',
-                                  child: Text('恢复'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('永久删除'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
+              if (_error != null)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        Text(localizedMessage(context, _error!)),
+                        TextButton(
+                          onPressed: _busy ? null : _load,
+                          child: Text(l10n(context).retry),
+                        ),
+                      ],
                     ),
-            ),
-          ],
+                  ),
+                ),
+              if (_busy)
+                const SliverToBoxAdapter(child: LinearProgressIndicator()),
+              if (_recordings.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Text(
+                      _busy
+                          ? l10n(context).loadingDeleted
+                          : l10n(context).deletedEmpty,
+                    ),
+                  ),
+                )
+              else
+                SliverList.builder(
+                  itemCount: _recordings.length,
+                  itemBuilder: (context, index) {
+                    final recording = _recordings[index];
+                    return ListTile(
+                      key: Key('deleted-${recording.id}'),
+                      title: Text(
+                        recording.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(_deletionInfo(recording)),
+                      isThreeLine: true,
+                      trailing: PopupMenuButton<String>(
+                        enabled: !_busy,
+                        tooltip: l10n(context).titleActions(recording.title),
+                        onSelected: (action) =>
+                            _apply(recording, permanently: action == 'delete'),
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: 'restore',
+                            child: Text(l10n(context).restore),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text(l10n(context).permanentDelete),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );

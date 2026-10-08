@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../recording/recording_format.dart';
+import '../settings/app_language.dart';
 import 'models/recording.dart';
 import 'models/recording_folder.dart';
 
@@ -20,7 +21,7 @@ class RecordingStore {
   }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
        _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
 
-  static const _schemaVersion = 5;
+  static const _schemaVersion = 6;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -46,11 +47,34 @@ class RecordingStore {
 
   Future<void> setThemeMode(ThemeMode mode) async {
     final database = await _openDatabase();
-    await database.insert('app_preferences', {
-      'id': 1,
-      'theme_mode': mode.name,
-    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
+    await _setAppPreference(database, 'theme_mode', mode.name);
   }
+
+  Future<AppLanguage> getAppLanguage() async {
+    final database = await _openDatabase();
+    final rows = await database.query('app_preferences', where: 'id = 1');
+    return AppLanguage.fromCode(rows.isEmpty ? null : rows.single['language']);
+  }
+
+  Future<void> setAppLanguage(AppLanguage language) async {
+    final database = await _openDatabase();
+    await _setAppPreference(database, 'language', language.code);
+  }
+
+  static Future<void> _setAppPreference(
+    sqflite.Database database,
+    String column,
+    String value,
+  ) => database.transaction((transaction) async {
+    await transaction.insert('app_preferences', {
+      'id': 1,
+      'theme_mode': 'system',
+      'language': 'zh',
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.ignore);
+    await transaction.update('app_preferences', {
+      column: value,
+    }, where: 'id = 1');
+  });
 
   Future<RecordingFormat> getDefaultRecordingFormat() async {
     final database = await _openDatabase();
@@ -532,6 +556,11 @@ class RecordingStore {
           if (oldVersion < 5) {
             await _createAppPreferencesSchema(database);
           }
+          if (oldVersion == 5) {
+            await database.execute(
+              "ALTER TABLE app_preferences ADD COLUMN language TEXT NOT NULL DEFAULT 'zh' CHECK(language IN ('zh', 'en'))",
+            );
+          }
         },
       ),
     );
@@ -587,7 +616,8 @@ class RecordingStore {
       database.execute('''
     CREATE TABLE app_preferences (
       id INTEGER PRIMARY KEY CHECK(id = 1),
-      theme_mode TEXT NOT NULL CHECK(theme_mode IN ('system', 'light', 'dark'))
+      theme_mode TEXT NOT NULL CHECK(theme_mode IN ('system', 'light', 'dark')),
+      language TEXT NOT NULL DEFAULT 'zh' CHECK(language IN ('zh', 'en'))
     )
   ''');
 

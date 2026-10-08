@@ -1,0 +1,305 @@
+{
+  "@@locale": "zh",
+  "appTitle": "丫丫录音",
+  "settings": "设置",
+  "theme": "主题",
+  "systemTheme": "跟随系统",
+  "lightTheme": "浅色模式",
+  "darkTheme": "深色模式",
+  "reading": "正在读取…",
+  "retryTheme": "重试读取主题",
+  "defaultFormat": "默认录音格式",
+  "formatDescription": "用于下一次录音，已有录音保持原格式",
+  "saving": "正在保存",
+  "cancel": "取消",
+  "retry": "重试",
+  "selectScope": "选择录音范围",
+  "allRecordings": "全部录音",
+  "moveRecordingTo": "移动录音到",
+  "deleteRecordingTitle": "移入最近删除？",
+  "deleteRecordingDescription": "录音会保留在最近删除中，可在保留期内恢复。",
+  "moveToDeleted": "移入最近删除",
+  "discardTitle": "放弃这次录音？",
+  "discardDescription": "当前未保存的内容将被删除。",
+  "resumeRecording": "继续录音",
+  "discard": "放弃",
+  "searchAll": "搜索全部录音",
+  "exitSelection": "退出多选",
+  "selectRecordings": "多选录音",
+  "closeSearch": "关闭搜索",
+  "searchRecordings": "搜索录音",
+  "more": "更多",
+  "manageFolders": "文件夹管理",
+  "recentlyDeleted": "最近删除",
+  "openSystemSettings": "前往系统设置",
+  "deselectAll": "取消全选",
+  "selectAll": "全选",
+  "move": "移动",
+  "delete": "删除",
+  "startRecording": "开始录音",
+  "requestAgain": "再次请求",
+  "reload": "重新加载",
+  "noRecordings": "还没有录音",
+  "noRecordingsDescription": "点击“开始录音”录下第一段声音。",
+  "noMatches": "没有匹配的录音",
+  "noMatchesDescription": "请尝试其他标题关键词。",
+  "pausePlayback": "暂停播放",
+  "playRecording": "播放录音",
+  "recordingActions": "录音操作",
+  "rename": "重命名",
+  "moveToFolder": "移动到文件夹",
+  "share": "分享",
+  "newRecording": "新的录音",
+  "pause": "暂停",
+  "stopAndSave": "停止并保存",
+  "discardRecording": "放弃本次录音",
+  "recordingIdle": "准备好后即可开始录音",
+  "recordingPreparing": "正在准备录音",
+  "recordingActive": "正在录音",
+  "recordingPaused": "录音已暂停",
+  "recordingStopping": "正在完成录音",
+  "recordingDiscarding": "正在放弃录音",
+  "recordingFailed": "录音服务需要重新开始",
+  "dismissMessage": "关闭提示",
+  "renameRecording": "重命名录音",
+  "recordingTitle": "录音标题",
+  "save": "保存",
+  "moveUp": "上移",
+  "moveDown": "下移",
+  "folderActions": "文件夹操作",
+  "deleteFolder": "删除文件夹",
+  "sortFolders": "文件夹排序",
+  "cancelSorting": "取消排序",
+  "done": "完成",
+  "sort": "排序",
+  "sortingDescription": "拖动右侧手柄调整顺序",
+  "noFolders": "还没有文件夹。",
+  "createFolder": "创建文件夹",
+  "folderName": "文件夹名称",
+  "create": "创建",
+  "renameFolder": "重命名文件夹",
+  "deleteFolderTitle": "删除文件夹？",
+  "handleFolderRecordings": "处理文件夹中的录音",
+  "moveToAll": "移至全部录音",
+  "close": "关闭",
+  "viewFullTitle": "查看完整录音标题",
+  "loadingPlayback": "正在加载",
+  "playbackFailed": "播放失败",
+  "playing": "正在播放",
+  "playbackPaused": "已暂停",
+  "notPlaying": "未播放",
+  "retryPlayback": "重试播放",
+  "skipBackward": "快退 5 秒",
+  "skipForward": "快进 5 秒",
+  "playbackSpeed": "播放倍速",
+  "playbackProgress": "播放进度",
+  "permanentDeleteTitle": "永久删除录音？",
+  "permanentDelete": "永久删除",
+  "deletedDescription": "删除的录音保留 30 天，过期后自动清理。恢复时放回原文件夹；文件夹已删除时放回全部录音。",
+  "loadingDeleted": "正在读取最近删除…",
+  "deletedEmpty": "最近删除为空",
+  "restore": "恢复",
+  "themeReadFailed": "无法读取主题设置，请重试。",
+  "themeSaveFailed": "无法保存主题，请重试。",
+  "formatReadFailed": "无法读取录音格式设置，请重试。",
+  "formatSaveFailed": "无法保存录音格式，请重试。",
+  "recoveryIndexFailed": "部分录音未能写入本地索引，文件已保留，稍后可重试恢复。",
+  "recoveryUnresolved": "部分中断录音暂无法恢复，残留文件已保留。",
+  "recoveryCheckFailed": "无法检查待恢复录音，请重新打开应用重试。",
+  "expiredCleanupPartial": "部分过期录音未能清理，请在最近删除中重试。",
+  "expiredCleanupFailed": "无法清理过期录音，请在最近删除中重试。",
+  "openDeletedFailed": "无法打开最近删除。",
+  "openSettingsFailed": "无法打开设置，请重试。",
+  "statusReadFailed": "无法读取当前录音状态。",
+  "libraryReadFailed": "无法读取本地录音。",
+  "foldersReadFailed": "无法读取文件夹。",
+  "shareFailed": "无法分享该录音。",
+  "renameRecordingFailed": "无法重命名该录音。",
+  "createFolderFirst": "请先创建一个文件夹，再移动录音。",
+  "moveRecordingFailed": "无法移动该录音。",
+  "deleteRecordingFailed": "无法删除该录音。",
+  "batchDeleteFailed": "无法批量删除录音，请重试。",
+  "batchMoveFailed": "无法批量移动录音，请重试。",
+  "foldersRefreshFailed": "无法刷新文件夹。",
+  "microphoneRequired": "需要麦克风权限才能开始录音。",
+  "defaultFormatReadFailed": "无法读取默认录音格式，请在设置中重试。",
+  "mp3Unavailable": "无法开始 MP3 录音，请在设置中选择 M4A 后重试",
+  "startFailed": "无法开始录音。",
+  "startRetryFailed": "无法开始录音，请重试。",
+  "systemSettingsFailed": "无法打开系统设置。",
+  "recordingUpdateFailed": "无法更新录音状态。",
+  "recordingStopFailed": "无法停止录音。",
+  "discardFailed": "无法放弃当前录音。",
+  "recordingDiscarded": "本次录音已放弃",
+  "serviceConnectionFailed": "无法连接录音服务。",
+  "savedCleanupPending": "录音已入库，待下次打开应用清理保存记录。",
+  "interruptedSaved": "录音已中断，已录部分已保存。",
+  "recordingSaved": "录音已保存",
+  "saveIndexFailed": "无法将录音保存到本地索引，文件已保留，稍后可重试恢复。",
+  "folderOrderSaveFailed": "无法保存文件夹顺序，请重试",
+  "createFolderFailed": "无法创建文件夹。名称不能为空且必须唯一。",
+  "renameFolderFailed": "无法重命名文件夹。名称不能为空且必须唯一。",
+  "deleteFolderFailed": "无法删除文件夹。",
+  "playbackSpeedFailed": "无法调整播放倍速，请重试。",
+  "playbackLoadFailed": "无法播放该录音。",
+  "expiredCleanupRetry": "部分过期录音未能清理，请重试。",
+  "deletedReadFailed": "无法读取最近删除，请重试。",
+  "recordingPermanentlyDeleted": "录音已永久删除",
+  "recordingRestored": "录音已恢复",
+  "permanentDeleteFailed": "永久删除失败，录音仍保留在最近删除中，请重试。",
+  "restoreFailed": "恢复失败，请重试。",
+  "deleteSelectedTitle": "将 {count} 条录音移入最近删除？",
+  "@deleteSelectedTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "moveSelectedTitle": "移动 {count} 条录音到",
+  "@moveSelectedTitle": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "selectedCount": "已选 {count} 条",
+  "@selectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "searchFolder": "搜索「{name}」中的录音",
+  "@searchFolder": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "switchScope": "{name}，切换录音范围",
+  "@switchScope": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "selectRecording": "选择 {title}",
+  "@selectRecording": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "speedValue": "播放倍速 {speed}×",
+  "@speedValue": {
+    "placeholders": {
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "recordingFormat": "录音格式：{format}",
+  "@recordingFormat": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "moveFolderPosition": "调整 {name} 的位置",
+  "@moveFolderPosition": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "reorderFolder": "调整 {name} 的顺序",
+  "@reorderFolder": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "emptyFolderDelete": "“{name}”为空文件夹，删除后无法恢复。",
+  "@emptyFolderDelete": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "nonemptyFolderDelete": "“{name}”中仍有录音。删除前请选择这些录音的去向。",
+  "@nonemptyFolderDelete": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "permanentDeleteDescription": "“{title}”的音频文件将被永久删除，无法恢复。",
+  "@permanentDeleteDescription": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "deletionInfo": "删除于 {date}\n剩余 {days} 天",
+  "@deletionInfo": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "titleActions": "{title}的操作",
+  "@titleActions": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "formatUnavailable": "{format} 暂不可用",
+  "@formatUnavailable": {
+    "placeholders": {
+      "format": {
+        "type": "String"
+      }
+    }
+  },
+  "defaultRecordingTitle": "录音 {date}",
+  "@defaultRecordingTitle": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "language": "语言",
+  "languageReadFailed": "无法读取语言设置，请重试。",
+  "languageSaveFailed": "无法保存语言，请重试。",
+  "retryLanguage": "重试读取语言",
+  "genericError": "操作失败，请重试。",
+  "recordingFormatInvalid": "录音格式无效。",
+  "recordingStorageUnavailable": "无法访问录音存储空间，请检查可用空间后重试。",
+  "recordingInterruptedUnsaved": "录音已中断，暂无法保存，残留文件已保留。",
+  "recordingPauseFailed": "无法暂停录音，录音已中断。",
+  "recordingResumeFailed": "无法继续录音，录音已中断。",
+  "recordingSessionMissing": "当前录音会话丢失，请检查待恢复录音。",
+  "recordingSaveFailed": "无法保存录音，残留文件已保留。",
+  "permissionRequestActive": "正在请求麦克风权限，请先完成授权。",
+  "shareInvalidRecording": "只能分享格式正确的已完成录音。",
+  "recordingBaseName": "录音"
+}

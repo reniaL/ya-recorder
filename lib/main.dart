@@ -1,3 +1,4 @@
+import 'l10n/localization.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import 'recording/recording_service.dart';
 import 'recording/recording_save_coordinator.dart';
 import 'sharing/audio_share_service.dart';
 import 'settings/recording_settings_page.dart';
+import 'settings/app_language.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
@@ -41,12 +43,17 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  AppLanguage _language = AppLanguage.simplifiedChinese;
   ThemeMode _themeMode = ThemeMode.system;
   late final RecordingService _recordingService =
       widget.recordingService ?? RecordingService();
 
   void _setThemeMode(ThemeMode mode) {
     if (mounted) setState(() => _themeMode = mode);
+  }
+
+  void _setLanguage(AppLanguage language) {
+    if (mounted) setState(() => _language = language);
   }
 
   ThemeData _theme(Brightness brightness) {
@@ -79,7 +86,10 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '丫丫录音',
+      onGenerateTitle: (context) => l10n(context).appTitle,
+      locale: _language.locale,
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
       themeMode: _themeMode,
@@ -89,6 +99,7 @@ class _MyAppState extends State<MyApp> {
         playbackService: widget.playbackService,
         audioShareService: widget.audioShareService,
         onThemeChanged: _setThemeMode,
+        onLanguageChanged: _setLanguage,
       ),
     );
   }
@@ -99,6 +110,7 @@ class RecordingHomePage extends StatefulWidget {
     super.key,
     required this.recordingService,
     this.onThemeChanged,
+    this.onLanguageChanged,
     this.recordingStore,
     this.playbackService,
     this.audioShareService,
@@ -106,6 +118,7 @@ class RecordingHomePage extends StatefulWidget {
 
   final RecordingService recordingService;
   final ValueChanged<ThemeMode>? onThemeChanged;
+  final ValueChanged<AppLanguage>? onLanguageChanged;
   final RecordingStore? recordingStore;
   final AudioPlaybackService? playbackService;
   final AudioShareService? audioShareService;
@@ -147,11 +160,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   Timer? _successMessageTimer;
   String? _libraryError;
   String? _playbackError;
-  List<Recording> _recordings = const [];
+  List<Recording> _recordings = [];
   String _searchQuery = '';
   String? _selectedFolderId;
   String? _selectedFolderName;
   Future<RecordingStore>? _openedRecordingStore;
+  bool _languageChangedInSettings = false;
+  AppLocalizations _titleStrings = lookupAppLocalizations(
+    AppLanguage.simplifiedChinese.locale,
+  );
 
   List<Recording> get _visibleRecordings {
     final query = _searchQuery.trim().toLowerCase();
@@ -204,6 +221,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _titleStrings = l10n(context);
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _successMessageTimer?.cancel();
@@ -233,7 +256,27 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
+  Future<void> _loadLanguage() async {
+    if (widget.onLanguageChanged == null) return;
+    try {
+      final language = await (await _getRecordingStore()).getAppLanguage();
+      if (!mounted || _languageChangedInSettings) return;
+      _titleStrings = lookupAppLocalizations(language.locale);
+      widget.onLanguageChanged?.call(language);
+      await widget.recordingService.setAppLanguage(language.code);
+    } catch (_) {
+      // Settings offers a retry if preferences or native synchronization fail.
+    }
+  }
+
+  void _languageChanged(AppLanguage language) {
+    _languageChangedInSettings = true;
+    _titleStrings = lookupAppLocalizations(language.locale);
+    widget.onLanguageChanged?.call(language);
+  }
+
   Future<void> _initializeLibrary() async {
+    await _loadLanguage();
     await _recoverRecordings();
     await _loadRecordings();
     await _cleanupExpiredRecordings();
@@ -249,12 +292,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         if (!await _persistSavedRecording(ready)) indexFailures++;
       }
       if (indexFailures > 0) {
-        _setServiceError('部分录音未能写入本地索引，文件已保留，稍后可重试恢复。');
+        _setServiceError('recoveryIndexFailed');
       } else if (batch.unresolvedCount > 0) {
-        _setServiceError('部分中断录音暂无法恢复，残留文件已保留。');
+        _setServiceError('recoveryUnresolved');
       }
     } catch (_) {
-      _setServiceError('无法检查待恢复录音，请重新打开应用重试。');
+      _setServiceError('recoveryCheckFailed');
     } finally {
       _isRecoveringRecordings = false;
     }
@@ -265,10 +308,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       final failures = await (await _getRecordingStore())
           .purgeExpiredRecordings();
       if (failures.isNotEmpty) {
-        _setServiceError('部分过期录音未能清理，请在最近删除中重试。');
+        _setServiceError('expiredCleanupPartial');
       }
     } catch (_) {
-      _setServiceError('无法清理过期录音，请在最近删除中重试。');
+      _setServiceError('expiredCleanupFailed');
     }
   }
 
@@ -283,7 +326,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       );
       if (mounted) await _loadRecordings();
     } catch (_) {
-      _setLibraryError('无法打开最近删除。');
+      _setLibraryError('openDeletedFailed');
     }
   }
 
@@ -297,11 +340,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             store: store,
             service: widget.recordingService,
             onThemeChanged: widget.onThemeChanged,
+            onLanguageChanged: _languageChanged,
           ),
         ),
       );
     } catch (_) {
-      _setServiceError('无法打开设置，请重试。');
+      _setServiceError('openSettingsFailed');
     }
   }
 
@@ -334,9 +378,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         _status = status;
       });
     } on PlatformException catch (error) {
-      _setServiceError(error.message ?? '无法读取当前录音状态。');
-    } on FormatException catch (error) {
-      _setServiceError(error.message);
+      _setServiceError(
+        nativeMessageCode(error.code, fallback: 'statusReadFailed'),
+      );
+    } on FormatException {
+      _setServiceError('statusReadFailed');
     }
   }
 
@@ -360,7 +406,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       }
       setState(() {
         _isLoadingRecordings = false;
-        _libraryError = '无法读取本地录音。';
+        _libraryError = 'libraryReadFailed';
       });
     }
   }
@@ -377,11 +423,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           child: ListView(
             shrinkWrap: true,
             children: [
-              const ListTile(title: Text('选择录音范围')),
+              ListTile(title: Text(l10n(context).selectScope)),
               ListTile(
                 key: const Key('folderScope-all'),
                 leading: const Icon(Icons.library_music_outlined),
-                title: const Text('全部录音'),
+                title: Text(l10n(context).allRecordings),
                 trailing: _selectedFolderId == null
                     ? const Icon(Icons.check_rounded)
                     : null,
@@ -421,7 +467,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       });
       await _loadRecordings();
     } catch (_) {
-      _setLibraryError('无法读取文件夹。');
+      _setLibraryError('foldersReadFailed');
     }
   }
 
@@ -466,9 +512,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       _serviceError = null;
     });
     try {
-      await _audioShareService.shareRecording(recording);
+      await _audioShareService.shareRecording(
+        recording,
+        fallbackTitle: l10n(context).recordingBaseName,
+      );
     } catch (_) {
-      _setServiceError('无法分享该录音。');
+      _setServiceError('shareFailed');
     } finally {
       if (mounted) {
         setState(() {
@@ -502,7 +551,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       );
       await _loadRecordings();
     } catch (_) {
-      _setServiceError('无法重命名该录音。');
+      _setServiceError('renameRecordingFailed');
     } finally {
       if (mounted) {
         setState(() {
@@ -522,7 +571,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           .where((folder) => folder.id != recording.folderId)
           .toList();
       if (recording.folderId == null && destinations.isEmpty) {
-        _setServiceError('请先创建一个文件夹，再移动录音。');
+        _setServiceError('createFolderFirst');
         return;
       }
 
@@ -532,12 +581,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           child: ListView(
             shrinkWrap: true,
             children: [
-              const ListTile(title: Text('移动录音到')),
+              ListTile(title: Text(l10n(context).moveRecordingTo)),
               if (recording.folderId != null)
                 ListTile(
                   key: Key('moveRecording-${recording.id}-all'),
                   leading: const Icon(Icons.library_music_outlined),
-                  title: const Text('全部录音'),
+                  title: Text(l10n(context).allRecordings),
                   onTap: () => Navigator.pop(context, ''),
                 ),
               for (final folder in destinations)
@@ -566,7 +615,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       );
       await _loadRecordings();
     } catch (_) {
-      _setServiceError('无法移动该录音。');
+      _setServiceError('moveRecordingFailed');
     } finally {
       if (mounted) {
         setState(() {
@@ -580,16 +629,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('移入最近删除？'),
-        content: const Text('录音会保留在最近删除中，可在保留期内恢复。'),
+        title: Text(l10n(context).deleteRecordingTitle),
+        content: Text(l10n(context).deleteRecordingDescription),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+            child: Text(l10n(context).cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('移入最近删除'),
+            child: Text(l10n(context).moveToDeleted),
           ),
         ],
       ),
@@ -613,7 +662,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       );
       await _loadRecordings();
     } catch (_) {
-      _setServiceError('无法删除该录音。');
+      _setServiceError('deleteRecordingFailed');
     } finally {
       if (mounted) {
         setState(() {
@@ -656,16 +705,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
-            title: Text('将 ${ids.length} 条录音移入最近删除？'),
-            content: const Text('录音会保留在最近删除中，可在保留期内恢复。'),
+            title: Text(l10n(context).deleteSelectedTitle(ids.length)),
+            content: Text(l10n(context).deleteRecordingDescription),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
+                child: Text(l10n(context).cancel),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('移入最近删除'),
+                child: Text(l10n(context).moveToDeleted),
               ),
             ],
           ),
@@ -688,7 +737,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             .toList();
         final canMoveToAll = selected.any((r) => r.folderId != null);
         if (!canMoveToAll && destinations.isEmpty) {
-          _setServiceError('请先创建一个文件夹，再移动录音。');
+          _setServiceError('createFolderFirst');
           return;
         }
         final destination = await showModalBottomSheet<String>(
@@ -698,11 +747,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ListTile(title: Text('移动 ${ids.length} 条录音到')),
+                  ListTile(
+                    title: Text(l10n(context).moveSelectedTitle(ids.length)),
+                  ),
                   if (canMoveToAll)
                     ListTile(
                       key: const Key('batchMove-all'),
-                      title: const Text('全部录音'),
+                      title: Text(l10n(context).allRecordings),
                       onTap: () => Navigator.pop(context, ''),
                     ),
                   for (final folder in destinations)
@@ -730,7 +781,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       });
       await _loadRecordings();
     } catch (_) {
-      _setServiceError(delete ? '无法批量删除录音，请重试。' : '无法批量移动录音，请重试。');
+      _setServiceError(delete ? 'batchDeleteFailed' : 'batchMoveFailed');
     } finally {
       if (mounted) {
         setState(() {
@@ -789,7 +840,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       }
       await _loadRecordings();
     } catch (_) {
-      _setLibraryError('无法刷新文件夹。');
+      _setLibraryError('foldersRefreshFailed');
     }
   }
 
@@ -824,7 +875,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       }
       if (!granted) {
         setState(() {
-          _permissionMessage = '需要麦克风权限才能开始录音。';
+          _permissionMessage = 'microphoneRequired';
         });
         return;
       }
@@ -833,7 +884,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       try {
         format = await (await _getRecordingStore()).getDefaultRecordingFormat();
       } catch (_) {
-        _setServiceError('无法读取默认录音格式，请在设置中重试。');
+        _setServiceError('defaultFormatReadFailed');
         return;
       }
       if (!mounted) return;
@@ -854,8 +905,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       }
       _setServiceError(
         error.code == 'recording-format-unavailable'
-            ? '无法开始 MP3 录音，请在设置中选择 M4A 后重试'
-            : error.message ?? '无法开始录音。',
+            ? 'mp3Unavailable'
+            : nativeMessageCode(error.code, fallback: 'startFailed'),
       );
     } catch (_) {
       if (mounted &&
@@ -863,7 +914,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           _status.sessionId == null) {
         setState(() => _status = _idleStatus);
       }
-      _setServiceError('无法开始录音，请重试。');
+      _setServiceError('startRetryFailed');
     } finally {
       if (mounted) {
         setState(() {
@@ -885,7 +936,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     try {
       await widget.recordingService.openAppSettings();
     } on PlatformException catch (error) {
-      _setServiceError(error.message ?? '无法打开系统设置。');
+      _setServiceError(
+        nativeMessageCode(error.code, fallback: 'systemSettingsFailed'),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -911,7 +964,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         await widget.recordingService.resume();
       }
     } on PlatformException catch (error) {
-      _setServiceError(error.message ?? '无法更新录音状态。');
+      _setServiceError(
+        nativeMessageCode(error.code, fallback: 'recordingUpdateFailed'),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -940,7 +995,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     try {
       await widget.recordingService.stop();
     } on PlatformException catch (error) {
-      _setServiceError(error.message ?? '无法停止录音。');
+      _setServiceError(
+        nativeMessageCode(error.code, fallback: 'recordingStopFailed'),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -955,16 +1012,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('放弃这次录音？'),
-          content: const Text('当前未保存的内容将被删除。'),
+          title: Text(l10n(context).discardTitle),
+          content: Text(l10n(context).discardDescription),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('继续录音'),
+              child: Text(l10n(context).resumeRecording),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('放弃'),
+              child: Text(l10n(context).discard),
             ),
           ],
         );
@@ -986,7 +1043,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       if (mounted) {
         setState(() {
           _isCancellingRecording = false;
-          _serviceError = error.message ?? '无法放弃当前录音。';
+          _serviceError = nativeMessageCode(
+            error.code,
+            fallback: 'discardFailed',
+          );
         });
       }
     } finally {
@@ -1015,21 +1075,21 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           }
           if (cancellationCompleted) {
             _isCancellingRecording = false;
-            _updateSuccessMessage('本次录音已放弃');
+            _updateSuccessMessage('recordingDiscarded');
           }
         });
       case RecordingFileReady(:final recording):
         unawaited(_persistSavedRecording(recording));
-      case RecordingFailed(:final message):
+      case RecordingFailed(:final code):
         setState(() {
           _isCancellingRecording = false;
-          _serviceError = message;
+          _serviceError = nativeMessageCode(code);
         });
     }
   }
 
   void _handleEventError(Object error, StackTrace stackTrace) {
-    _setServiceError('无法连接录音服务。');
+    _setServiceError('serviceConnectionFailed');
   }
 
   void _setServiceError(String message) {
@@ -1064,11 +1124,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           _status = _idleStatus;
         }
         if (result.acknowledgementPending) {
-          _serviceError = '录音已入库，待下次打开应用清理保存记录。';
+          _serviceError = 'savedCleanupPending';
         } else if (result.inserted && savedRecording.wasInterrupted) {
-          _serviceError = '录音已中断，已录部分已保存。';
+          _serviceError = 'interruptedSaved';
         } else if (result.inserted) {
-          _updateSuccessMessage('录音已保存');
+          _updateSuccessMessage('recordingSaved');
         }
       });
       await _loadRecordings();
@@ -1078,7 +1138,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         return false;
       }
       setState(() {
-        _serviceError = '无法将录音保存到本地索引，文件已保留，稍后可重试恢复。';
+        _serviceError = 'saveIndexFailed';
       });
       return false;
     } finally {
@@ -1107,13 +1167,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     return store;
   }
 
-  static String _defaultTitle(DateTime createdAt) {
+  String _defaultTitle(DateTime createdAt) {
     final localTime = createdAt.toLocal();
     final month = localTime.month.toString().padLeft(2, '0');
     final day = localTime.day.toString().padLeft(2, '0');
     final hour = localTime.hour.toString().padLeft(2, '0');
     final minute = localTime.minute.toString().padLeft(2, '0');
-    return '录音 ${localTime.year}-$month-$day $hour:$minute';
+    return _titleStrings.defaultRecordingTitle(
+      '${localTime.year}-$month-$day $hour:$minute',
+    );
   }
 
   bool get _canStart =>
@@ -1177,13 +1239,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       color: Theme.of(context).colorScheme.outline,
                     ),
                     hintText: _selectedFolderName == null
-                        ? '搜索全部录音'
-                        : '搜索「$_selectedFolderName」中的录音',
+                        ? l10n(context).searchAll
+                        : l10n(context).searchFolder(_selectedFolderName!),
                     border: InputBorder.none,
                   ),
                 )
               : Semantics(
-                  label: '${_selectedFolderName ?? '全部录音'}，切换录音范围',
+                  label: l10n(context).switchScope(
+                    _selectedFolderName ?? l10n(context).allRecordings,
+                  ),
                   button: true,
                   enabled: !_isSubmitting,
                   onTap: _isSubmitting ? null : _chooseFolderScope,
@@ -1208,7 +1272,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                         children: [
                           Flexible(
                             child: Text(
-                              _selectedFolderName ?? '全部录音',
+                              _selectedFolderName ??
+                                  l10n(context).allRecordings,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1226,13 +1291,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           actions: [
             if (_isSelecting)
               IconButton(
-                tooltip: '退出多选',
+                tooltip: l10n(context).exitSelection,
                 onPressed: _isSubmitting ? null : _exitSelection,
                 icon: const Icon(Icons.close),
               ),
             if (!_isSelecting)
               IconButton(
-                tooltip: '多选录音',
+                tooltip: l10n(context).selectRecordings,
                 onPressed: _isSubmitting || _visibleRecordings.isEmpty
                     ? null
                     : () => setState(() => _isSelecting = true),
@@ -1240,7 +1305,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               ),
             IconButton(
               key: const Key('recordingSearchButton'),
-              tooltip: _isSearching ? '关闭搜索' : '搜索录音',
+              tooltip: _isSearching
+                  ? l10n(context).closeSearch
+                  : l10n(context).searchRecordings,
               onPressed: _isSubmitting
                   ? null
                   : () {
@@ -1259,7 +1326,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             PopupMenuButton<String>(
               enabled: !_isSelecting && !_isSubmitting,
               key: const Key('manageFoldersMenu'),
-              tooltip: '更多',
+              tooltip: l10n(context).more,
               onSelected: (action) {
                 if (action == 'folders') {
                   _openFolderManagement();
@@ -1269,14 +1336,20 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   _openRecordingSettings();
                 }
               },
-              itemBuilder: (context) => const [
+              itemBuilder: (context) => [
                 PopupMenuItem(
                   key: Key('manageFoldersItem'),
                   value: 'folders',
-                  child: Text('文件夹管理'),
+                  child: Text(l10n(context).manageFolders),
                 ),
-                PopupMenuItem(value: 'recentlyDeleted', child: Text('最近删除')),
-                PopupMenuItem(value: 'settings', child: Text('设置')),
+                PopupMenuItem(
+                  value: 'recentlyDeleted',
+                  child: Text(l10n(context).recentlyDeleted),
+                ),
+                PopupMenuItem(
+                  value: 'settings',
+                  child: Text(l10n(context).settings),
+                ),
               ],
             ),
           ],
@@ -1289,45 +1362,52 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   _serviceError != null ||
                   _successMessage != null ||
                   _playbackError != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_permissionMessage != null) ...[
-                        _MessagePanel(
-                          icon: Icons.mic_off_rounded,
-                          message: _permissionMessage!,
-                        ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: OutlinedButton.icon(
-                            onPressed: _isSubmitting ? null : _openAppSettings,
-                            icon: const Icon(Icons.settings_outlined),
-                            label: const Text('前往系统设置'),
-                          ),
-                        ),
-                      ],
-                      if (_serviceError != null)
-                        _MessagePanel(
-                          icon: Icons.error_outline_rounded,
-                          message: _serviceError!,
-                          isError: true,
-                        ),
-                      if (_successMessage != null)
-                        _MessagePanel(
-                          icon: Icons.check_circle_outline_rounded,
-                          message: _successMessage!,
-                          onDismiss: _dismissSuccessMessage,
-                        ),
-                      if (_playbackError != null)
-                        _MessagePanel(
-                          icon: Icons.error_outline_rounded,
-                          message: _playbackError!,
-                          isError: true,
-                        ),
-                    ],
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_permissionMessage != null) ...[
+                            _MessagePanel(
+                              icon: Icons.mic_off_rounded,
+                              message: _permissionMessage!,
+                            ),
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: OutlinedButton.icon(
+                                onPressed: _isSubmitting
+                                    ? null
+                                    : _openAppSettings,
+                                icon: const Icon(Icons.settings_outlined),
+                                label: Text(l10n(context).openSystemSettings),
+                              ),
+                            ),
+                          ],
+                          if (_serviceError != null)
+                            _MessagePanel(
+                              icon: Icons.error_outline_rounded,
+                              message: _serviceError!,
+                              isError: true,
+                            ),
+                          if (_successMessage != null)
+                            _MessagePanel(
+                              icon: Icons.check_circle_outline_rounded,
+                              message: _successMessage!,
+                              onDismiss: _dismissSuccessMessage,
+                            ),
+                          if (_playbackError != null)
+                            _MessagePanel(
+                              icon: Icons.error_outline_rounded,
+                              message: _playbackError!,
+                              isError: true,
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               Expanded(child: _buildRecordingList(context)),
@@ -1343,7 +1423,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                           children: [
                             Expanded(
                               child: Text(
-                                '已选 ${_selectedRecordingIds.length} 条',
+                                l10n(
+                                  context,
+                                ).selectedCount(_selectedRecordingIds.length),
                               ),
                             ),
                             TextButton(
@@ -1368,8 +1450,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                                 _visibleRecordings.isNotEmpty &&
                                         _selectedRecordingIds.length ==
                                             _visibleRecordings.length
-                                    ? '取消全选'
-                                    : '全选',
+                                    ? l10n(context).deselectAll
+                                    : l10n(context).selectAll,
                               ),
                             ),
                           ],
@@ -1384,7 +1466,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                                     ? null
                                     : () => _operateOnSelection(delete: false),
                                 icon: const Icon(Icons.drive_file_move_outline),
-                                label: const Text('移动'),
+                                label: Text(l10n(context).move),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -1396,7 +1478,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                                     ? null
                                     : () => _operateOnSelection(delete: true),
                                 icon: const Icon(Icons.delete_outline),
-                                label: const Text('删除'),
+                                label: Text(l10n(context).delete),
                               ),
                             ),
                           ],
@@ -1431,7 +1513,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               child: FloatingActionButton.extended(
                 onPressed: _isSubmitting ? null : _requestPermissionAndStart,
                 icon: const Icon(Icons.mic_rounded),
-                label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
+                label: Text(
+                  _permissionMessage == null
+                      ? l10n(context).startRecording
+                      : l10n(context).requestAgain,
+                ),
               ),
             ),
           ),
@@ -1442,25 +1528,27 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   Widget _buildRecordingList(BuildContext context) {
     if (_isLoadingRecordings) {
-      return const Center(child: CircularProgressIndicator());
+      return Center(child: CircularProgressIndicator());
     }
 
     if (_libraryError != null) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline_rounded, size: 48),
-              const SizedBox(height: 16),
-              Text(_libraryError!),
-              const SizedBox(height: 12),
-              OutlinedButton(
-                onPressed: _loadRecordings,
-                child: const Text('重新加载'),
-              ),
-            ],
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline_rounded, size: 48),
+                const SizedBox(height: 16),
+                Text(localizedMessage(context, _libraryError!)),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: _loadRecordings,
+                  child: Text(l10n(context).reload),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -1468,21 +1556,26 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
     if (_recordings.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.mic_none_rounded,
-                size: 56,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 16),
-              Text('还没有录音', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              const Text('点击“开始录音”录下第一段声音。'),
-            ],
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.mic_none_rounded,
+                  size: 56,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n(context).noRecordings,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 8),
+                Text(l10n(context).noRecordingsDescription),
+              ],
+            ),
           ),
         ),
       );
@@ -1491,17 +1584,19 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     final visibleRecordings = _visibleRecordings;
     if (visibleRecordings.isEmpty) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.search_off_rounded, size: 56),
-              const SizedBox(height: 16),
-              const Text('没有匹配的录音'),
-              const SizedBox(height: 8),
-              const Text('请尝试其他标题关键词。'),
-            ],
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.search_off_rounded, size: 56),
+                const SizedBox(height: 16),
+                Text(l10n(context).noMatches),
+                const SizedBox(height: 8),
+                Text(l10n(context).noMatchesDescription),
+              ],
+            ),
           ),
         ),
       );
@@ -1534,7 +1629,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             leading: _isSelecting
                 ? Checkbox(
                     value: _selectedRecordingIds.contains(recording.id),
-                    semanticLabel: '选择 ${recording.title}',
+                    semanticLabel: l10n(
+                      context,
+                    ).selectRecording(recording.title),
                     onChanged: _isSubmitting
                         ? null
                         : (_) => _toggleSelection(recording.id),
@@ -1561,10 +1658,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                               ? Icons.pause_circle_outline_rounded
                               : Icons.play_circle_outline_rounded,
                         ),
-                        tooltip: isPlaying ? '暂停播放' : '播放录音',
+                        tooltip: isPlaying
+                            ? l10n(context).pausePlayback
+                            : l10n(context).playRecording,
                       ),
                       PopupMenuButton<String>(
-                        tooltip: '录音操作',
+                        tooltip: l10n(context).recordingActions,
                         onSelected: (action) {
                           if (action == 'rename') {
                             _renameRecording(recording);
@@ -1576,11 +1675,23 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                             _deleteRecording(recording);
                           }
                         },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(value: 'rename', child: Text('重命名')),
-                          PopupMenuItem(value: 'move', child: Text('移动到文件夹')),
-                          PopupMenuItem(value: 'share', child: Text('分享')),
-                          PopupMenuItem(value: 'delete', child: Text('删除')),
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'rename',
+                            child: Text(l10n(context).rename),
+                          ),
+                          PopupMenuItem(
+                            value: 'move',
+                            child: Text(l10n(context).moveToFolder),
+                          ),
+                          PopupMenuItem(
+                            value: 'share',
+                            child: Text(l10n(context).share),
+                          ),
+                          PopupMenuItem(
+                            value: 'delete',
+                            child: Text(l10n(context).delete),
+                          ),
                         ],
                       ),
                     ],
@@ -1645,11 +1756,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                         ? Icons.pause_circle_outline_rounded
                         : Icons.play_circle_outline_rounded,
                   ),
-                  tooltip: isPlaying ? '暂停播放' : '播放录音',
+                  tooltip: isPlaying
+                      ? l10n(context).pausePlayback
+                      : l10n(context).playRecording,
                 ),
               ),
               if (_playbackStatus.speed != 1)
-                Text('播放倍速 ${_playbackStatus.speed}×'),
+                Text(
+                  l10n(context).speedValue(_playbackStatus.speed.toString()),
+                ),
             ],
           ),
         ),
@@ -1662,156 +1777,187 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('丫丫录音'),
+        title: Text(l10n(context).appTitle),
         centerTitle: false,
         backgroundColor: Colors.transparent,
         actions: [
           PopupMenuButton<String>(
             key: const Key('recordingSettingsMenu'),
-            tooltip: '更多',
+            tooltip: l10n(context).more,
             enabled: !_isSubmitting,
             onSelected: (_) => _openRecordingSettings(),
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'settings', child: Text('设置')),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: 'settings',
+                child: Text(l10n(context).settings),
+              ),
             ],
           ),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('新的录音', style: Theme.of(context).textTheme.headlineMedium),
-              const SizedBox(height: 8),
-              Text(
-                _statusLabel,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              if (_status.format != null)
-                Text(
-                  '录音格式：${_status.format!.label}',
-                  key: const Key('sessionRecordingFormat'),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              const Spacer(),
-              Center(
-                child: Column(
-                  children: [
-                    Text(
-                      _formatDuration(_status.elapsed),
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colorScheme.primary,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        l10n(context).newRecording,
+                        style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Icon(
-                      _hasActiveSession
-                          ? Icons.mic_rounded
-                          : Icons.mic_none_rounded,
-                      size: 52,
-                      color: _hasActiveSession
-                          ? const Color(0xffd5543f)
-                          : colorScheme.primary,
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              if (_permissionMessage != null) ...[
-                _MessagePanel(
-                  icon: Icons.mic_off_rounded,
-                  message: _permissionMessage!,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: _isSubmitting ? null : _openAppSettings,
-                    icon: const Icon(Icons.settings_outlined),
-                    label: const Text('前往系统设置'),
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (_serviceError != null) ...[
-                _MessagePanel(
-                  icon: Icons.error_outline_rounded,
-                  message: _serviceError!,
-                  isError: true,
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (_successMessage != null) ...[
-                _MessagePanel(
-                  icon: Icons.check_circle_outline_rounded,
-                  message: _successMessage!,
-                  onDismiss: _dismissSuccessMessage,
-                ),
-                const SizedBox(height: 16),
-              ],
-              if (_canStart)
-                SizedBox(
-                  height: 56,
-                  child: FilledButton.icon(
-                    onPressed: _isSubmitting
-                        ? null
-                        : _requestPermissionAndStart,
-                    icon: const Icon(Icons.mic_rounded),
-                    label: Text(_permissionMessage == null ? '开始录音' : '再次请求'),
-                  ),
-                )
-              else if (_canPause || _canResume || _canStop || _canCancel)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (_canPause || _canResume || _canStop)
-                      Row(
-                        children: [
-                          if (_canPause || _canResume)
-                            Expanded(
-                              child: FilledButton.icon(
+                      const SizedBox(height: 8),
+                      Text(
+                        _statusLabel,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (_status.format != null)
+                        Text(
+                          l10n(context).recordingFormat(_status.format!.label),
+                          key: const Key('sessionRecordingFormat'),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: colorScheme.onSurfaceVariant),
+                        ),
+                      const Spacer(),
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              _formatDuration(_status.elapsed),
+                              style: Theme.of(context).textTheme.displayLarge
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.primary,
+                                  ),
+                            ),
+                            const SizedBox(height: 12),
+                            Icon(
+                              _hasActiveSession
+                                  ? Icons.mic_rounded
+                                  : Icons.mic_none_rounded,
+                              size: 52,
+                              color: _hasActiveSession
+                                  ? const Color(0xffd5543f)
+                                  : colorScheme.primary,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_permissionMessage != null) ...[
+                        _MessagePanel(
+                          icon: Icons.mic_off_rounded,
+                          message: _permissionMessage!,
+                        ),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: _isSubmitting ? null : _openAppSettings,
+                            icon: const Icon(Icons.settings_outlined),
+                            label: Text(l10n(context).openSystemSettings),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_serviceError != null) ...[
+                        _MessagePanel(
+                          icon: Icons.error_outline_rounded,
+                          message: _serviceError!,
+                          isError: true,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_successMessage != null) ...[
+                        _MessagePanel(
+                          icon: Icons.check_circle_outline_rounded,
+                          message: _successMessage!,
+                          onDismiss: _dismissSuccessMessage,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                      if (_canStart)
+                        SizedBox(
+                          height: 56,
+                          child: FilledButton.icon(
+                            onPressed: _isSubmitting
+                                ? null
+                                : _requestPermissionAndStart,
+                            icon: const Icon(Icons.mic_rounded),
+                            label: Text(
+                              _permissionMessage == null
+                                  ? l10n(context).startRecording
+                                  : l10n(context).requestAgain,
+                            ),
+                          ),
+                        )
+                      else if (_canPause ||
+                          _canResume ||
+                          _canStop ||
+                          _canCancel)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_canPause || _canResume || _canStop)
+                              Row(
+                                children: [
+                                  if (_canPause || _canResume)
+                                    Expanded(
+                                      child: FilledButton.icon(
+                                        onPressed: _isSubmitting
+                                            ? null
+                                            : _pauseOrResume,
+                                        icon: Icon(
+                                          _canPause
+                                              ? Icons.pause_rounded
+                                              : Icons.play_arrow_rounded,
+                                        ),
+                                        label: Text(
+                                          _canPause
+                                              ? l10n(context).pause
+                                              : l10n(context).resumeRecording,
+                                        ),
+                                      ),
+                                    ),
+                                  if ((_canPause || _canResume) && _canStop)
+                                    const SizedBox(width: 12),
+                                  if (_canStop)
+                                    Expanded(
+                                      child: FilledButton.icon(
+                                        onPressed: _isSubmitting
+                                            ? null
+                                            : _stopAndSave,
+                                        icon: const Icon(Icons.stop_rounded),
+                                        label: Text(l10n(context).stopAndSave),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            if ((_canPause || _canResume || _canStop) &&
+                                _canCancel)
+                              const SizedBox(height: 12),
+                            if (_canCancel)
+                              OutlinedButton.icon(
                                 onPressed: _isSubmitting
                                     ? null
-                                    : _pauseOrResume,
-                                icon: Icon(
-                                  _canPause
-                                      ? Icons.pause_rounded
-                                      : Icons.play_arrow_rounded,
-                                ),
-                                label: Text(_canPause ? '暂停' : '继续录音'),
+                                    : _confirmCancellation,
+                                icon: const Icon(Icons.delete_outline_rounded),
+                                label: Text(l10n(context).discardRecording),
                               ),
-                            ),
-                          if ((_canPause || _canResume) && _canStop)
-                            const SizedBox(width: 12),
-                          if (_canStop)
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: _isSubmitting ? null : _stopAndSave,
-                                icon: const Icon(Icons.stop_rounded),
-                                label: const Text('停止并保存'),
-                              ),
-                            ),
-                        ],
-                      ),
-                    if ((_canPause || _canResume || _canStop) && _canCancel)
-                      const SizedBox(height: 12),
-                    if (_canCancel)
-                      OutlinedButton.icon(
-                        onPressed: _isSubmitting ? null : _confirmCancellation,
-                        icon: const Icon(Icons.delete_outline_rounded),
-                        label: const Text('放弃本次录音'),
-                      ),
-                  ],
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
-            ],
+              ),
+            ),
           ),
         ),
       ),
@@ -1819,13 +1965,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   }
 
   String get _statusLabel => switch (_status.state) {
-    RecordingLifecycleState.idle => '准备好后即可开始录音',
-    RecordingLifecycleState.preparing => '正在准备录音',
-    RecordingLifecycleState.recording => '正在录音',
-    RecordingLifecycleState.paused => '录音已暂停',
-    RecordingLifecycleState.stopping => '正在完成录音',
-    RecordingLifecycleState.discarding => '正在放弃录音',
-    RecordingLifecycleState.failed => '录音服务需要重新开始',
+    RecordingLifecycleState.idle => l10n(context).recordingIdle,
+    RecordingLifecycleState.preparing => l10n(context).recordingPreparing,
+    RecordingLifecycleState.recording => l10n(context).recordingActive,
+    RecordingLifecycleState.paused => l10n(context).recordingPaused,
+    RecordingLifecycleState.stopping => l10n(context).recordingStopping,
+    RecordingLifecycleState.discarding => l10n(context).recordingDiscarding,
+    RecordingLifecycleState.failed => l10n(context).recordingFailed,
   };
 
   String _formatDuration(Duration duration) {
@@ -1882,11 +2028,14 @@ class _MessagePanel extends StatelessWidget {
             Icon(icon, color: foregroundColor),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(message, style: TextStyle(color: foregroundColor)),
+              child: Text(
+                localizedMessage(context, message),
+                style: TextStyle(color: foregroundColor),
+              ),
             ),
             if (onDismiss != null)
               IconButton(
-                tooltip: '关闭提示',
+                tooltip: l10n(context).dismissMessage,
                 onPressed: onDismiss,
                 icon: const Icon(Icons.close_rounded),
               ),
@@ -1920,23 +2069,23 @@ class _RenameRecordingDialogState extends State<_RenameRecordingDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('重命名录音'),
+      title: Text(l10n(context).renameRecording),
       content: TextField(
         controller: _controller,
         autofocus: true,
         maxLength: 120,
         textInputAction: TextInputAction.done,
         onSubmitted: (value) => Navigator.pop(context, value),
-        decoration: const InputDecoration(labelText: '录音标题'),
+        decoration: InputDecoration(labelText: l10n(context).recordingTitle),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n(context).cancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text),
-          child: const Text('保存'),
+          child: Text(l10n(context).save),
         ),
       ],
     );
@@ -2011,7 +2160,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _errorMessage = '无法保存文件夹顺序，请重试');
+        setState(() => _errorMessage = 'folderOrderSaveFailed');
       }
     } finally {
       if (mounted) setState(() => _savingOrder = false);
@@ -2042,7 +2191,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
         return;
       }
       setState(() {
-        _errorMessage = '无法创建文件夹。名称不能为空且必须唯一。';
+        _errorMessage = 'createFolderFailed';
       });
     }
   }
@@ -2071,7 +2220,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
         return;
       }
       setState(() {
-        _errorMessage = '无法重命名文件夹。名称不能为空且必须唯一。';
+        _errorMessage = 'renameFolderFailed';
       });
     }
   }
@@ -2117,7 +2266,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
         return;
       }
       setState(() {
-        _errorMessage = '无法删除文件夹。';
+        _errorMessage = 'deleteFolderFailed';
       });
     }
   }
@@ -2136,7 +2285,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
               children: [
                 PopupMenuButton<String>(
                   key: Key('folderSortActions-${folder.id}'),
-                  tooltip: '调整 ${folder.name} 的位置',
+                  tooltip: l10n(context).moveFolderPosition(folder.name),
                   enabled: !_savingOrder,
                   onSelected: (action) => _moveFolder(
                     index,
@@ -2146,23 +2295,25 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                     PopupMenuItem(
                       value: 'up',
                       enabled: up,
-                      child: const Text('上移'),
+                      child: Text(l10n(context).moveUp),
                     ),
                     PopupMenuItem(
                       value: 'down',
                       enabled: down,
-                      child: const Text('下移'),
+                      child: Text(l10n(context).moveDown),
                     ),
                   ],
                 ),
                 Semantics(
-                  label: '调整 ${folder.name} 的顺序',
+                  label: l10n(context).reorderFolder(folder.name),
                   customSemanticsActions: {
                     if (up)
-                      const CustomSemanticsAction(label: '上移'): () =>
+                      CustomSemanticsAction(label: l10n(context).moveUp): () =>
                           _moveFolder(index, index - 1),
                     if (down)
-                      const CustomSemanticsAction(label: '下移'): () =>
+                      CustomSemanticsAction(
+                        label: l10n(context).moveDown,
+                      ): () =>
                           _moveFolder(index, index + 1),
                   },
                   child: ReorderableDragStartListener(
@@ -2180,14 +2331,20 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
             )
           : PopupMenuButton<String>(
               key: Key('folderActions-${folder.id}'),
-              tooltip: '文件夹操作',
+              tooltip: l10n(context).folderActions,
               onSelected: (action) {
                 if (action == 'rename') _renameFolder(folder);
                 if (action == 'delete') _deleteFolder(folder);
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'rename', child: Text('重命名')),
-                PopupMenuItem(value: 'delete', child: Text('删除文件夹')),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'rename',
+                  child: Text(l10n(context).rename),
+                ),
+                PopupMenuItem(
+                  value: 'delete',
+                  child: Text(l10n(context).deleteFolder),
+                ),
               ],
             ),
     );
@@ -2207,12 +2364,16 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
           },
           child: Scaffold(
             appBar: AppBar(
-              title: Text(sorting ? '文件夹排序' : '文件夹管理'),
+              title: Text(
+                sorting
+                    ? l10n(context).sortFolders
+                    : l10n(context).manageFolders,
+              ),
               automaticallyImplyLeading: !sorting,
               leading: sorting
                   ? IconButton(
                       key: const Key('cancelFolderSort'),
-                      tooltip: '取消排序',
+                      tooltip: l10n(context).cancelSorting,
                       onPressed: _savingOrder ? null : _cancelSort,
                       icon: const Icon(Icons.close),
                     )
@@ -2222,7 +2383,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                   TextButton(
                     key: const Key('saveFolderSort'),
                     onPressed: _savingOrder ? null : _saveOrder,
-                    child: const Text('完成'),
+                    child: Text(l10n(context).done),
                   )
                 else
                   TextButton(
@@ -2239,27 +2400,27 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                               _errorMessage = null;
                             });
                           },
-                    child: const Text('排序'),
+                    child: Text(l10n(context).sort),
                   ),
               ],
             ),
             body: snapshot.connectionState != ConnectionState.done && !sorting
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator())
                 : snapshot.hasError && !sorting
-                ? const Center(child: Text('无法读取文件夹。'))
+                ? Center(child: Text(l10n(context).foldersReadFailed))
                 : Column(
                     children: [
                       if (sorting)
-                        const Padding(
+                        Padding(
                           padding: EdgeInsets.all(16),
-                          child: Text('拖动右侧手柄调整顺序'),
+                          child: Text(l10n(context).sortingDescription),
                         ),
                       if (_savingOrder) const LinearProgressIndicator(),
                       if (_errorMessage != null)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                           child: Text(
-                            _errorMessage!,
+                            localizedMessage(context, _errorMessage!),
                             style: TextStyle(
                               color: Theme.of(context).colorScheme.error,
                             ),
@@ -2267,7 +2428,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                         ),
                       Expanded(
                         child: folders.isEmpty
-                            ? const Center(child: Text('还没有文件夹。'))
+                            ? Center(child: Text(l10n(context).noFolders))
                             : sorting
                             ? ReorderableListView.builder(
                                 key: const Key('folderSortList'),
@@ -2305,7 +2466,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                     key: const Key('createFolderButton'),
                     onPressed: _createFolder,
                     icon: const Icon(Icons.create_new_folder_outlined),
-                    label: const Text('创建文件夹'),
+                    label: Text(l10n(context).createFolder),
                   ),
           ),
         );
@@ -2333,7 +2494,7 @@ class _CreateFolderDialogState extends State<_CreateFolderDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('创建文件夹'),
+      title: Text(l10n(context).createFolder),
       content: TextField(
         key: const Key('folderNameField'),
         controller: _controller,
@@ -2341,16 +2502,16 @@ class _CreateFolderDialogState extends State<_CreateFolderDialog> {
         maxLength: 120,
         textInputAction: TextInputAction.done,
         onSubmitted: (value) => Navigator.pop(context, value),
-        decoration: const InputDecoration(labelText: '文件夹名称'),
+        decoration: InputDecoration(labelText: l10n(context).folderName),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n(context).cancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text),
-          child: const Text('创建'),
+          child: Text(l10n(context).create),
         ),
       ],
     );
@@ -2380,7 +2541,7 @@ class _RenameFolderDialogState extends State<_RenameFolderDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('重命名文件夹'),
+      title: Text(l10n(context).renameFolder),
       content: TextField(
         key: const Key('renameFolderNameField'),
         controller: _controller,
@@ -2388,16 +2549,16 @@ class _RenameFolderDialogState extends State<_RenameFolderDialog> {
         maxLength: 120,
         textInputAction: TextInputAction.done,
         onSubmitted: (value) => Navigator.pop(context, value),
-        decoration: const InputDecoration(labelText: '文件夹名称'),
+        decoration: InputDecoration(labelText: l10n(context).folderName),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n(context).cancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text),
-          child: const Text('保存'),
+          child: Text(l10n(context).save),
         ),
       ],
     );
@@ -2412,17 +2573,17 @@ class _DeleteEmptyFolderDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('删除文件夹？'),
-      content: Text('“${folder.name}”为空文件夹，删除后无法恢复。'),
+      title: Text(l10n(context).deleteFolderTitle),
+      content: Text(l10n(context).emptyFolderDelete(folder.name)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n(context).cancel),
         ),
         FilledButton(
           onPressed: () =>
               Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
-          child: const Text('删除文件夹'),
+          child: Text(l10n(context).deleteFolder),
         ),
       ],
     );
@@ -2437,24 +2598,24 @@ class _DeleteNonEmptyFolderDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('处理文件夹中的录音'),
-      content: Text('“${folder.name}”中仍有录音。删除前请选择这些录音的去向。'),
+      title: Text(l10n(context).handleFolderRecordings),
+      content: Text(l10n(context).nonemptyFolderDelete(folder.name)),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          child: Text(l10n(context).cancel),
         ),
         OutlinedButton(
           onPressed: () =>
               Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
-          child: const Text('移至全部录音'),
+          child: Text(l10n(context).moveToAll),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(
             context,
             FolderDeletionAction.moveRecordingsToRecentlyDeleted,
           ),
-          child: const Text('移入最近删除'),
+          child: Text(l10n(context).moveToDeleted),
         ),
       ],
     );

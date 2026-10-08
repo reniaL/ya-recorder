@@ -124,7 +124,7 @@ void main() {
           options: OpenDatabaseOptions(singleInstance: false),
         );
         try {
-          expect(await db.getVersion(), 5);
+          expect(await db.getVersion(), 6);
           expect(
             (await db.rawQuery(
               "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'recordings_%'",

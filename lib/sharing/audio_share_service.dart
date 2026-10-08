@@ -66,24 +66,37 @@ class AudioShareService {
 
   final AudioSharePlatform _platform;
 
-  Future<void> shareRecording(Recording recording) {
+  Future<void> shareRecording(
+    Recording recording, {
+    String fallbackTitle = 'Recording',
+  }) {
     if (recording.isDeleted ||
         !recording.format.matchesCompletedPath(recording.filePath)) {
-      throw StateError('只能分享格式正确的已完成录音。');
+      throw StateError(
+        'Only completed recordings with a valid format can be shared.',
+      );
     }
     return _platform.shareAudio(
       filePath: recording.filePath,
-      fileName: _sharedFileName(recording.title, recording.format),
+      fileName: _sharedFileName(
+        recording.title,
+        recording.format,
+        fallbackTitle,
+      ),
       title: recording.title,
       format: recording.format,
     );
   }
 
-  static String _sharedFileName(String title, RecordingFormat format) {
+  static String _sharedFileName(
+    String title,
+    RecordingFormat format,
+    String fallbackTitle,
+  ) {
     final sanitizedTitle = title
         .replaceAll(RegExp(r'[\\/:*?"<>|\x00-\x1F]'), '_')
         .trim();
-    final baseName = sanitizedTitle.isEmpty ? '录音' : sanitizedTitle;
+    final baseName = sanitizedTitle.isEmpty ? fallbackTitle : sanitizedTitle;
     final extension = '.${format.extension}';
     return baseName.toLowerCase().endsWith(extension)
         ? baseName

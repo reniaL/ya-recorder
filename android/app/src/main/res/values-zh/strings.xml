@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">丫丫录音</string>
+    <string name="recording_notification_channel_name">录音</string>
+    <string name="recording_notification_title">正在录音</string>
+</resources>

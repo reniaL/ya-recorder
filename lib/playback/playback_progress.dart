@@ -1,3 +1,4 @@
+import '../l10n/localization.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -115,7 +116,7 @@ class _PlaybackProgressState extends State<PlaybackProgress> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Semantics(
-              label: '播放进度',
+              label: l10n(context).playbackProgress,
               child: Slider(
                 key: widget.sliderKey,
                 value: value,

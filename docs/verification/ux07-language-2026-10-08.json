@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-08",
+  "item": "UX-07",
+  "status": "implemented; device acceptance pending",
+  "languages": [
+    "zh-Hans",
+    "en"
+  ],
+  "default_language": "zh-Hans",
+  "translation_messages_per_language": 180,
+  "sqlite_schema_version": 6,
+  "checks": [
+    {
+      "command": "flutter gen-l10n",
+      "result": "passed"
+    },
+    {
+      "command": "flutter analyze",
+      "result": "passed; no issues"
+    },
+    {
+      "command": "flutter test",
+      "result": "passed",
+      "tests": 195,
+      "log": "build/language-full-tests.log"
+    },
+    {
+      "command": "android/gradlew.bat :app:testDebugUnitTest --console=plain",
+      "result": "passed",
+      "tests": 64,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "log": "build/language-native-tests.log"
+    },
+    {
+      "command": "flutter build apk --debug",
+      "result": "passed",
+      "log": "build/language-apk-build.log"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "apk": {
+    "path": "build/app/outputs/flutter-apk/app-debug.apk",
+    "bytes": 217443399,
+    "sha256": "4fb04a6a99c7cecd1629dddbaf35c64d19cc2d349f43e791a73f5e7b1dcdad96"
+  },
+  "device": {
+    "adb_devices": [],
+    "verification": "not performed; no connected Android device"
+  },
+  "pending_device_checks": [
+    "Selected language in notification and channel name, including while locked",
+    "Language change during real recording and playback",
+    "Preference after process/device restart",
+    "Visual layout and screen reader in both languages"
+  ],
+  "scope_notes": [
+    "Existing user recording titles and folder names remain unchanged",
+    "New default titles use the selected language and remain available to queued saves after UI disposal",
+    "Audio encoding and persistence protocols unchanged; existing regression tests passed",
+    "System permission dialogs and share sheets continue to use the device language",
+    "Standalone MP3 prototype and long-duration stress tests not repeated"
+  ]
+}

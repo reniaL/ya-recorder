@@ -73,6 +73,20 @@ class RecordingPlatformBridge(
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "setAppLanguage" -> {
+                try {
+                    val code = AppLanguagePreferences.requireSupported(
+                        (call.arguments as? Map<*, *>)?.get("language") as? String,
+                    )
+                    AppLanguagePreferences.save(activity, code)
+                    if (RecordingService.currentStatus()["sessionId"] != null) {
+                        activity.startService(RecordingService.commandIntent(activity, RecordingService.ACTION_LANGUAGE_CHANGED))
+                    }
+                    result.success(null)
+                } catch (error: Exception) {
+                    result.error("app-language-failed", error.message, null)
+                }
+            }
             "requestMicrophonePermission" -> requestMicrophonePermission(result)
             "openAppSettings" -> openAppSettings(result)
             "getStatus" -> result.success(RecordingService.currentStatus())

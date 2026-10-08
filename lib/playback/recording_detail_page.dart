@@ -1,3 +1,4 @@
+import '../l10n/localization.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -28,14 +29,14 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('录音标题'),
+        title: Text(l10n(context).recordingTitle),
         content: SingleChildScrollView(
           child: SelectableText(widget.recording.title),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
+            child: Text(l10n(context).close),
           ),
         ],
       ),
@@ -79,7 +80,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
       child: Scaffold(
         appBar: AppBar(
           title: Tooltip(
-            message: '查看完整录音标题',
+            message: l10n(context).viewFullTitle,
             child: InkWell(
               key: const Key('recordingDetailTitleButton'),
               onTap: _showFullTitle,
@@ -126,33 +127,38 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                     const SizedBox(height: 24),
                     Text(
                       loading
-                          ? '正在加载'
+                          ? l10n(context).loadingPlayback
                           : failed
-                          ? '播放失败'
+                          ? l10n(context).playbackFailed
                           : playing
-                          ? '正在播放'
+                          ? l10n(context).playing
                           : active && status.state == PlaybackState.paused
-                          ? '已暂停'
-                          : '未播放',
+                          ? l10n(context).playbackPaused
+                          : l10n(context).notPlaying,
                       key: const Key('recordingDetailState'),
                     ),
                     if (loading) const LinearProgressIndicator(),
                     if (failed) ...[
                       const SizedBox(height: 8),
-                      Text(status.errorMessage ?? '无法播放该录音。'),
+                      Text(
+                        localizedMessage(
+                          context,
+                          status.errorMessage ?? 'playbackLoadFailed',
+                        ),
+                      ),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton.icon(
                           onPressed: () =>
                               widget.playbackService.play(widget.recording),
                           icon: const Icon(Icons.refresh),
-                          label: const Text('重试播放'),
+                          label: Text(l10n(context).retryPlayback),
                         ),
                       ),
                     ],
                     if (!failed && status.errorMessage != null) ...[
                       const SizedBox(height: 8),
-                      Text(status.errorMessage!),
+                      Text(localizedMessage(context, status.errorMessage!)),
                     ],
                     const SizedBox(height: 16),
                     PlaybackProgress(
@@ -169,7 +175,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                           children: [
                             IconButton(
                               key: const Key('recordingDetailSkipBackward'),
-                              tooltip: '快退 5 秒',
+                              tooltip: l10n(context).skipBackward,
                               iconSize: 36,
                               style: IconButton.styleFrom(
                                 minimumSize: const Size(56, 56),
@@ -187,7 +193,9 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                             const SizedBox(width: 24),
                             IconButton.filled(
                               key: const Key('recordingDetailPlayButton'),
-                              tooltip: playing ? '暂停播放' : '播放录音',
+                              tooltip: playing
+                                  ? l10n(context).pausePlayback
+                                  : l10n(context).playRecording,
                               iconSize: 48,
                               style: IconButton.styleFrom(
                                 minimumSize: const Size(64, 64),
@@ -206,7 +214,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                             const SizedBox(width: 24),
                             IconButton(
                               key: const Key('recordingDetailSkipForward'),
-                              tooltip: '快进 5 秒',
+                              tooltip: l10n(context).skipForward,
                               iconSize: 36,
                               style: IconButton.styleFrom(
                                 minimumSize: const Size(56, 56),
@@ -226,7 +234,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                         const SizedBox(height: 16),
                         PopupMenuButton<double>(
                           key: const Key('recordingDetailSpeed'),
-                          tooltip: '播放倍速',
+                          tooltip: l10n(context).playbackSpeed,
                           initialValue: active ? status.speed : 1,
                           enabled:
                               active &&
@@ -246,7 +254,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                           ],
                           child: Semantics(
                             button: true,
-                            label: '播放倍速',
+                            label: l10n(context).playbackSpeed,
                             value: _formatSpeed(active ? status.speed : 1),
                             excludeSemantics: true,
                             child: ConstrainedBox(

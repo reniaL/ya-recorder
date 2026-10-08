@@ -144,7 +144,7 @@ void main() {
     () async {
       final platform = _FakeAudioSharePlatform();
       for (final entry in {
-        '': '录音.mp3',
+        '': 'Recording.mp3',
         '访谈/问题:*?': '访谈_问题___.mp3',
         '已命名.MP3': '已命名.MP3',
         '旧标题.m4a': '旧标题.m4a.mp3',
