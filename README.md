@@ -6,7 +6,7 @@
 
 ## 项目状态
 
-核心录音、播放与管理功能已实现，部分专项仍待 Android 真机回归，详见 [开发进度](docs/development-progress.md)。普通 debug、profile、release 均支持在“更多 → 设置”选择 M4A 或 MP3，初始默认 M4A；偏好即时保存并从下一次录音生效。用户已在真机确认设置及 MP3 录制、播放、分享正常，MP3 无需额外构建开关。系统中断策略、后台/恢复及 16 KB 运行等专项继续跟踪；详见 [正式开放记录](docs/architecture/mp3-availability.md)和 [保存与恢复边界](docs/architecture/recording-save-recovery.md)。
+2026-10-08 用户确认开发进度中全部“进行中”功能项已在真机验证通过，29 项功能现均标为已完成，详见 [开发进度](docs/development-progress.md)和 [真机验收确认](docs/device-feedback.md#功能验收确认2026-10-08)。普通 debug、profile、release 均支持在“更多 → 设置”选择 M4A 或 MP3，初始默认 M4A；偏好即时保存并从下一次录音生效，MP3 无需额外构建开关。现有技术边界及验证证据见 [正式开放记录](docs/architecture/mp3-availability.md)和 [保存与恢复边界](docs/architecture/recording-save-recovery.md)。
 
 ## 首版目标
 

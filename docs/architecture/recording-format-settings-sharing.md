@@ -1,6 +1,6 @@
 # REC-07 第六步：默认格式设置与分享
 
-日期：2026-10-08。设置、偏好持久化、下次会话格式读取、录音页格式显示及 MP3/M4A 分享已接入。用户确认真机基本功能正常并授权正式开放后，普通 debug/profile/release 均可选择并录制 MP3。当前开放状态见 [正式开放记录](mp3-availability.md)；整体专项验收继续跟踪。
+日期：2026-10-08。设置、偏好持久化、下次会话格式读取、录音页格式显示及 MP3/M4A 分享已接入。用户确认真机基本功能正常并授权正式开放后，普通 debug/profile/release 均可选择并录制 MP3。用户随后确认全部“进行中”功能项已在真机验证通过，REC-07 已完成；当前状态见 [正式开放记录](mp3-availability.md)和 [真机验收确认](../device-feedback.md#功能验收确认2026-10-08)。下文第六步验证与待验收清单保留为历史证据，不代表当前功能状态；未新增 16 KB 运行或性能测量。
 
 ## 设置与会话
 
@@ -37,4 +37,4 @@ flutter build apk --release
 - 原生新增 1 项开关一致性测试，正式应用 JVM 测试共 60 项通过。构建及静态对齐证据见 [验证快照](../verification/rec07-settings-2026-10-08.json)。编码核心、原型和媒体恢复算法未改，本次不重复桌面编码/原型测试；应用完整 lint 的既有跨盘模型限制沿用第五步记录，未重跑或修改 lint 配置。
 - 普通与 `-Prec07Mp3=true` 的 debug APK 构建成功，生成的 `BuildConfig.REC07_MP3_ENABLED` 分别为 false/true；两份 APK 的全部 10 个原生库通过 16 KB ELF/APK 静态对齐及 SDK zipalign。产物分别为 `build/rec07-settings/app-debug-m4a.apk`、`build/rec07-settings/app-debug-mp3.apk`，构建成功不代表实际麦克风或 JNI/媒体运行通过。
 - `adb devices -l` 无设备。设置重启保持与旧版本升级、两种格式的极短/1–5 分钟录音、当前会话修改设置、暂停/继续/停止/取消、锁屏/后台、系统分享面板与接收附件、实际恢复及 16 KB 运行仍需验收。一小时压力测试暂缓。
-- 上述检查为第六步当时证据；正式开放后的用户真机反馈与本轮构建证据见 [开放记录](mp3-availability.md)。MGT-03 已完成；REC-07 与 REC-06 的专项工作继续跟踪。
+- 上述检查为第六步当时证据；正式开放后的用户真机反馈与构建证据见 [开放记录](mp3-availability.md)。MGT-03、REC-07 与 REC-06 当前均已按用户功能验收确认标为已完成；现有实现边界见 [保存与恢复记录](recording-save-recovery.md)。
