@@ -16,6 +16,24 @@
 
 已有 MP3 偏好在普通构建中仍显示 MP3；用户可主动选择 M4A，开始 MP3 则准确拒绝。可分享已保存 MP3 的能力不受录音开关限制，因为分享只读取录音自身格式。原型参数、几分钟真实采集及 16 KB 运行验收通过后再调整产品开放策略，不能用组件测试或编译成功代替该关口。
 
+### 真机测试包
+
+看到“MP3 暂不可用”表示当前构建没有开放 MP3 录制。测试时应安装开启开关的 debug 包；普通 `flutter run` / `flutter build apk --debug` 不传该原生开关，重新安装普通包会恢复禁用状态。
+
+已有第六步测试包可在仓库根目录安装（设备没有活动录音时执行，`-r` 保留应用数据）：
+
+```powershell
+& 'D:/data/app/android_sdk/platform-tools/adb.exe' install -r build/rec07-settings/app-debug-mp3.apk
+```
+
+代码更改后需重新生成测试包，在 `android/` 中执行：
+
+```powershell
+.\gradlew.bat :app:assembleDebug -Prec07Mp3=true --console=plain
+```
+
+该命令新产物为 `build/app/outputs/apk/debug/app-debug.apk`（相对仓库根目录），不会自动更新之前归档的 `build/rec07-settings/app-debug-mp3.apk`；安装应使用新产物。2026-10-08 已在 M2102K1AC / Android 13（4096 字节页）覆盖安装归档的启用包，确认设置中 MP3 实际可点击，选择后默认显示 MP3；只验证设置入口，没有开始实际录音，完整设备验收仍待进行。
+
 ## 分享
 
 - 分享接口从 `shareM4a` 改为 `shareAudio`，显式传递该录音的格式。M4A 使用 `.m4a` / `audio/mp4`；MP3 使用 `.mp3` / `audio/mpeg`。分享从不读取默认偏好，不转换文件。
