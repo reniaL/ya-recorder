@@ -34,6 +34,32 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('theme selection persists; failed save keeps old selection', (
+    tester,
+  ) async {
+    await open(tester);
+    expect(find.text('跟随系统'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('themeMode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chooseTheme-dark')));
+    await tester.pumpAndSettle();
+    expect(store.themeMode, ThemeMode.dark);
+    expect(find.text('深色模式'), findsOneWidget);
+    store.failWrite = true;
+    await tester.tap(find.byKey(const Key('themeMode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chooseTheme-light')));
+    await tester.pumpAndSettle();
+    expect(store.themeMode, ThemeMode.dark);
+    expect(find.text('无法保存主题，请重试。'), findsOneWidget);
+    store.failWrite = false;
+    await tester.tap(find.byKey(const Key('themeMode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('chooseTheme-light')));
+    await tester.pumpAndSettle();
+    expect(store.themeMode, ThemeMode.light);
+  });
+
   testWidgets(
     'choosing MP3 persists immediately; reopening reads the preference',
     (tester) async {
@@ -217,6 +243,15 @@ void main() {
         await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
         await tester.pumpAndSettle();
         expect(find.text('MP3'), findsOneWidget);
+        await tester.tap(find.byKey(const Key('themeMode')));
+        await tester.pumpAndSettle();
+        for (final mode in ThemeMode.values) {
+          final row = find.byKey(Key('chooseTheme-${mode.name}'));
+          expect(tester.getSize(row).height, greaterThanOrEqualTo(48));
+        }
+        await tester.tap(find.byKey(const Key('chooseTheme-dark')));
+        await tester.pumpAndSettle();
+        expect(store.themeMode, ThemeMode.dark);
         expect(tester.takeException(), isNull);
         semantics.dispose();
       },
@@ -226,6 +261,15 @@ void main() {
 
 class _Store extends RecordingStore {
   _Store() : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
+  ThemeMode themeMode = ThemeMode.system;
+  @override
+  Future<ThemeMode> getThemeMode() async => themeMode;
+  @override
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (failWrite) throw StateError('write failed');
+    themeMode = mode;
+  }
+
   RecordingFormat format = RecordingFormat.m4a;
   bool failRead = false;
   bool failWrite = false;

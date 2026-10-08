@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path/path.dart' as path;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:ya_recorder/recording/recording_format.dart';
@@ -27,6 +28,55 @@ void main() {
   });
 
   Future<Database> database() => databaseFactoryFfi.openDatabase(databasePath);
+
+  test(
+    'theme defaults to system and persists independently of format',
+    () async {
+      expect(await store.getThemeMode(), ThemeMode.system);
+      await store.setDefaultRecordingFormat(RecordingFormat.mp3);
+      for (final mode in ThemeMode.values) {
+        await store.setThemeMode(mode);
+        await store.close();
+        expect(await store.getThemeMode(), mode);
+        expect(await store.getDefaultRecordingFormat(), RecordingFormat.mp3);
+        await store.setDefaultRecordingFormat(RecordingFormat.m4a);
+        expect(await store.getThemeMode(), mode);
+        await store.setDefaultRecordingFormat(RecordingFormat.mp3);
+      }
+    },
+  );
+
+  test(
+    'v4 upgrade preserves format and folders; failed theme writes retry',
+    () async {
+      await store.setDefaultRecordingFormat(RecordingFormat.mp3);
+      final folder = await store.createFolder(id: 'keep', name: '保留');
+      var db = await database();
+      await db.execute('DROP TABLE app_preferences');
+      await db.setVersion(4);
+      await store.close();
+      expect(await store.getThemeMode(), ThemeMode.system);
+      expect(await store.getDefaultRecordingFormat(), RecordingFormat.mp3);
+      expect(
+        (await store.listFolders()).single.toDatabaseMap(),
+        folder.toDatabaseMap(),
+      );
+      await store.setThemeMode(ThemeMode.dark);
+      db = await database();
+      await db.execute(
+        '''CREATE TRIGGER fail_theme BEFORE INSERT ON app_preferences
+      BEGIN SELECT RAISE(ABORT, 'write failed'); END''',
+      );
+      await expectLater(
+        store.setThemeMode(ThemeMode.light),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await store.getThemeMode(), ThemeMode.dark);
+      await db.execute('DROP TRIGGER fail_theme');
+      await store.setThemeMode(ThemeMode.light);
+      expect(await store.getThemeMode(), ThemeMode.light);
+    },
+  );
 
   test(
     'fresh defaults to M4A; successful changes persist after reopening',
@@ -87,6 +137,7 @@ void main() {
           .toList();
       final db = await database();
       await db.execute('DROP TABLE recording_preferences');
+      await db.execute('DROP TABLE app_preferences');
       await db.setVersion(3);
       await store.close();
 
@@ -108,7 +159,7 @@ void main() {
           [1, 2, 3],
         );
       }
-      expect(await (await database()).getVersion(), 4);
+      expect(await (await database()).getVersion(), 5);
     },
   );
 

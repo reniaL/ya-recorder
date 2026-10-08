@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../recording/recording_format.dart';
@@ -19,7 +20,7 @@ class RecordingStore {
   }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
        _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
 
-  static const _schemaVersion = 4;
+  static const _schemaVersion = 5;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -31,6 +32,24 @@ class RecordingStore {
 
   Future<void> open() async {
     await _openDatabase();
+  }
+
+  Future<ThemeMode> getThemeMode() async {
+    final database = await _openDatabase();
+    final rows = await database.query('app_preferences', where: 'id = 1');
+    final value = rows.isEmpty ? 'system' : rows.single['theme_mode'];
+    return ThemeMode.values.firstWhere(
+      (mode) => mode.name == value,
+      orElse: () => ThemeMode.system,
+    );
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    final database = await _openDatabase();
+    await database.insert('app_preferences', {
+      'id': 1,
+      'theme_mode': mode.name,
+    }, conflictAlgorithm: sqflite.ConflictAlgorithm.replace);
   }
 
   Future<RecordingFormat> getDefaultRecordingFormat() async {
@@ -510,6 +529,9 @@ class RecordingStore {
           if (oldVersion < 4) {
             await _createPreferencesSchema(database);
           }
+          if (oldVersion < 5) {
+            await _createAppPreferencesSchema(database);
+          }
         },
       ),
     );
@@ -527,6 +549,7 @@ class RecordingStore {
 
   static Future<void> _createSchema(sqflite.Database database) async {
     await _createPreferencesSchema(database);
+    await _createAppPreferencesSchema(database);
     await database.execute('''
       CREATE TABLE folders (
         id TEXT PRIMARY KEY NOT NULL,
@@ -559,6 +582,14 @@ class RecordingStore {
       ON recordings(deleted_at DESC)
     ''');
   }
+
+  static Future<void> _createAppPreferencesSchema(sqflite.Database database) =>
+      database.execute('''
+    CREATE TABLE app_preferences (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      theme_mode TEXT NOT NULL CHECK(theme_mode IN ('system', 'light', 'dark'))
+    )
+  ''');
 
   static Future<void> _createPreferencesSchema(sqflite.Database database) =>
       database.execute('''

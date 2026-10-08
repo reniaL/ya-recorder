@@ -9,10 +9,12 @@ class RecordingSettingsPage extends StatefulWidget {
     super.key,
     required this.store,
     required this.service,
+    this.onThemeChanged,
   });
 
   final RecordingStore store;
   final RecordingService service;
+  final ValueChanged<ThemeMode>? onThemeChanged;
 
   @override
   State<RecordingSettingsPage> createState() => _RecordingSettingsPageState();
@@ -28,7 +30,72 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   void initState() {
     super.initState();
     _load();
+    _loadTheme();
   }
+
+  ThemeMode? _themeMode;
+  bool _savingTheme = false;
+  String? _themeError;
+
+  Future<void> _loadTheme() async {
+    try {
+      final mode = await widget.store.getThemeMode();
+      if (!mounted) return;
+      setState(() {
+        _themeMode = mode;
+        _themeError = null;
+      });
+      widget.onThemeChanged?.call(mode);
+    } catch (_) {
+      if (mounted) setState(() => _themeError = '无法读取主题设置，请重试。');
+    }
+  }
+
+  Future<void> _chooseTheme() async {
+    final selected = await showModalBottomSheet<ThemeMode>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(padding: EdgeInsets.all(16), child: Text('主题')),
+              for (final mode in ThemeMode.values)
+                ListTile(
+                  key: Key('chooseTheme-${mode.name}'),
+                  title: Text(_themeLabel(mode)),
+                  selected: mode == _themeMode,
+                  trailing: mode == _themeMode ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.pop(context, mode),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || selected == null || selected == _themeMode) return;
+    setState(() {
+      _savingTheme = true;
+      _themeError = null;
+    });
+    try {
+      await widget.store.setThemeMode(selected);
+      if (!mounted) return;
+      setState(() => _themeMode = selected);
+      widget.onThemeChanged?.call(selected);
+    } catch (_) {
+      if (mounted) setState(() => _themeError = '无法保存主题，请重试。');
+    } finally {
+      if (mounted) setState(() => _savingTheme = false);
+    }
+  }
+
+  static String _themeLabel(ThemeMode mode) => switch (mode) {
+    ThemeMode.system => '跟随系统',
+    ThemeMode.light => '浅色模式',
+    ThemeMode.dark => '深色模式',
+  };
 
   Future<void> _load() async {
     setState(() {
@@ -69,38 +136,76 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
-      body: SafeArea(
-        child: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                children: [
-                  if (_error != null) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(_error!, semanticsLabel: _error),
-                    ),
-                    TextButton(onPressed: _load, child: const Text('重试')),
-                  ] else ...[
+    return PopScope(
+      canPop: !_savingTheme,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('设置')),
+        body: SafeArea(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  children: [
                     Semantics(
-                      value: _format!.label,
+                      value: _themeMode == null
+                          ? null
+                          : _themeLabel(_themeMode!),
                       child: ListTile(
-                        key: const Key('defaultRecordingFormat'),
-                        title: const Text('默认录音格式'),
-                        subtitle: Text(_format!.label),
-                        trailing: const Icon(Icons.chevron_right_rounded),
-                        onTap: _chooseFormat,
+                        key: const Key('themeMode'),
+                        title: const Text('主题'),
+                        subtitle: Text(
+                          _themeMode == null
+                              ? '正在读取…'
+                              : _themeLabel(_themeMode!),
+                        ),
+                        trailing: _savingTheme
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(),
+                              )
+                            : const Icon(Icons.chevron_right_rounded),
+                        onTap: _themeMode == null || _savingTheme
+                            ? null
+                            : _chooseTheme,
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('用于下一次录音，已有录音保持原格式'),
-                    ),
+                    if (_themeError != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(_themeError!),
+                      ),
+                      if (_themeMode == null)
+                        TextButton(
+                          onPressed: _loadTheme,
+                          child: const Text('重试读取主题'),
+                        ),
+                    ],
+                    if (_error != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(_error!, semanticsLabel: _error),
+                      ),
+                      TextButton(onPressed: _load, child: const Text('重试')),
+                    ] else ...[
+                      Semantics(
+                        value: _format!.label,
+                        child: ListTile(
+                          key: const Key('defaultRecordingFormat'),
+                          title: const Text('默认录音格式'),
+                          subtitle: Text(_format!.label),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: _chooseFormat,
+                        ),
+                      ),
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text('用于下一次录音，已有录音保持原格式'),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                ),
+        ),
       ),
     );
   }

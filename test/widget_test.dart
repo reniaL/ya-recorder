@@ -105,6 +105,84 @@ void main() {
     messenger.setMockMethodCallHandler(eventChannel, null);
   });
 
+  testWidgets(
+    'system theme tracks brightness; explicit choices apply immediately and restore',
+    (tester) async {
+      final store = _ThemeStore();
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      Future<void> open() async {
+        await tester.pumpWidget(
+          MyApp(
+            recordingStore: store,
+            recordingService: RecordingService(
+              commands: commandChannel,
+              eventStream: events.stream,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      Brightness brightness() =>
+          Theme.of(tester.element(find.byType(Scaffold).first)).brightness;
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      await open();
+      expect(brightness(), Brightness.dark);
+      final appBar = tester.widget<AppBar>(find.byType(AppBar).first);
+      expect(
+        Theme.of(
+          tester.element(find.byWidget(appBar)),
+        ).appBarTheme.systemOverlayStyle!.statusBarIconBrightness,
+        Brightness.light,
+      );
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+      await tester.pumpAndSettle();
+      expect(brightness(), Brightness.light);
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      events.add(
+        const RecordingStateChanged(
+          RecordingSessionStatus(
+            state: RecordingLifecycleState.recording,
+            format: RecordingFormat.m4a,
+            elapsed: Duration(seconds: 12),
+            canResume: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final mode in [
+        ThemeMode.dark,
+        ThemeMode.light,
+        ThemeMode.system,
+        ThemeMode.dark,
+      ]) {
+        await tester.tap(find.byKey(const Key('themeMode')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(Key('chooseTheme-${mode.name}')));
+        await tester.pumpAndSettle();
+        expect(store.mode, mode);
+        expect(
+          brightness(),
+          mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
+        );
+      }
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('00:12'), findsOneWidget);
+      expect(brightness(), Brightness.dark);
+      expect(invokedMethods, isNot(contains('pause')));
+      expect(invokedMethods, isNot(contains('start')));
+      await tester.pumpWidget(const SizedBox());
+      await open();
+      expect(brightness(), Brightness.dark);
+    },
+  );
+
   testWidgets('light pages keep dark status bar icons when recording starts', (
     WidgetTester tester,
   ) async {
@@ -2883,4 +2961,12 @@ class _FakePlaybackBackend implements AudioPlaybackBackend {
       throw StateError('Cannot set speed');
     }
   }
+}
+
+class _ThemeStore extends _RecordingStoreSpy {
+  ThemeMode mode = ThemeMode.system;
+  @override
+  Future<ThemeMode> getThemeMode() async => mode;
+  @override
+  Future<void> setThemeMode(ThemeMode value) async => mode = value;
 }

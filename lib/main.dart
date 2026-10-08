@@ -22,7 +22,7 @@ void main() {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({
     super.key,
     this.recordingService,
@@ -37,31 +37,58 @@ class MyApp extends StatelessWidget {
   final AudioShareService? audioShareService;
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  ThemeMode _themeMode = ThemeMode.system;
+  late final RecordingService _recordingService =
+      widget.recordingService ?? RecordingService();
+
+  void _setThemeMode(ThemeMode mode) {
+    if (mounted) setState(() => _themeMode = mode);
+  }
+
+  ThemeData _theme(Brightness brightness) {
+    final dark = brightness == Brightness.dark;
+    return ThemeData(
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: const Color(0xff0b6657),
+        brightness: brightness,
+      ),
+      scaffoldBackgroundColor: dark
+          ? const Color(0xff101815)
+          : const Color(0xfff2f7f4),
+      appBarTheme: AppBarTheme(
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: brightness,
+          systemNavigationBarColor: dark
+              ? const Color(0xff101815)
+              : const Color(0xfff2f7f4),
+          systemNavigationBarIconBrightness: dark
+              ? Brightness.light
+              : Brightness.dark,
+        ),
+      ),
+      useMaterial3: true,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: '丫丫录音',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xff0b6657),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xfff2f7f4),
-        appBarTheme: const AppBarTheme(
-          // Every page has a light background, including the recording page's
-          // transparent app bar. Do not infer icon contrast from transparency.
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness: Brightness.dark,
-            statusBarBrightness: Brightness.light,
-          ),
-        ),
-        useMaterial3: true,
-      ),
+      theme: _theme(Brightness.light),
+      darkTheme: _theme(Brightness.dark),
+      themeMode: _themeMode,
       home: RecordingHomePage(
-        recordingService: recordingService ?? RecordingService(),
-        recordingStore: recordingStore,
-        playbackService: playbackService,
-        audioShareService: audioShareService,
+        recordingService: _recordingService,
+        recordingStore: widget.recordingStore,
+        playbackService: widget.playbackService,
+        audioShareService: widget.audioShareService,
+        onThemeChanged: _setThemeMode,
       ),
     );
   }
@@ -71,12 +98,14 @@ class RecordingHomePage extends StatefulWidget {
   const RecordingHomePage({
     super.key,
     required this.recordingService,
+    this.onThemeChanged,
     this.recordingStore,
     this.playbackService,
     this.audioShareService,
   });
 
   final RecordingService recordingService;
+  final ValueChanged<ThemeMode>? onThemeChanged;
   final RecordingStore? recordingStore;
   final AudioPlaybackService? playbackService;
   final AudioShareService? audioShareService;
@@ -171,6 +200,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     );
     _loadCurrentStatus();
     _initializeLibrary();
+    unawaited(_loadTheme());
   }
 
   @override
@@ -190,6 +220,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (state == AppLifecycleState.resumed) {
       _cleanupExpiredRecordings();
       unawaited(_recoverRecordings());
+    }
+  }
+
+  Future<void> _loadTheme() async {
+    if (widget.onThemeChanged == null) return;
+    try {
+      final mode = await (await _getRecordingStore()).getThemeMode();
+      if (mounted) widget.onThemeChanged?.call(mode);
+    } catch (_) {
+      // Settings offers a retry; keep the system theme while storage is unavailable.
     }
   }
 
@@ -256,6 +296,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           builder: (_) => RecordingSettingsPage(
             store: store,
             service: widget.recordingService,
+            onThemeChanged: widget.onThemeChanged,
           ),
         ),
       );
