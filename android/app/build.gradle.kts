@@ -39,6 +39,15 @@ android {
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
+        debug {
+            // The REC-08 probe can be installed alongside the normal application.
+            val aacProbe = providers.gradleProperty("aacAdtsProbe").orNull == "true"
+            manifestPlaceholders["aacProbeEnabled"] = aacProbe
+            manifestPlaceholders["aacProbeMainEnabled"] = !aacProbe
+            if (aacProbe) {
+                applicationIdSuffix = ".aacprobe"
+            }
+        }
     }
 }
 

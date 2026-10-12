@@ -4,4 +4,22 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <application>
+        <activity android:name=".MainActivity" android:enabled="${aacProbeMainEnabled}" />
+        <!-- Foreground-only REC-08 harness, launched explicitly by adb. -->
+        <activity android:name=".AacAdtsProbeActivity"
+            android:exported="true"
+            android:enabled="${aacProbeEnabled}"
+            android:label="AAC ADTS Probe"
+            android:theme="@style/LaunchTheme"
+            android:hardwareAccelerated="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+            <meta-data android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
 </manifest>

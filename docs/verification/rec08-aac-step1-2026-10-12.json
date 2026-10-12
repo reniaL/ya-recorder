@@ -1,0 +1,71 @@
+{
+  "date": "2026-10-12",
+  "item": "REC-08 step 1",
+  "status": "probe implemented; device validation pending",
+  "flutterAnalyze": "passed; no issues",
+  "flutterTests": {
+    "scope": [
+      "test/recording/aac_adts_probe_test.dart",
+      "test/playback/audio_playback_service_test.dart"
+    ],
+    "passed": 38,
+    "newProbeChecks": 5,
+    "fullSuiteRun": false,
+    "reason": "Debug-only probe; production playback, storage and recording contracts unchanged"
+  },
+  "androidJvmTests": {
+    "task": ":app:testDebugUnitTest",
+    "passed": 64,
+    "failures": 0
+  },
+  "pythonChecks": [
+    "py_compile passed for both scripts",
+    "CLI help passed",
+    "run_device rejects missing authorized device"
+  ],
+  "artifacts": [
+    {
+      "path": "build/aac-adts-probe/aac-adts-probe-debug.apk",
+      "applicationId": "io.github.renial.ya_recorder.aacprobe",
+      "bytes": 162942923,
+      "sha256": "9ec7148a71320662fe990e1e13f166aa53798e258086d0f9d2530cdad15d7796"
+    },
+    {
+      "path": "build/app/outputs/flutter-apk/app-debug.apk",
+      "applicationId": "io.github.renial.ya_recorder",
+      "bytes": 164825507,
+      "sha256": "c04543f76fef2115cdf5911a3d87dfe40c45a79b8c5f5354ffae859b1d4f6c31"
+    }
+  ],
+  "manifestChecks": {
+    "probe": {
+      "MainActivity": false,
+      "AacAdtsProbeActivity": true
+    },
+    "normalDebug": {
+      "MainActivity": true,
+      "AacAdtsProbeActivity": false
+    }
+  },
+  "player": {
+    "justAudioVersion": "0.10.6",
+    "constantBitrateSeekingEnabled": true,
+    "constantBitrateSeekingAlwaysEnabled": false,
+    "dependencyChange": false,
+    "nativeDefaultAlreadyEnabled": true
+  },
+  "deviceEvidence": {
+    "connectedDevices": [],
+    "realSample": null,
+    "nativeDecode": "not run on device",
+    "playbackSeeking": "pending",
+    "listeningContinuity": "pending",
+    "ffprobeAndFfmpeg": "not run; no device sample"
+  },
+  "remaining": [
+    "Run on authorized Android device",
+    "Export real sample and measured report",
+    "Complete manual listening and actual seek checks",
+    "Independently inspect and fully decode exported sample"
+  ]
+}
