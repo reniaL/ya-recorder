@@ -19,9 +19,9 @@ void main() {
       addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
       final service = RecordingService(commands: channel);
       expect(await service.getAvailableFormats(), [RecordingFormat.m4a]);
-      response = ['m4a', 'mp3'];
+      response = ['aac', 'mp3'];
       expect(await service.getAvailableFormats(), [
-        RecordingFormat.m4a,
+        RecordingFormat.aac,
         RecordingFormat.mp3,
       ]);
       for (final invalid in [

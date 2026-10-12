@@ -1,18 +1,19 @@
 package io.github.renial.ya_recorder
 
+import android.media.MediaRecorder
 import org.junit.Assert.*
 import org.junit.Test
 
 class RecordingFormatTest {
     @Test fun normalBuildOffersAndAcceptsMp3WithoutAnOptIn() {
         assertTrue(BuildConfig.REC07_MP3_ENABLED)
-        assertEquals(listOf(RecordingFormat.M4A, RecordingFormat.MP3),
+        assertEquals(listOf(RecordingFormat.AAC, RecordingFormat.MP3),
             RecordingFormat.availableForRecording(BuildConfig.REC07_MP3_ENABLED))
         RecordingFormat.MP3.requireRecordingEncoder(BuildConfig.REC07_MP3_ENABLED)
     }
     @Test fun availableFormatsFollowTheNativeGate() {
-        assertEquals(listOf(RecordingFormat.M4A), RecordingFormat.availableForRecording(false))
-        assertEquals(listOf(RecordingFormat.M4A, RecordingFormat.MP3), RecordingFormat.availableForRecording(true))
+        assertEquals(listOf(RecordingFormat.AAC), RecordingFormat.availableForRecording(false))
+        assertEquals(listOf(RecordingFormat.AAC, RecordingFormat.MP3), RecordingFormat.availableForRecording(true))
         for (enabled in listOf(false, true)) {
             for (format in RecordingFormat.availableForRecording(enabled)) format.requireRecordingEncoder(enabled)
         }
@@ -32,17 +33,25 @@ class RecordingFormatTest {
         }
     }
 
-    @Test fun aacContractIsKnownButItsEncoderIsNotAvailableYet() {
+    @Test fun aacContractAndEncoderAreAvailable() {
         assertEquals(RecordingFormat.AAC, RecordingFormat.fromWireValue("aac"))
         assertEquals("audio/aac", RecordingFormat.AAC.mimeType)
         assertEquals("recording-one.aac", RecordingFormat.AAC.completedFileName("one"))
         assertEquals("recording-one.aac.part", RecordingFormat.AAC.temporaryFileName("one"))
-        assertThrows(UnsupportedOperationException::class.java) {
-            RecordingFormat.AAC.requireRecordingEncoder(true)
-        }
-        assertThrows(UnsupportedOperationException::class.java) {
-            RecordingBackendFactory(mp3Enabled = true).create(RecordingFormat.AAC)
-        }
+        RecordingFormat.AAC.requireRecordingEncoder()
+        assertEquals(RecordingFormat.AAC, RecordingBackendFactory().create(RecordingFormat.AAC).format)
+    }
+
+    @Test fun mediaRecorderSelectsAdtsForAacAndMp4ForLegacyM4a() {
+        assertEquals(MediaRecorder.OutputFormat.AAC_ADTS, AndroidAacRecorder.outputFormat(RecordingFormat.AAC))
+        assertEquals(MediaRecorder.OutputFormat.MPEG_4, AndroidAacRecorder.outputFormat(RecordingFormat.M4A))
+        assertThrows(IllegalArgumentException::class.java) { AndroidAacRecorder.outputFormat(RecordingFormat.MP3) }
+        assertThrows(IllegalArgumentException::class.java) { AacRecordingBackend(RecordingFormat.MP3) }
+    }
+
+    @Test fun factoryDoesNotAcceptAacBackendWithTheWrongContainer() {
+        val factory = RecordingBackendFactory(createAac = { AacRecordingBackend(RecordingFormat.M4A) })
+        assertThrows(IllegalStateException::class.java) { factory.create(RecordingFormat.AAC) }
     }
 
     @Test fun unavailableMp3EncoderIsRejectedBeforeStarting() {

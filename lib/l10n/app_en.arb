@@ -123,7 +123,7 @@
   "foldersRefreshFailed": "Couldn't refresh your folders.",
   "microphoneRequired": "Microphone access is required to record.",
   "defaultFormatReadFailed": "Couldn't load the default recording format. Please try again in Settings.",
-  "mp3Unavailable": "MP3 recording is unavailable. Choose M4A in Settings and try again.",
+  "mp3Unavailable": "MP3 recording is unavailable. Choose AAC in Settings and try again.",
   "aacUnavailable": "AAC recording is unavailable. Choose another format in Settings and try again.",
   "startFailed": "Couldn't start recording.",
   "startRetryFailed": "Couldn't start recording. Please try again.",

@@ -2,7 +2,6 @@ package io.github.renial.ya_recorder
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -59,17 +58,12 @@ class AacAdtsProbeActivity : FlutterActivity() {
 
     private fun capture(result: MethodChannel.Result) {
         worker = Thread {
-            val recorder = MediaRecorder()
+            val recorder = AacRecordingBackend(RecordingFormat.AAC)
             try {
                 val directory = File(filesDir, "aac-adts-probe").apply { mkdirs() }
                 val file = File(directory, "sample-${System.currentTimeMillis()}.aac")
-                recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-                recorder.setOutputFormat(MediaRecorder.OutputFormat.AAC_ADTS)
-                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                recorder.setAudioEncodingBitRate(128000)
-                recorder.setAudioSamplingRate(44100)
-                recorder.setOutputFile(file.absolutePath)
-                recorder.prepare()
+                val temporaryFile = File(directory, "${file.name}.part")
+                recorder.prepare(temporaryFile)
                 recorder.start()
                 var start = SystemClock.elapsedRealtime()
                 phase("录音前半段：请说出 1、2、3、4")
@@ -84,6 +78,7 @@ class AacAdtsProbeActivity : FlutterActivity() {
                 Thread.sleep(4000)
                 recorder.stop()
                 activeMs += SystemClock.elapsedRealtime() - start
+                check(temporaryFile.renameTo(file)) { "Unable to finalize probe sample" }
                 phase("完整解码验证")
                 val media = AacAdtsProbeMedia.inspect(file)
                 val report = media + mapOf(

@@ -141,6 +141,34 @@ void main() {
   );
 
   testWidgets(
+    'native AAC capability enables AAC and keeps old M4A unavailable for new selection',
+    (tester) async {
+      service.available = [RecordingFormat.aac, RecordingFormat.mp3];
+      await open(tester);
+      await choose(tester);
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const Key('chooseFormat-m4a')))
+            .enabled,
+        isFalse,
+      );
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const Key('chooseFormat-aac')))
+            .enabled,
+        isTrue,
+      );
+      await tester.tap(find.byKey(const Key('chooseFormat-aac')));
+      await tester.pumpAndSettle();
+      expect(store.format, RecordingFormat.aac);
+      expect(store.writes, 1);
+      await tester.pumpWidget(const SizedBox());
+      await open(tester);
+      expect(find.text('AAC'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'native gate disables MP3 while preserving an existing MP3 preference',
     (tester) async {
       service.available = [RecordingFormat.m4a];

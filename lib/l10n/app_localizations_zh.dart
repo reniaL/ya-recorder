@@ -379,7 +379,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get defaultFormatReadFailed => '无法读取默认录音格式，请在设置中重试。';
 
   @override
-  String get mp3Unavailable => '无法开始 MP3 录音，请在设置中选择 M4A 后重试';
+  String get mp3Unavailable => '无法开始 MP3 录音，请在设置中选择 AAC 后重试';
 
   @override
   String get aacUnavailable => '无法开始 AAC 录音，请在设置中选择其他格式后重试';

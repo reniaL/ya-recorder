@@ -1,0 +1,75 @@
+{
+  "date": "2026-10-12",
+  "item": "REC-08 step 3",
+  "status": "shared AAC recorder implemented; device and step 4 media validation pending",
+  "flutterAnalyze": "passed; no issues",
+  "flutterTests": {
+    "fullSuite": true,
+    "passed": 219,
+    "failed": 0,
+    "newTests": [
+      "AAC default starts without fallback",
+      "Paused AAC session keeps its format after preference changes",
+      "Native capabilities enable AAC and disable new M4A selection"
+    ]
+  },
+  "androidJvmTests": {
+    "task": ":app:testDebugUnitTest",
+    "passed": 81,
+    "failed": 0,
+    "aacM4aParameterizedLifecycleCases": 28,
+    "newTests": [
+      "MediaRecorder chooses AAC_ADTS for AAC and MPEG_4 for M4A",
+      "Factory rejects wrong-container AAC backend"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "build/app/outputs/flutter-apk/app-debug.apk",
+      "applicationId": "io.github.renial.ya_recorder",
+      "bytes": 164827567,
+      "sha256": "6a19a1a4ff2ad7960483043e0023a7d06b7ccfaef5b8f46ea4a4b5062ef59d3e"
+    },
+    {
+      "path": "build/aac-adts-probe/aac-adts-probe-debug.apk",
+      "applicationId": "io.github.renial.ya_recorder.aacprobe",
+      "bytes": 162942923,
+      "sha256": "5c5279e2e450fb145cdd0a242279cad9f66aa3f7d9704d97e728652b3bf72b1e"
+    }
+  ],
+  "productionChanges": {
+    "backend": "AacRecordingBackend / AndroidAacRecorder",
+    "containers": {
+      "aac": "AAC_ADTS",
+      "m4a": "MPEG_4"
+    },
+    "encoder": "MediaRecorder.AudioEncoder.AAC",
+    "bitrate": 128000,
+    "sampleRate": 44100,
+    "channelPolicyChanged": false,
+    "aacElapsedMs": "null; RecordingService monotonic clock excludes pauses",
+    "availableFormats": [
+      "aac",
+      "mp3"
+    ],
+    "legacyM4aExplicitStartAccepted": true,
+    "newEncodingThreads": 0,
+    "schemaVersion": 7,
+    "schemaChanged": false,
+    "silentFallback": false
+  },
+  "probe": "Uses production AacRecordingBackend(AAC); .aac.part is finalized to .aac after stop/release",
+  "deviceEvidence": {
+    "connectedDevices": [],
+    "realAdtsSample": null,
+    "microphonePauseResumeStop": "not verified",
+    "audibleContinuityAndSeeking": "not verified",
+    "aacSaveRecovery": "step 4 adapter and real device checks pending"
+  },
+  "remaining": [
+    "Step 4: decoded AAC duration and ADTS metadata handling in save/recovery",
+    "Step 5: picker presentation and final sharing/display verification",
+    "Run step 1 production-backend probe on an authorized Android device",
+    "Step 6: complete mixed-format and upgrade device acceptance"
+  ]
+}

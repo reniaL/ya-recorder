@@ -2,8 +2,8 @@ package io.github.renial.ya_recorder
 
 import java.io.File
 
-/** Test seam for the Android recorder; one instance writes one M4A file. */
-internal interface M4aRecorder {
+/** One Android AAC recorder writes one M4A or ADTS file. */
+internal interface AacRecorder {
     fun prepare(temporaryFile: File)
     fun start()
     fun pause()
@@ -13,20 +13,24 @@ internal interface M4aRecorder {
     fun release()
 }
 
-class M4aRecordingBackend internal constructor(
-    private val createRecorder: () -> M4aRecorder,
+class AacRecordingBackend internal constructor(
+    override val format: RecordingFormat,
+    private val createRecorder: () -> AacRecorder,
 ) : RecordingBackend {
-    constructor() : this({ AndroidM4aRecorder() })
+    constructor(format: RecordingFormat) : this(format, { AndroidAacRecorder(format) })
 
-    override val format = RecordingFormat.M4A
-    private var recorder: M4aRecorder? = null
+    init {
+        require(format == RecordingFormat.AAC || format == RecordingFormat.M4A)
+    }
+
+    private var recorder: AacRecorder? = null
     private var state = State.NEW
     private var releaseFailed = false
     override val isQuiescent: Boolean get() = recorder == null && !releaseFailed
 
     override fun prepare(temporaryFile: File) {
         check(state == State.NEW) { "The recording backend has already been prepared" }
-        require(temporaryFile.name.endsWith(".${format.extension}.part")) { "Invalid M4A temporary path" }
+        require(temporaryFile.name.endsWith(".${format.extension}.part")) { "Invalid AAC temporary path" }
         try {
             recorder = createRecorder()
             requireRecorder().prepare(temporaryFile)
@@ -99,7 +103,7 @@ class M4aRecordingBackend internal constructor(
         }
     }
 
-    private fun requireRecorder(): M4aRecorder =
+    private fun requireRecorder(): AacRecorder =
         checkNotNull(recorder) { "The recording backend has no recorder" }
 
     private fun releaseAfterFailure(error: Exception) {

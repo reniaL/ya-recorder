@@ -281,15 +281,15 @@ class Mp3RecordingBackendTest {
         }
     }
 
-    @Test fun optedInFactoryRoutesMp3WithoutCreatingAnM4aRecorder() {
-        var m4aCreations = 0
+    @Test fun enabledFactoryRoutesMp3WithoutCreatingAnAacRecorder() {
+        var aacCreations = 0
         val factory = RecordingBackendFactory(
-            createM4a = { m4aCreations++; M4aRecordingBackend() },
+            createAac = { format -> aacCreations++; AacRecordingBackend(format) },
             mp3Enabled = true,
             createMp3 = { backend },
         )
         assertSame(backend, factory.create(RecordingFormat.MP3))
-        assertEquals(0, m4aCreations)
+        assertEquals(0, aacCreations)
         RecordingFormat.MP3.requireRecordingEncoder(true)
         assertThrows(IllegalStateException::class.java) { backend.start() }
         assertThrows(IllegalArgumentException::class.java) { backend.prepare(File("one.m4a.part")) }

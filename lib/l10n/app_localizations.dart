@@ -839,7 +839,7 @@ abstract class AppLocalizations {
   /// No description provided for @mp3Unavailable.
   ///
   /// In en, this message translates to:
-  /// **'MP3 recording is unavailable. Choose M4A in Settings and try again.'**
+  /// **'MP3 recording is unavailable. Choose AAC in Settings and try again.'**
   String get mp3Unavailable;
 
   /// No description provided for @aacUnavailable.

@@ -4,24 +4,32 @@ import java.io.File
 import java.nio.file.Files
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.Parameterized
 
-class M4aRecordingBackendTest {
+@RunWith(Parameterized::class)
+class AacRecordingBackendTest(private val format: RecordingFormat) {
+    companion object {
+        @JvmStatic @Parameterized.Parameters(name = "{0}")
+        fun formats() = listOf(arrayOf(RecordingFormat.AAC), arrayOf(RecordingFormat.M4A))
+    }
     @Test fun prepareDoesNotCaptureBeforeForegroundStart() {
         val recorder = FakeRecorder()
-        val output = File("recording-one.m4a.part")
-        val backend = M4aRecordingBackend { recorder }
+        val output = File(format.temporaryFileName("one"))
+        val backend = AacRecordingBackend(format) { recorder }
         backend.prepare(output)
         assertEquals(output, recorder.output)
         assertEquals(listOf("prepare"), recorder.calls)
-        assertEquals(RecordingFormat.M4A, backend.format)
+        assertEquals(format, backend.format)
+        assertNull(backend.elapsedMs)
         backend.release()
     }
 
     @Test fun pauseAndResumeKeepOneRecorderAndOutputUntilStop() {
         val recorder = FakeRecorder()
         var created = 0
-        val backend = M4aRecordingBackend { created++; recorder }
-        backend.prepare(File("recording-one.m4a.part"))
+        val backend = AacRecordingBackend(format) { created++; recorder }
+        backend.prepare(File(format.temporaryFileName("one")))
         backend.start()
         repeat(2) { backend.pause(); backend.resume() }
         backend.stop()
@@ -78,12 +86,12 @@ class M4aRecordingBackendTest {
     }
 
     @Test fun failedSavePropagatesErrorReleasesAndPreservesTemporaryData() {
-        val directory = Files.createTempDirectory("m4a-backend-").toFile()
+        val directory = Files.createTempDirectory("aac-backend-").toFile()
         try {
-            val output = File(directory, "recording-one.m4a.part")
+            val output = File(directory, format.temporaryFileName("one"))
             output.writeBytes(byteArrayOf(1, 2, 3))
             val recorder = FakeRecorder()
-            val backend = M4aRecordingBackend { recorder }
+            val backend = AacRecordingBackend(format) { recorder }
             backend.prepare(output)
             backend.start()
             val failure = RuntimeException("stop failed")
@@ -103,9 +111,9 @@ class M4aRecordingBackendTest {
             val recorder = FakeRecorder()
             val failure = RuntimeException("$operation failed")
             recorder.failures[operation] = failure
-            val backend = M4aRecordingBackend { recorder }
+            val backend = AacRecordingBackend(format) { recorder }
             assertSame(failure, assertThrows(RuntimeException::class.java) {
-                backend.prepare(File("recording-one.m4a.part"))
+                backend.prepare(File(format.temporaryFileName("one")))
                 backend.start()
             })
             backend.release()
@@ -134,12 +142,12 @@ class M4aRecordingBackendTest {
     }
 
     @Test fun successfulStopAndCancelLeaveFileCommitOrDeletionToTheService() {
-        val directory = Files.createTempDirectory("m4a-backend-output-").toFile()
+        val directory = Files.createTempDirectory("aac-backend-output-").toFile()
         try {
             for (cancelled in listOf(false, true)) {
-                val output = File(directory, "recording-one.m4a.part")
+                val output = File(directory, format.temporaryFileName("one"))
                 output.writeBytes(byteArrayOf(4, 5, 6))
-                val backend = M4aRecordingBackend { FakeRecorder() }
+                val backend = AacRecordingBackend(format) { FakeRecorder() }
                 backend.prepare(output)
                 backend.start()
                 if (cancelled) backend.cancel() else backend.stop()
@@ -157,9 +165,9 @@ class M4aRecordingBackendTest {
         val cleanupFailure = RuntimeException("release failed")
         recorder.failures["prepare"] = failure
         recorder.failures["release"] = cleanupFailure
-        val backend = M4aRecordingBackend { recorder }
+        val backend = AacRecordingBackend(format) { recorder }
         assertSame(failure, assertThrows(RuntimeException::class.java) {
-            backend.prepare(File("recording-one.m4a.part"))
+            backend.prepare(File(format.temporaryFileName("one")))
         })
         assertArrayEquals(arrayOf(cleanupFailure), failure.suppressed)
         backend.release()
@@ -180,15 +188,17 @@ class M4aRecordingBackendTest {
     @Test fun invalidOrderingOrOutputNeverStartsAnotherCapture() {
         val recorder = FakeRecorder()
         var created = 0
-        val backend = M4aRecordingBackend { created++; recorder }
+        val backend = AacRecordingBackend(format) { created++; recorder }
         assertThrows(IllegalStateException::class.java) { backend.start() }
         assertThrows(IllegalStateException::class.java) { backend.pause() }
         assertThrows(IllegalStateException::class.java) { backend.resume() }
         assertThrows(IllegalStateException::class.java) { backend.stop() }
         assertThrows(IllegalArgumentException::class.java) { backend.prepare(File("one.mp3.part")) }
+        val other = if (format == RecordingFormat.AAC) RecordingFormat.M4A else RecordingFormat.AAC
+        assertThrows(IllegalArgumentException::class.java) { backend.prepare(File(other.temporaryFileName("one"))) }
         assertEquals(0, created)
-        backend.prepare(File("recording-one.m4a.part"))
-        assertThrows(IllegalStateException::class.java) { backend.prepare(File("recording-two.m4a.part")) }
+        backend.prepare(File(format.temporaryFileName("one")))
+        assertThrows(IllegalStateException::class.java) { backend.prepare(File(format.temporaryFileName("two"))) }
         backend.start()
         assertThrows(IllegalStateException::class.java) { backend.start() }
         assertEquals(1, created)
@@ -197,23 +207,23 @@ class M4aRecordingBackendTest {
         assertThrows(IllegalStateException::class.java) { backend.resume() }
     }
 
-    @Test fun factoryRejectsMp3WithoutCreatingOrFallingBackToM4a() {
+    @Test fun factoryRejectsMp3WithoutCreatingOrFallingBackToAac() {
         val recorder = FakeRecorder()
-        val m4a = M4aRecordingBackend { recorder }
+        val aac = AacRecordingBackend(format) { recorder }
         var created = 0
-        val factory = RecordingBackendFactory(createM4a = { created++; m4a })
+        val factory = RecordingBackendFactory(createAac = { selected -> assertEquals(format, selected); created++; aac })
         assertThrows(UnsupportedOperationException::class.java) { factory.create(RecordingFormat.MP3) }
         assertEquals(0, created)
-        assertSame(m4a, factory.create(RecordingFormat.M4A))
+        assertSame(aac, factory.create(format))
         assertEquals(1, created)
         assertTrue(recorder.calls.isEmpty())
-        assertTrue(RecordingBackendFactory().create(RecordingFormat.M4A) is M4aRecordingBackend)
+        assertTrue(RecordingBackendFactory().create(format) is AacRecordingBackend)
     }
 
-    private fun prepared(recorder: FakeRecorder): M4aRecordingBackend =
-        M4aRecordingBackend { recorder }.also { it.prepare(File("recording-one.m4a.part")) }
+    private fun prepared(recorder: FakeRecorder): AacRecordingBackend =
+        AacRecordingBackend(format) { recorder }.also { it.prepare(File(format.temporaryFileName("one"))) }
 
-    private class FakeRecorder : M4aRecorder {
+    private class FakeRecorder : AacRecorder {
         val calls = mutableListOf<String>()
         val failures = mutableMapOf<String, RuntimeException>()
         var output: File? = null

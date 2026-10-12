@@ -396,7 +396,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mp3Unavailable =>
-      'MP3 recording is unavailable. Choose M4A in Settings and try again.';
+      'MP3 recording is unavailable. Choose AAC in Settings and try again.';
 
   @override
   String get aacUnavailable =>

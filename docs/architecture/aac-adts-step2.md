@@ -2,6 +2,8 @@
 
 日期：2026-10-12。第二步已实现并通过自动化回归；第一步的实际录音、听音和定位验证仍待真机。AAC 正式后端将在第三步接入，本记录不代表 AAC 录音已开放。
 
+后续状态：第三步已接入共享 AAC 后端，原生新录音能力为 AAC/MP3，见 [第三步记录](aac-adts-step3.md)。本文后端不可用及第三步未开始的描述保留第二步当时状态，AAC 保存/恢复验证及真机验收仍待完成。
+
 ## 格式契约
 
 Dart 与 Kotlin 的 `RecordingFormat` 增加 `aac`，对应 `.aac` / `audio/aac`。最终文件为 `recording-<id>.aac`，临时文件为 `recording-<id>.aac.part`。已有 `m4a` / `audio/mp4` 与 `mp3` / `audio/mpeg` 的值保持；路径、模型、状态和原生协议沿用已有格式解析，不增加转换逻辑。

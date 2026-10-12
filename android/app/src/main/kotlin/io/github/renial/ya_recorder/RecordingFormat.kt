@@ -14,14 +14,12 @@ enum class RecordingFormat(val wireName: String, val extension: String, val mime
     fun temporaryFileName(id: String): String = "${completedFileName(id)}.part"
 
     fun requireRecordingEncoder(mp3Enabled: Boolean = false) {
-        // AAC is a storage/protocol format; its recorder is added in REC-08 step 3.
-        if (this == AAC) throw UnsupportedOperationException("当前版本暂不支持 AAC 录音。")
         if (this == MP3 && !mp3Enabled) throw UnsupportedOperationException("当前版本暂不支持 MP3 录音。")
     }
 
     companion object {
         fun availableForRecording(mp3Enabled: Boolean): List<RecordingFormat> =
-            if (mp3Enabled) listOf(M4A, MP3) else listOf(M4A)
+            if (mp3Enabled) listOf(AAC, MP3) else listOf(AAC)
 
         fun fromWireValue(value: Any?): RecordingFormat {
             return entries.firstOrNull { it.wireName == value }

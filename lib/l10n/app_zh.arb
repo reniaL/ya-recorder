@@ -123,7 +123,7 @@
   "foldersRefreshFailed": "无法刷新文件夹。",
   "microphoneRequired": "需要麦克风权限才能开始录音。",
   "defaultFormatReadFailed": "无法读取默认录音格式，请在设置中重试。",
-  "mp3Unavailable": "无法开始 MP3 录音，请在设置中选择 M4A 后重试",
+  "mp3Unavailable": "无法开始 MP3 录音，请在设置中选择 AAC 后重试",
   "aacUnavailable": "无法开始 AAC 录音，请在设置中选择其他格式后重试",
   "startFailed": "无法开始录音。",
   "startRetryFailed": "无法开始录音，请重试。",
