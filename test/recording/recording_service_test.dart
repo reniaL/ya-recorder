@@ -20,7 +20,10 @@ void main() {
       final service = RecordingService(commands: channel);
       expect(await service.getAvailableFormats(), [RecordingFormat.m4a]);
       response = ['m4a', 'mp3'];
-      expect(await service.getAvailableFormats(), RecordingFormat.values);
+      expect(await service.getAvailableFormats(), [
+        RecordingFormat.m4a,
+        RecordingFormat.mp3,
+      ]);
       for (final invalid in [
         null,
         [],

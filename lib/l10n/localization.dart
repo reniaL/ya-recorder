@@ -31,6 +31,7 @@ AppLocalizations l10n(BuildContext context) =>
 String localizedMessage(BuildContext context, String identifier) {
   final strings = l10n(context);
   return switch (identifier) {
+    'aacUnavailable' => strings.aacUnavailable,
     'themeReadFailed' => strings.themeReadFailed,
     'themeSaveFailed' => strings.themeSaveFailed,
     'formatReadFailed' => strings.formatReadFailed,

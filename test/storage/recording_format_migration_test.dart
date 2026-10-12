@@ -91,6 +91,7 @@ void main() {
       () async {
         final original = await createLegacy(version);
         await store.open();
+        expect(await store.getDefaultRecordingFormat(), RecordingFormat.aac);
         final expected = original
             .map((row) => {...row, 'format': 'm4a'})
             .toList();
@@ -124,7 +125,7 @@ void main() {
           options: OpenDatabaseOptions(singleInstance: false),
         );
         try {
-          expect(await db.getVersion(), 6);
+          expect(await db.getVersion(), 7);
           expect(
             (await db.rawQuery(
               "SELECT name FROM sqlite_master WHERE type = 'index' AND name LIKE 'recordings_%'",
@@ -202,14 +203,18 @@ void main() {
         );
       }
       await store.moveRecordings(
-        recordingIds: ['m4a', 'mp3'],
+        recordingIds: RecordingFormat.values
+            .map((format) => format.wireName)
+            .toList(),
         folderId: 'folder',
       );
       final before = (await store.listRecordings())
           .map((r) => r.toDatabaseMap())
           .toList();
       await store.softDeleteRecordings(
-        recordingIds: ['m4a', 'mp3'],
+        recordingIds: RecordingFormat.values
+            .map((format) => format.wireName)
+            .toList(),
         deletedAt: now,
       );
       await store.close();

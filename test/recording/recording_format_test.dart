@@ -9,6 +9,8 @@ void main() {
   test('formats keep stable wire names, extensions and MIME types', () {
     expect(RecordingFormat.m4a.wireName, 'm4a');
     expect(RecordingFormat.m4a.mimeType, 'audio/mp4');
+    expect(RecordingFormat.aac.wireName, 'aac');
+    expect(RecordingFormat.aac.mimeType, 'audio/aac');
     expect(RecordingFormat.mp3.wireName, 'mp3');
     expect(RecordingFormat.mp3.mimeType, 'audio/mpeg');
     for (final format in RecordingFormat.values) {
@@ -25,7 +27,7 @@ void main() {
   });
 
   test(
-    'both format paths remain in their own completed and recovery directories',
+    'all format paths remain in their own completed and recovery directories',
     () {
       final paths = AppStoragePaths(
         Directory(path.join(Directory.systemTemp.path, 'format-paths')),

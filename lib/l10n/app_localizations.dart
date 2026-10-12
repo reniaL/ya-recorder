@@ -842,6 +842,12 @@ abstract class AppLocalizations {
   /// **'MP3 recording is unavailable. Choose M4A in Settings and try again.'**
   String get mp3Unavailable;
 
+  /// No description provided for @aacUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'AAC recording is unavailable. Choose another format in Settings and try again.'**
+  String get aacUnavailable;
+
   /// No description provided for @startFailed.
   ///
   /// In en, this message translates to:

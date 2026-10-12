@@ -1,0 +1,60 @@
+{
+  "date": "2026-10-12",
+  "item": "REC-08 step 2",
+  "status": "format contract and schema migration implemented; AAC recorder pending step 3",
+  "schemaVersion": 7,
+  "flutterAnalyze": "passed; no issues",
+  "flutterTests": {
+    "fullSuite": true,
+    "passed": 216,
+    "failed": 0,
+    "newMigrationTests": 12,
+    "newAacUnavailableWidgetTest": 1,
+    "targetedMigrationContractTestsPassed": 27
+  },
+  "androidJvmTests": {
+    "task": ":app:testDebugUnitTest",
+    "passed": 65,
+    "failed": 0,
+    "newAacContractAndAvailabilityTest": 1
+  },
+  "apk": {
+    "build": "flutter build apk --debug",
+    "path": "build/app/outputs/flutter-apk/app-debug.apk",
+    "applicationId": "io.github.renial.ya_recorder",
+    "bytes": 188328216,
+    "sha256": "198b0bde47422fb01c7956a8c849d83f2334f2eae5d919c3f971c0a14770e7ce"
+  },
+  "migrationEvidence": [
+    "Versions 1-6 upgrade to v7",
+    "Absent preferences default to AAC",
+    "M4A preference becomes AAC; MP3 retained",
+    "Old recording rows, audio and draft bytes retained",
+    "Theme, language and folder ordering retained",
+    "AAC index and preference round-trip after reopening",
+    "Indexes, unique paths, foreign keys and CHECK constraints retained",
+    "Invalid preference causes rollback of already rebuilt recordings; old version and CHECK restored; repair/retry succeeds"
+  ],
+  "recordingAvailability": {
+    "nativeAvailableFormats": [
+      "m4a",
+      "mp3"
+    ],
+    "aacKnownInProtocol": true,
+    "aacEncoderAvailable": false,
+    "silentFallback": false,
+    "temporaryUserGuidance": "Choose M4A or MP3 explicitly until step 3 adds the AAC backend"
+  },
+  "deviceEvidence": {
+    "connectedDevices": [],
+    "androidInstallUpgrade": "not verified",
+    "realAacRecording": "not verified; step 1 still pending",
+    "listeningAndSeeking": "not verified"
+  },
+  "notChanged": [
+    "Production AAC encoder not added",
+    "Audio files and native draft files not converted",
+    "Database stays local",
+    "Existing playback backend and encoding dependencies unchanged"
+  ]
+}

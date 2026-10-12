@@ -21,7 +21,7 @@ class RecordingStore {
   }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
        _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
 
-  static const _schemaVersion = 6;
+  static const _schemaVersion = 7;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -80,7 +80,7 @@ class RecordingStore {
     final database = await _openDatabase();
     final rows = await database.query('recording_preferences', where: 'id = 1');
     return rows.isEmpty
-        ? RecordingFormat.m4a
+        ? RecordingFormat.aac
         : RecordingFormat.fromWireValue(rows.single['default_format']);
   }
 
@@ -561,6 +561,9 @@ class RecordingStore {
               "ALTER TABLE app_preferences ADD COLUMN language TEXT NOT NULL DEFAULT 'zh' CHECK(language IN ('zh', 'en'))",
             );
           }
+          if (oldVersion < 7) {
+            await _migrateAacFormats(database);
+          }
         },
       ),
     );
@@ -587,21 +590,30 @@ class RecordingStore {
         sort_order INTEGER NOT NULL DEFAULT 0
       )
     ''');
-    await database.execute('''
-      CREATE TABLE recordings (
+    await _createRecordingsTable(database);
+    await _createRecordingIndexes(database);
+  }
+
+  static Future<void> _createRecordingsTable(
+    sqflite.Database database, {
+    String tableName = 'recordings',
+  }) => database.execute('''
+      CREATE TABLE $tableName (
         id TEXT PRIMARY KEY NOT NULL,
         title TEXT NOT NULL,
         file_path TEXT NOT NULL UNIQUE,
         created_at INTEGER NOT NULL,
         duration_ms INTEGER NOT NULL CHECK(duration_ms >= 0),
         file_size_bytes INTEGER NOT NULL CHECK(file_size_bytes >= 0),
-        format TEXT NOT NULL DEFAULT 'm4a' CHECK(format IN ('m4a', 'mp3')),
+        format TEXT NOT NULL DEFAULT 'm4a' CHECK(format IN ('m4a', 'mp3', 'aac')),
         folder_id TEXT REFERENCES folders(id) ON DELETE SET NULL,
         deleted_at INTEGER,
         was_interrupted INTEGER NOT NULL DEFAULT 0
           CHECK(was_interrupted IN (0, 1))
       )
     ''');
+
+  static Future<void> _createRecordingIndexes(sqflite.Database database) async {
     await database.execute('''
       CREATE INDEX recordings_active_by_folder_and_date
       ON recordings(folder_id, deleted_at, created_at DESC)
@@ -621,13 +633,45 @@ class RecordingStore {
     )
   ''');
 
-  static Future<void> _createPreferencesSchema(sqflite.Database database) =>
-      database.execute('''
-    CREATE TABLE recording_preferences (
+  static Future<void> _createPreferencesSchema(
+    sqflite.Database database, {
+    String tableName = 'recording_preferences',
+  }) => database.execute('''
+    CREATE TABLE $tableName (
       id INTEGER PRIMARY KEY CHECK(id = 1),
-      default_format TEXT NOT NULL CHECK(default_format IN ('m4a', 'mp3'))
+      default_format TEXT NOT NULL CHECK(default_format IN ('m4a', 'mp3', 'aac'))
     )
   ''');
+
+  static Future<void> _migrateAacFormats(sqflite.Database database) async {
+    // sqflite runs onUpgrade in a transaction. No table references recordings;
+    // its outgoing folder FK remains valid, so foreign_keys can stay enabled.
+    await _createRecordingsTable(database, tableName: 'recordings_v7');
+    await database.execute('''
+      INSERT INTO recordings_v7 (
+        id, title, file_path, created_at, duration_ms, file_size_bytes,
+        format, folder_id, deleted_at, was_interrupted
+      ) SELECT id, title, file_path, created_at, duration_ms, file_size_bytes,
+        format, folder_id, deleted_at, was_interrupted FROM recordings
+    ''');
+    await database.execute('DROP TABLE recordings');
+    await database.execute('ALTER TABLE recordings_v7 RENAME TO recordings');
+    await _createRecordingIndexes(database);
+
+    await _createPreferencesSchema(
+      database,
+      tableName: 'recording_preferences_v7',
+    );
+    await database.execute('''
+      INSERT INTO recording_preferences_v7 (id, default_format)
+      SELECT id, CASE WHEN default_format = 'm4a' THEN 'aac' ELSE default_format END
+      FROM recording_preferences
+    ''');
+    await database.execute('DROP TABLE recording_preferences');
+    await database.execute(
+      'ALTER TABLE recording_preferences_v7 RENAME TO recording_preferences',
+    );
+  }
 
   static Future<void> _ensureFolderExists(
     sqflite.DatabaseExecutor executor,

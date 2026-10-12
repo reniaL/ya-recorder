@@ -33,6 +33,7 @@ class RecordingBackendFactory(
     fun create(format: RecordingFormat): RecordingBackend {
         format.requireRecordingEncoder(mp3Enabled)
         return when (format) {
+            RecordingFormat.AAC -> throw UnsupportedOperationException("当前版本暂不支持 AAC 录音。")
             RecordingFormat.M4A -> createM4a().also {
                 check(it.format == format) { "Recording backend format does not match the session" }
             }

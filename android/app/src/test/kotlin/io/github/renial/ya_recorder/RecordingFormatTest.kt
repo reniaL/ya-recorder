@@ -32,6 +32,19 @@ class RecordingFormatTest {
         }
     }
 
+    @Test fun aacContractIsKnownButItsEncoderIsNotAvailableYet() {
+        assertEquals(RecordingFormat.AAC, RecordingFormat.fromWireValue("aac"))
+        assertEquals("audio/aac", RecordingFormat.AAC.mimeType)
+        assertEquals("recording-one.aac", RecordingFormat.AAC.completedFileName("one"))
+        assertEquals("recording-one.aac.part", RecordingFormat.AAC.temporaryFileName("one"))
+        assertThrows(UnsupportedOperationException::class.java) {
+            RecordingFormat.AAC.requireRecordingEncoder(true)
+        }
+        assertThrows(UnsupportedOperationException::class.java) {
+            RecordingBackendFactory(mp3Enabled = true).create(RecordingFormat.AAC)
+        }
+    }
+
     @Test fun unavailableMp3EncoderIsRejectedBeforeStarting() {
         RecordingFormat.M4A.requireRecordingEncoder()
         assertThrows(UnsupportedOperationException::class.java) { RecordingFormat.MP3.requireRecordingEncoder() }

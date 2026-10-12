@@ -382,6 +382,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mp3Unavailable => '无法开始 MP3 录音，请在设置中选择 M4A 后重试';
 
   @override
+  String get aacUnavailable => '无法开始 AAC 录音，请在设置中选择其他格式后重试';
+
+  @override
   String get startFailed => '无法开始录音。';
 
   @override

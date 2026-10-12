@@ -1,6 +1,7 @@
 /// Stable values shared by the platform protocol and the recording index.
 enum RecordingFormat {
   m4a('m4a', 'audio/mp4'),
+  aac('aac', 'audio/aac'),
   mp3('mp3', 'audio/mpeg');
 
   const RecordingFormat(this.extension, this.mimeType);

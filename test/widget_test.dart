@@ -69,7 +69,8 @@ void main() {
           return permissionGranted;
         case 'start':
           expect(call.arguments, {'format': expectedStartFormat.wireName});
-          if (expectedStartFormat == RecordingFormat.mp3 && !mp3Available) {
+          if (expectedStartFormat == RecordingFormat.aac ||
+              (expectedStartFormat == RecordingFormat.mp3 && !mp3Available)) {
             throw PlatformException(code: 'recording-format-unavailable');
           }
           return null;
@@ -522,6 +523,46 @@ void main() {
       await tester.pumpAndSettle();
       expect(invokedMethods, contains('resume'));
       expect(find.text('录音格式：M4A'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'migrated AAC preference reports unavailability and allows choosing MP3',
+    (tester) async {
+      final store = _RecordingStoreSpy()..defaultFormat = RecordingFormat.aac;
+      permissionGranted = true;
+      mp3Available = true;
+      expectedStartFormat = RecordingFormat.aac;
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始录音'));
+      await tester.pumpAndSettle();
+      expect(find.text('无法开始 AAC 录音，请在设置中选择其他格式后重试'), findsOneWidget);
+      expect(store.defaultFormat, RecordingFormat.aac);
+      expect(find.text('开始录音'), findsOneWidget);
+      expect(invokedMethods.where((method) => method == 'start'), hasLength(1));
+      await tester.tap(find.byTooltip('更多'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ListTile>(find.byKey(const Key('chooseFormat-aac')))
+            .enabled,
+        isFalse,
+      );
+      await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expectedStartFormat = RecordingFormat.mp3;
+      await tester.tap(find.text('开始录音'));
+      await tester.pumpAndSettle();
+      expect(store.defaultFormat, RecordingFormat.mp3);
+      expect(invokedMethods.where((method) => method == 'start'), hasLength(2));
+      expect(find.text('录音格式：MP3'), findsOneWidget);
     },
   );
 

@@ -898,6 +898,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       });
       await widget.recordingService.start(format: format);
     } on PlatformException catch (error) {
+      final unavailableMessage = _status.format == RecordingFormat.aac
+          ? 'aacUnavailable'
+          : 'mp3Unavailable';
       if (mounted &&
           _status.state == RecordingLifecycleState.preparing &&
           _status.sessionId == null) {
@@ -905,7 +908,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       }
       _setServiceError(
         error.code == 'recording-format-unavailable'
-            ? 'mp3Unavailable'
+            ? unavailableMessage
             : nativeMessageCode(error.code, fallback: 'startFailed'),
       );
     } catch (_) {

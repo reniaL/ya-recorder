@@ -137,10 +137,10 @@ void main() {
   );
 
   test(
-    'fresh defaults to M4A; successful changes persist after reopening',
+    'fresh defaults to AAC; successful changes persist after reopening',
     () async {
-      expect(await store.getDefaultRecordingFormat(), RecordingFormat.m4a);
-      for (final format in [RecordingFormat.mp3, RecordingFormat.m4a]) {
+      expect(await store.getDefaultRecordingFormat(), RecordingFormat.aac);
+      for (final format in RecordingFormat.values) {
         await store.setDefaultRecordingFormat(format);
         await store.close();
         expect(await store.getDefaultRecordingFormat(), format);
@@ -172,7 +172,7 @@ void main() {
     'v3 migration preserves mixed index, folder order and original audio',
     () async {
       final folder = await store.createFolder(id: 'folder', name: '工作');
-      for (final format in RecordingFormat.values) {
+      for (final format in [RecordingFormat.m4a, RecordingFormat.mp3]) {
         final file = File(
           path.join(directory.path, 'audio.${format.extension}'),
         );
@@ -199,7 +199,7 @@ void main() {
       await db.setVersion(3);
       await store.close();
 
-      expect(await store.getDefaultRecordingFormat(), RecordingFormat.m4a);
+      expect(await store.getDefaultRecordingFormat(), RecordingFormat.aac);
       await store.setDefaultRecordingFormat(RecordingFormat.mp3);
       expect(
         (await store.listRecordings()).map((r) => r.toDatabaseMap()).toList(),
@@ -209,7 +209,7 @@ void main() {
         (await store.listFolders()).single.toDatabaseMap(),
         folder.toDatabaseMap(),
       );
-      for (final format in RecordingFormat.values) {
+      for (final format in [RecordingFormat.m4a, RecordingFormat.mp3]) {
         expect(
           await File(
             path.join(directory.path, 'audio.${format.extension}'),
@@ -217,7 +217,7 @@ void main() {
           [1, 2, 3],
         );
       }
-      expect(await (await database()).getVersion(), 6);
+      expect(await (await database()).getVersion(), 7);
     },
   );
 
