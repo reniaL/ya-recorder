@@ -1,6 +1,6 @@
 # AAC / ADTS 原生输出实现计划
 
-日期：2026-10-14。关联需求：[REC-08](../product/feature-list.md)。状态：第一至第五步代码已实现，第一步及端到端真机待验收；第六步自动化回归与普通 debug 构建已通过，真机验收待完成。实施证据见 [第一步](aac-adts-step1.md)、[第二步](aac-adts-step2.md)、[第三步](aac-adts-step3.md)、[第四步](aac-adts-step4.md)、[第五步](aac-adts-step5.md)与 [第六步记录](aac-adts-step6.md)，本计划不代表完整功能已验收。
+日期：2026-10-14。关联需求：[REC-08](../product/feature-list.md)。状态：六步实现及自动化回归已完成，用户确认 AAC 设置、录音、播放、分享等各项功能已在真机测试通过，REC-08 已完成。验收依据见 [用户真机反馈](../device-feedback.md#aac-功能验收确认2026-10-14)；未逐项提供的专项场景与测量不新增通过结论。实施证据见 [第一步](aac-adts-step1.md)、[第二步](aac-adts-step2.md)、[第三步](aac-adts-step3.md)、[第四步](aac-adts-step4.md)、[第五步](aac-adts-step5.md)与 [第六步记录](aac-adts-step6.md)。下文保留实施与验证范围。
 
 ## 目标与技术选择
 

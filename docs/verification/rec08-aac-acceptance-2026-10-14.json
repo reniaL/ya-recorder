@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-14",
+  "item": "REC-08",
+  "status": "completed based on user-reported device functional acceptance and existing automated regression",
+  "acceptanceSource": "User confirmation in this conversation",
+  "userStatement": "我已在真机上测试了aac相关的各个功能，包括功能设置、录音、播放、分享等，都没有问题。请更新相关的文档，并作一次提交。",
+  "explicitlyReportedFunctions": ["settings", "recording", "playback", "sharing"],
+  "deviceModel": null,
+  "androidVersion": null,
+  "testedApkHash": null,
+  "newSamplesOrMeasurementReports": false,
+  "existingAutomatedEvidence": "rec08-aac-step6-2026-10-14.json",
+  "historicalSnapshotsModified": false,
+  "additionalScenarioPassClaims": false,
+  "evidenceLimits": [
+    "No new ffprobe/FFmpeg sample verification report supplied",
+    "No measured seek error or recording duration supplied",
+    "No individual upgrade, interruption or index-failure device results supplied",
+    "No new 16 KB runtime or performance measurements supplied"
+  ],
+  "progressCounts": {"notStarted": 0, "inProgress": 2, "completed": 30, "blocked": 0},
+  "unrelatedItemsUnchanged": ["UX-06", "UX-07"],
+  "changeScope": "Documentation only; implementation and acceptance requirements unchanged"
+}
