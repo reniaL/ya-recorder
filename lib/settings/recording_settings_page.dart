@@ -389,7 +389,7 @@ class _FormatChooserState extends State<_FormatChooser> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(title: Text(l10n(context).defaultFormat)),
-              for (final format in RecordingFormat.values)
+              for (final format in [RecordingFormat.aac, RecordingFormat.mp3])
                 Semantics(
                   checked: widget.current == format,
                   inMutuallyExclusiveGroup: true,
@@ -402,7 +402,9 @@ class _FormatChooserState extends State<_FormatChooser> {
                     ),
                     title: Text(format.label),
                     subtitle: widget.available.contains(format)
-                        ? null
+                        ? format == RecordingFormat.aac
+                              ? Text(l10n(context).aacFormatDescription)
+                              : null
                         : Text(l10n(context).formatUnavailable(format.label)),
                     enabled: !_saving && widget.available.contains(format),
                     onTap: () => _select(format),

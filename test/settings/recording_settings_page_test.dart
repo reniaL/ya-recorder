@@ -125,7 +125,7 @@ void main() {
     'choosing MP3 persists immediately; reopening reads the preference',
     (tester) async {
       await open(tester);
-      expect(find.text('M4A'), findsOneWidget);
+      expect(find.text('AAC'), findsOneWidget);
       expect(find.text('用于下一次录音，已有录音保持原格式'), findsOneWidget);
       await choose(tester);
       await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
@@ -141,17 +141,14 @@ void main() {
   );
 
   testWidgets(
-    'native AAC capability enables AAC and keeps old M4A unavailable for new selection',
+    'native AAC capability enables AAC and hides old M4A for new selection',
     (tester) async {
+      store.format = RecordingFormat.m4a;
       service.available = [RecordingFormat.aac, RecordingFormat.mp3];
       await open(tester);
       await choose(tester);
-      expect(
-        tester
-            .widget<ListTile>(find.byKey(const Key('chooseFormat-m4a')))
-            .enabled,
-        isFalse,
-      );
+      expect(find.byKey(const Key('chooseFormat-m4a')), findsNothing);
+
       expect(
         tester
             .widget<ListTile>(find.byKey(const Key('chooseFormat-aac')))
@@ -171,7 +168,7 @@ void main() {
   testWidgets(
     'native gate disables MP3 while preserving an existing MP3 preference',
     (tester) async {
-      service.available = [RecordingFormat.m4a];
+      service.available = [RecordingFormat.aac];
       store.format = RecordingFormat.mp3;
       await open(tester);
       expect(find.text('MP3'), findsOneWidget);
@@ -182,9 +179,9 @@ void main() {
       await tester.tap(mp3);
       await tester.pumpAndSettle();
       expect(store.writes, 0);
-      await tester.tap(find.byKey(const Key('chooseFormat-m4a')));
+      await tester.tap(find.byKey(const Key('chooseFormat-aac')));
       await tester.pumpAndSettle();
-      expect(store.format, RecordingFormat.m4a);
+      expect(store.format, RecordingFormat.aac);
     },
   );
 
@@ -197,10 +194,10 @@ void main() {
     await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
     await tester.pumpAndSettle();
     expect(find.text('无法保存录音格式，请重试。'), findsOneWidget);
-    expect(store.format, RecordingFormat.m4a);
+    expect(store.format, RecordingFormat.aac);
     final semantics = tester.ensureSemantics();
     expect(
-      tester.getSemantics(find.byKey(const Key('chooseFormat-m4a'))),
+      tester.getSemantics(find.byKey(const Key('chooseFormat-aac'))),
       matchesSemantics(
         hasCheckedState: true,
         isChecked: true,
@@ -212,7 +209,7 @@ void main() {
         isFocusable: true,
         isButton: true,
         hasSelectedState: true,
-        label: 'M4A',
+        label: 'AAC\nADTS 文件，后缀 .aac',
       ),
     );
     semantics.dispose();
@@ -232,12 +229,12 @@ void main() {
     await choose(tester);
     await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('chooseFormat-m4a')));
+    await tester.tap(find.byKey(const Key('chooseFormat-aac')));
     await tester.tap(find.text('取消'));
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(store.writes, 1);
-    expect(store.format, RecordingFormat.m4a);
+    expect(store.format, RecordingFormat.aac);
     expect(find.text('正在保存'), findsOneWidget);
     gate.complete();
     await tester.pumpAndSettle();
@@ -256,7 +253,7 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await choose(tester);
-    await tester.tap(find.byKey(const Key('chooseFormat-m4a')));
+    await tester.tap(find.byKey(const Key('chooseFormat-aac')));
     await tester.pumpAndSettle();
     expect(store.writes, 0);
   });
@@ -320,13 +317,13 @@ void main() {
           tester
               .getSemantics(find.byKey(const Key('defaultRecordingFormat')))
               .value,
-          'M4A',
+          'AAC',
         );
         await choose(tester);
-        for (final format in RecordingFormat.values) {
+        for (final format in [RecordingFormat.aac, RecordingFormat.mp3]) {
           final row = find.byKey(Key('chooseFormat-${format.wireName}'));
           expect(tester.getSize(row).height, greaterThanOrEqualTo(48));
-          expect(tester.getSemantics(row).label, format.label);
+          expect(tester.getSemantics(row).label, contains(format.label));
         }
         expect(tester.takeException(), isNull);
         await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
@@ -374,7 +371,7 @@ class _Store extends RecordingStore {
     themeMode = mode;
   }
 
-  RecordingFormat format = RecordingFormat.m4a;
+  RecordingFormat format = RecordingFormat.aac;
   bool failRead = false;
   bool failWrite = false;
   int writes = 0;
@@ -404,7 +401,7 @@ class _Service extends RecordingService {
     language = code;
   }
 
-  List<RecordingFormat> available = RecordingFormat.values;
+  List<RecordingFormat> available = [RecordingFormat.aac, RecordingFormat.mp3];
   bool failRead = false;
   @override
   Future<List<RecordingFormat>> getAvailableFormats() async {

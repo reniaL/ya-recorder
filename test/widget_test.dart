@@ -587,7 +587,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始录音'));
     await tester.pumpAndSettle();
-    expect(find.text('无法开始 AAC 录音，请在设置中选择其他格式后重试'), findsOneWidget);
+    expect(find.text('无法开始 AAC 录音，请在设置中选择 MP3 后重试'), findsOneWidget);
     expect(store.defaultFormat, RecordingFormat.aac);
     expect(find.text('开始录音'), findsOneWidget);
     expect(invokedMethods.where((method) => method == 'start'), hasLength(1));
@@ -1719,38 +1719,46 @@ void main() {
     expect(sharePlatform.fileName, '播放进度测试.m4a');
   });
 
-  testWidgets('shares indexed MP3 using its format despite the M4A default', (
-    tester,
-  ) async {
-    final original = Recording(
-      id: 'mp3-share',
-      title: '访谈',
-      filePath: '/private/mp3-share.mp3',
-      format: RecordingFormat.mp3,
-      createdAt: DateTime.utc(2026, 10, 8),
-      duration: const Duration(seconds: 2),
-      fileSizeBytes: 32,
-      folderId: 'work',
+  for (final format in RecordingFormat.values) {
+    testWidgets(
+      'shares indexed ${format.label} using its format despite another default',
+      (tester) async {
+        final original = Recording(
+          id: 'mp3-share',
+          title: '访谈',
+          filePath: '/private/mixed-share.${format.extension}',
+          format: format,
+          createdAt: DateTime.utc(2026, 10, 8),
+          duration: const Duration(seconds: 2),
+          fileSizeBytes: 32,
+          folderId: 'work',
+        );
+        final defaultFormat = format == RecordingFormat.aac
+            ? RecordingFormat.mp3
+            : RecordingFormat.aac;
+        final store = _RecordingStoreSpy()
+          ..recordings = [original]
+          ..defaultFormat = defaultFormat;
+        final platform = _WidgetFakeAudioSharePlatform();
+        await tester.pumpWidget(
+          MyApp(
+            recordingStore: store,
+            audioShareService: AudioShareService(platform: platform),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('录音操作'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('分享'));
+        await tester.pumpAndSettle();
+        expect(platform.fileName, '访谈.${format.extension}');
+        expect(platform.format, format);
+        expect(platform.filePath, original.filePath);
+        expect(store.recordings.single, same(original));
+        expect(store.defaultFormat, defaultFormat);
+      },
     );
-    final store = _RecordingStoreSpy()..recordings = [original];
-    final platform = _WidgetFakeAudioSharePlatform();
-    await tester.pumpWidget(
-      MyApp(
-        recordingStore: store,
-        audioShareService: AudioShareService(platform: platform),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('录音操作'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('分享'));
-    await tester.pumpAndSettle();
-    expect(platform.fileName, '访谈.mp3');
-    expect(platform.format, RecordingFormat.mp3);
-    expect(platform.filePath, original.filePath);
-    expect(store.recordings.single, same(original));
-    expect(store.defaultFormat, RecordingFormat.m4a);
-  });
+  }
 
   testWidgets('moves a recording to recently deleted after confirmation', (
     WidgetTester tester,

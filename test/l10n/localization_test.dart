@@ -109,6 +109,14 @@ void main() {
           await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
           await tester.pumpAndSettle();
           expect(find.text('MP3'), findsOneWidget);
+          expect(find.text('AAC'), findsOneWidget);
+          expect(find.text(l10n(context).aacFormatDescription), findsOneWidget);
+          expect(find.byKey(const Key('chooseFormat-m4a')), findsNothing);
+          for (final format in [RecordingFormat.aac, RecordingFormat.mp3]) {
+            final row = find.byKey(Key('chooseFormat-${format.wireName}'));
+            expect(tester.getSize(row).height, greaterThanOrEqualTo(48));
+            expect(tester.getSemantics(row).label, contains(format.label));
+          }
           expect(tester.takeException(), isNull);
           semantics.dispose();
         },

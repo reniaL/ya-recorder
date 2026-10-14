@@ -845,8 +845,14 @@ abstract class AppLocalizations {
   /// No description provided for @aacUnavailable.
   ///
   /// In en, this message translates to:
-  /// **'AAC recording is unavailable. Choose another format in Settings and try again.'**
+  /// **'AAC recording is unavailable. Choose MP3 in Settings and try again.'**
   String get aacUnavailable;
+
+  /// No description provided for @aacFormatDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'ADTS file, .aac extension'**
+  String get aacFormatDescription;
 
   /// No description provided for @startFailed.
   ///

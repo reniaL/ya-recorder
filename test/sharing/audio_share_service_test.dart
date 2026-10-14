@@ -9,6 +9,34 @@ import 'package:ya_recorder/storage/models/recording.dart';
 
 void main() {
   test(
+    'AAC attachment names preserve titles and use the actual format',
+    () async {
+      final platform = _FakeAudioSharePlatform();
+      for (final entry in {
+        '': 'Recording.aac',
+        '访谈/问题:*?': '访谈_问题___.aac',
+        '已命名.AAC': '已命名.AAC',
+        '旧标题.m4a': '旧标题.m4a.aac',
+      }.entries) {
+        await AudioShareService(platform: platform).shareRecording(
+          Recording(
+            id: 'aac',
+            title: entry.key,
+            filePath: '/private/internal.aac',
+            format: RecordingFormat.aac,
+            createdAt: DateTime.utc(2026),
+            duration: const Duration(seconds: 1),
+            fileSizeBytes: 1,
+          ),
+        );
+        expect(platform.fileName, entry.value);
+        expect(platform.format, RecordingFormat.aac);
+        expect(platform.format!.mimeType, 'audio/aac');
+      }
+    },
+  );
+
+  test(
     'shares the completed M4A under its recording title without changing metadata',
     () async {
       final platform = _FakeAudioSharePlatform();

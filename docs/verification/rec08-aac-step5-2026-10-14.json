@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-14",
+  "item": "REC-08 step 5",
+  "status": "Settings, presentation and sharing implemented; device acceptance pending",
+  "flutterAnalyze": "passed; no issues",
+  "flutterTests": {
+    "fullSuite": false,
+    "passed": 117,
+    "failed": 0,
+    "files": [
+      "test/settings/recording_settings_page_test.dart",
+      "test/l10n/localization_test.dart",
+      "test/sharing/audio_share_service_test.dart",
+      "test/widget_test.dart"
+    ],
+    "coverage": [
+      "AAC/MP3 choices and hidden legacy M4A choice",
+      "Localized ADTS description, narrow screen, 2x text, light/dark themes and semantics",
+      "Preference failures, persistence, active AAC and legacy M4A session formats",
+      "Unavailable format guidance without automatic fallback",
+      "AAC title naming and three-format sharing independent of default preference",
+      "Per-format MIME, attachment cleanup and original-byte preservation"
+    ]
+  },
+  "androidJvmTests": "not run; no native or platform integration changes",
+  "apkBuild": "not run; settings presentation and localization only",
+  "deviceValidation": "not run; actual audio and system share receiver remain pending",
+  "schemaChanged": false,
+  "shareImplementationReused": true,
+  "remaining": [
+    "Step 1 real recording/playback gate",
+    "Step 6 final full regression, build and Android device acceptance"
+  ]
+}

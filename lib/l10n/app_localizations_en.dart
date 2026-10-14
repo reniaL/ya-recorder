@@ -400,7 +400,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aacUnavailable =>
-      'AAC recording is unavailable. Choose another format in Settings and try again.';
+      'AAC recording is unavailable. Choose MP3 in Settings and try again.';
+
+  @override
+  String get aacFormatDescription => 'ADTS file, .aac extension';
 
   @override
   String get startFailed => 'Couldn\'t start recording.';
