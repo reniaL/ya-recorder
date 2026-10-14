@@ -1,6 +1,6 @@
 # AAC / ADTS 原生输出实现计划
 
-日期：2026-10-12。关联需求：[REC-08](../product/feature-list.md)。状态：第一步工具、第二步格式/迁移与第三步共享原生后端已实现，第一步真机待验收；第四步以后未开始。实际证据见 [第一步记录](aac-adts-step1.md)、[第二步记录](aac-adts-step2.md)与 [第三步记录](aac-adts-step3.md)，本计划不代表完整功能已验收。
+日期：2026-10-14。关联需求：[REC-08](../product/feature-list.md)。状态：第一至第四步代码已实现，第一步及端到端真机待验收；第五步以后未开始。实施证据见 [第一步](aac-adts-step1.md)、[第二步](aac-adts-step2.md)、[第三步](aac-adts-step3.md)与 [第四步记录](aac-adts-step4.md)，本计划不代表完整功能已验收。
 
 ## 目标与技术选择
 

@@ -2,6 +2,8 @@
 
 日期：2026-10-12。共享后端和 AAC 录音能力已接入；第一步真实录音、听音和定位仍待真机。保存/恢复的 AAC 媒体验证适配留在第四步，不将本次构建或替身测试视为完整功能验收。
 
+后续状态（2026-10-14）：第四步已接入 AAC 保存/时长验证/恢复，见 [第四步记录](aac-adts-step4.md)。本文第四步未开始及 KEY_DURATION 待适配的描述保留第三步当时边界；真实音频和真机验收仍待完成。
+
 ## 后端与会话
 
 - `M4aRecordingBackend`、`M4aRecorder`、`AndroidM4aRecorder` 分别整理为 `AacRecordingBackend`、`AacRecorder`、`AndroidAacRecorder`，由固定的 `RecordingFormat` 选择封装。AAC 使用 `MediaRecorder.OutputFormat.AAC_ADTS`，旧 M4A 使用 `MPEG_4`；两者继续使用 MIC、AAC-LC、128 kbps、44.1 kHz 配置，声道策略保持。

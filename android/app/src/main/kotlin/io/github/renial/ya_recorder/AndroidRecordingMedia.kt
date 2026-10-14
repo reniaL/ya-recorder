@@ -11,8 +11,13 @@ import java.io.File
  * metadata or an extension alone cannot make a file eligible for the index.
  */
 internal object AndroidRecordingMedia {
-    fun validate(file: File, recordingFormat: RecordingFormat): Long {
+    data class DecodedAudio(val durationMs: Long, val sampleRate: Int, val channels: Int, val frames: Long)
+
+    fun validate(file: File, recordingFormat: RecordingFormat): Long = inspect(file, recordingFormat).durationMs
+
+    fun inspect(file: File, recordingFormat: RecordingFormat): DecodedAudio {
         check(file.isFile && file.length() > 0)
+        RecordingMediaValidation.validateContainer(file, recordingFormat)
         val extractor = MediaExtractor()
         var decoder: MediaCodec? = null
         try {
@@ -78,15 +83,10 @@ internal object AndroidRecordingMedia {
                     lastProgress = SystemClock.elapsedRealtime()
                 }
             }
-            val duration = frames * 1000 / rate
-            check(duration > 0) { "No decodable recording audio" }
-            if (format.containsKey(MediaFormat.KEY_DURATION)) {
-                val mediaDuration = format.getLong(MediaFormat.KEY_DURATION) / 1000
-                check(mediaDuration > 0 && kotlin.math.abs(duration - mediaDuration) <= 150) {
-                    "Decoded duration disagrees with media duration"
-                }
-            }
-            return duration
+            val mediaDuration = if (format.containsKey(MediaFormat.KEY_DURATION))
+                format.getLong(MediaFormat.KEY_DURATION) / 1000 else null
+            val duration = RecordingMediaValidation.decodedDurationMs(recordingFormat, frames, rate, mediaDuration)
+            return DecodedAudio(duration, rate, channels, frames)
         } finally {
             try { decoder?.release() } finally { extractor.release() }
         }

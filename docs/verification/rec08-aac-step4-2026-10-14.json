@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-14",
+  "item": "REC-08 step 4",
+  "status": "AAC save/validation/recovery adapter implemented; real-device acceptance pending",
+  "flutterAnalyze": "passed; no issues",
+  "flutterTests": {
+    "fullSuite": true,
+    "passed": 222,
+    "failed": 0,
+    "newTests": 3,
+    "coverage": [
+      "AAC index transaction precedes acknowledgement",
+      "Interrupted AAC retries failed indexing and lost acknowledgement idempotently",
+      "SQLite restart/replay preserves AAC duration, interrupted flag and user metadata"
+    ]
+  },
+  "androidJvmTests": {
+    "task": ":app:testDebugUnitTest --offline",
+    "passed": 94,
+    "failed": 0,
+    "newContainerAndDurationTests": 7,
+    "newAacSaveRecoveryTests": 6,
+    "syntheticAdtsPayloads": "framing fixtures only, not actual encoded audio",
+    "decoderDurationInProtocolTests": "simulated; no platform codec executed"
+  },
+  "artifacts": [
+    {
+      "path": "build/app/outputs/flutter-apk/app-debug.apk",
+      "applicationId": "io.github.renial.ya_recorder",
+      "bytes": 164827567,
+      "sha256": "38952a361ea6a6990b2df18cf8055a8b98f77f7a8b93e2e05dbb7db495d4744e"
+    },
+    {
+      "path": "build/aac-adts-probe/aac-adts-probe-debug.apk",
+      "applicationId": "io.github.renial.ya_recorder.aacprobe",
+      "bytes": 162942923,
+      "sha256": "19bf232bb99503379ffa77d27c0ec21560f100b262a29ab33534c8afada7900c"
+    }
+  ],
+  "validation": {
+    "aacDuration": "PCM decoded frames / sample rate; metadata duration ignored",
+    "aacContainer": "Read-only complete ADTS frame boundary validation; AAC-LC at 44100 Hz",
+    "m4aContainer": "Native MP4 ftyp header plus existing complete decode",
+    "m4aMp3MetadataDurationCheck": "unchanged; 150 ms tolerance",
+    "mp3SampleDurationCheck": "unchanged",
+    "aacTailRepair": false,
+    "originalAudioMutatedByValidation": false,
+    "sharedProbeDecoder": true,
+    "saveProtocolReused": true,
+    "schemaVersion": 7,
+    "schemaChanged": false
+  },
+  "deviceEvidence": {
+    "adbDevices": [],
+    "actualAacSample": null,
+    "platformFullDecode": "not verified",
+    "interruptRecovery": "not verified",
+    "listeningAndSeeking": "not verified"
+  },
+  "sourceChecks": [
+    "AOSP AACWriter ADTS header structure",
+    "AOSP MPEG4Writer initial ftyp box"
+  ],
+  "remaining": [
+    "Step 5: settings/presentation/sharing",
+    "Step 6 and step 1 gate: actual recording, decoding, interruption, listening, seek and upgrade acceptance"
+  ],
+  "environment": "Required existing SDK/Gradle caches outside workspace; checks run with approved tool escalation"
+}

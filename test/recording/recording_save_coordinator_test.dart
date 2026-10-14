@@ -38,16 +38,20 @@ void main() {
   });
   tearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-  SavedNativeRecording ready(String id, {String? filePath}) =>
-      SavedNativeRecording(
-        id: id,
-        filePath: filePath ?? '/private/$id.mp3',
-        createdAt: DateTime.utc(2026, 10, 8),
-        duration: const Duration(seconds: 3),
-        fileSizeBytes: 128,
-        wasInterrupted: false,
-        format: RecordingFormat.mp3,
-      );
+  SavedNativeRecording ready(
+    String id, {
+    String? filePath,
+    RecordingFormat format = RecordingFormat.mp3,
+    bool wasInterrupted = false,
+  }) => SavedNativeRecording(
+    id: id,
+    filePath: filePath ?? '/private/$id.${format.extension}',
+    createdAt: DateTime.utc(2026, 10, 8),
+    duration: const Duration(seconds: 3),
+    fileSizeBytes: 128,
+    wasInterrupted: wasInterrupted,
+    format: format,
+  );
 
   test('acknowledges only after a committed index transaction', () async {
     final gate = Completer<void>();
@@ -61,6 +65,54 @@ void main() {
     expect(result.acknowledgementPending, isFalse);
     expect(trace, ['insert:one', 'committed:one', 'acknowledgeRecording:one']);
   });
+
+  test(
+    'AAC is acknowledged only after its index transaction commits',
+    () async {
+      final gate = Completer<void>();
+      store.gate = gate.future;
+      final pending = coordinator.commit(
+        ready('aac-one', format: RecordingFormat.aac),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(trace, ['insert:aac-one']);
+      expect(store.rows, isEmpty);
+      gate.complete();
+      expect((await pending).inserted, isTrue);
+      expect(store.rows.single.format, RecordingFormat.aac);
+      expect(store.rows.single.filePath, '/private/aac-one.aac');
+      expect(trace, [
+        'insert:aac-one',
+        'committed:aac-one',
+        'acknowledgeRecording:aac-one',
+      ]);
+    },
+  );
+
+  test(
+    'interrupted AAC survives failed indexing and lost acknowledgement without duplicate rows',
+    () async {
+      final result = ready(
+        'aac-one',
+        format: RecordingFormat.aac,
+        wasInterrupted: true,
+      );
+      store.fail = true;
+      await expectLater(coordinator.commit(result), throwsStateError);
+      expect(trace, ['insert:aac-one', 'deferRecording:aac-one']);
+      expect(store.rows, isEmpty);
+      store.fail = false;
+      failAcknowledgement = true;
+      expect((await coordinator.commit(result)).acknowledgementPending, isTrue);
+      expect(store.rows.single.wasInterrupted, isTrue);
+      expect(store.rows.single.format, RecordingFormat.aac);
+      failAcknowledgement = false;
+      final replay = await coordinator.commit(result);
+      expect(replay.inserted, isFalse);
+      expect(replay.acknowledgementPending, isFalse);
+      expect(store.rows, hasLength(1));
+    },
+  );
 
   test('live and recovery duplicates share one in-flight commit', () async {
     final first = coordinator.commit(ready('one'));

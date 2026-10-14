@@ -136,4 +136,40 @@ void main() {
     await db.execute('DROP TRIGGER fail_commit');
     expect(await store.commitNativeRecording(recording), isTrue);
   });
+
+  test(
+    'interrupted AAC commits once and preserves user metadata on replay after restart',
+    () async {
+      final file = File(path.join(root.path, 'recovered.aac'));
+      await file.writeAsBytes([1, 2, 3]);
+      final aac = Recording(
+        id: 'aac',
+        title: 'Recovered AAC',
+        filePath: file.path,
+        createdAt: DateTime.utc(2026, 10, 14),
+        duration: const Duration(milliseconds: 3041),
+        fileSizeBytes: 3,
+        format: RecordingFormat.aac,
+        wasInterrupted: true,
+      );
+      expect(await store.commitNativeRecording(aac), isTrue);
+      await store.createFolder(id: 'aac-folder', name: 'AAC');
+      await store.renameRecording(recordingId: 'aac', title: 'User title');
+      await store.moveRecording(recordingId: 'aac', folderId: 'aac-folder');
+      await store.softDeleteRecording(
+        recordingId: 'aac',
+        deletedAt: DateTime.utc(2026, 10, 14),
+      );
+      await store.close();
+      await store.open();
+      expect(await store.commitNativeRecording(aac), isFalse);
+      final row = (await store.listRecentlyDeleted()).single;
+      expect(row.format, RecordingFormat.aac);
+      expect(row.duration, const Duration(milliseconds: 3041));
+      expect(row.wasInterrupted, isTrue);
+      expect(row.title, 'User title');
+      expect(row.folderId, 'aac-folder');
+      expect(await file.readAsBytes(), [1, 2, 3]);
+    },
+  );
 }
