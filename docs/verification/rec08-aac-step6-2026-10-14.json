@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-14",
+  "item": "REC-08 step 6",
+  "sourceCommit": "0b9b23f",
+  "status": "Final automated regression passed; device acceptance pending",
+  "productionCodeChanged": false,
+  "flutterAnalyze": "passed; no issues",
+  "flutterTests": {"fullSuite": true, "passed": 225, "failed": 0},
+  "androidJvmTests": {
+    "task": ":app:testDebugUnitTest --offline",
+    "tests": 94,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "evidence": "build/app/test-results/testDebugUnitTest/TEST-*.xml"
+  },
+  "apkBuild": "flutter build apk --debug --no-pub; passed",
+  "artifact": {
+    "path": "build/rec08-aac-step6/ya-recorder-aac-debug.apk",
+    "bytes": 188330512,
+    "sha256": "efd4435c65a44897d476237908061e258bb156b231e3a88e925c2943173060b9",
+    "applicationId": "io.github.renial.ya_recorder",
+    "versionName": "1.0.0",
+    "versionCode": 1,
+    "mainActivityEnabled": true,
+    "probeActivityEnabled": false,
+    "zipalign": "passed; -c -P 16 -v 4",
+    "elfAlignmentRechecked": false,
+    "device16kbRuntimeVerified": false
+  },
+  "playback": {
+    "justAudioVersion": "0.10.6",
+    "constantBitrateSeekingEnabled": true,
+    "constantBitrateSeekingAlwaysEnabled": false,
+    "evidence": "Locked dependency source defaults and Android extractor parameter forwarding",
+    "actualSeekAccuracy": "not measured"
+  },
+  "deviceEvidence": {
+    "adbDevices": [],
+    "installed": false,
+    "actualAacSample": null,
+    "platformDecode": "not verified",
+    "ffmpegDecode": "not run; no device sample",
+    "listening": "pending",
+    "upgradeAndRecovery": "pending",
+    "systemShareReceiver": "pending"
+  },
+  "remaining": "Step 1 real recording/playback gate and step 6 device checklist in docs/architecture/aac-adts-step6.md",
+  "environment": "Existing SDK and Gradle caches accessed with approved escalation; no cache clean or dependency upgrades"
+}
