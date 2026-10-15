@@ -27,6 +27,12 @@ class BackupTransferSnapshot {
       processedBytes = map['processedBytes']! as int,
       stagedPath = map['stagedPath']! as String,
       error = map['error'] as String?,
+      errorDetail = map['errorDetail'] as String?,
+      stage = map['stage'] as String?,
+      exportCommitted = map['kind'] == 'export' && map['accepted'] == true,
+      cachedArchivePath = map['cachedArchivePath'] as String?,
+      retainedUntilMs = map['retainedUntilMs'] as int?,
+      processedRecordings = map['processedRecordings'] as int? ?? 0,
       totalBytes = map['totalBytes'] as int?,
       cancelRequested = map['cancelRequested'] == true,
       residualUri = map['residualUri'] as String?,
@@ -38,6 +44,12 @@ class BackupTransferSnapshot {
   final int processedBytes;
   final String stagedPath;
   final String? error;
+  final String? errorDetail;
+  final String? stage;
+  final bool exportCommitted;
+  final String? cachedArchivePath;
+  final int? retainedUntilMs;
+  final int processedRecordings;
   final int? totalBytes;
   final bool cancelRequested;
   final String? residualUri;
@@ -51,6 +63,7 @@ class BackupTransferException implements Exception {
   @override
   String toString() =>
       'BackupTransferException: ${snapshot.error ?? snapshot.status}'
+      '${snapshot.errorDetail == null ? '' : '; ${snapshot.errorDetail}'}'
       '${snapshot.residualUri == null ? '' : '; residual: ${snapshot.residualUri}'}';
 }
 
@@ -110,13 +123,16 @@ class BackupDocumentService {
     // never treated as a usable backup, and native admission rejects a new job.
   }
 
-  /// Platform probe/future transport adapter, not a ZIP import/export operation.
+  /// Owns the lease and transport lifecycle. [createExportRequest] switches to
+  /// the native complete-export worker; otherwise this only copies a document.
   /// Select the document first, so picker cancellation never acquires the gate.
   Future<T> copy<T>({
     required RecordingService recordingService,
     required BackupDocument document,
     required bool write,
     Future<void> Function(String stagedPath)? prepareOutput,
+    Future<Map<String, Object?>> Function(BackupLease lease)?
+    createExportRequest,
     required Future<T> Function(BackupTransferSnapshot value) consume,
   }) async {
     final prepared = await _call('prepare', {
@@ -131,12 +147,14 @@ class BackupDocumentService {
         action: (lease) async {
           admitted = true;
           try {
+            final export = await createExportRequest?.call(lease);
             await prepareOutput?.call(prepared.stagedPath);
             lease.checkCancelled();
-            await _call('startCopy', {
+            await _call(export == null ? 'startCopy' : 'startExport', {
               'taskId': prepared.taskId,
               'direction': write ? 'write' : 'read',
               'uri': document.uri,
+              'export': ?export,
             });
             var lastSequence = -1;
             var cancelled = false;
@@ -162,12 +180,18 @@ class BackupDocumentService {
                     operation: lease.operation,
                     stage: cancelled || value.cancelRequested
                         ? BackupStage.cancelling
+                        : value.stage == 'preparing'
+                        ? BackupStage.preparing
+                        : value.stage == 'packing'
+                        ? BackupStage.packing
+                        : value.stage == 'verifying'
+                        ? BackupStage.verifying
                         : write
                         ? BackupStage.saving
                         : BackupStage.checking,
                     processedBytes: value.processedBytes,
                     totalBytes: value.totalBytes,
-                    processedRecordings: 0,
+                    processedRecordings: value.processedRecordings,
                   ),
                 );
               }
@@ -178,12 +202,14 @@ class BackupDocumentService {
                 if (value.status != 'completed') {
                   throw BackupTransferException(value);
                 }
-                lease.checkCancelled();
+                if (!value.exportCommitted) lease.checkCancelled();
                 final result = await consume(value);
-                lease.checkCancelled();
-                await _commands.invokeMethod<void>('accept', {
-                  'taskId': lease.taskId,
-                });
+                if (!value.exportCommitted) {
+                  lease.checkCancelled();
+                  await _commands.invokeMethod<void>('accept', {
+                    'taskId': lease.taskId,
+                  });
+                }
                 return result;
               }
               await Future<void>.delayed(pollInterval);
@@ -214,7 +240,8 @@ class BackupDocumentService {
       } while (value!.isRunning);
     }
     final cleaned = await release(id);
-    if (cleaned.cleanupPending || cleaned.residualUri != null) {
+    if (cleaned.cleanupPending && !cleaned.exportCommitted ||
+        cleaned.residualUri != null) {
       throw BackupTransferException(cleaned);
     }
   }

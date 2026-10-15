@@ -6,4 +6,7 @@
     <string name="backup_reading">Reading backup · %1$d KB</string>
     <string name="backup_writing">Saving backup · %1$d KB</string>
     <string name="backup_cancel">Cancel</string>
+    <string name="backup_preparing">Checking recordings · %1$d KB</string>
+    <string name="backup_packing">Packing backup · %1$d KB</string>
+    <string name="backup_verifying">Verifying backup · %1$d KB</string>
 </resources>

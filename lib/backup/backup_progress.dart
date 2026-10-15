@@ -5,6 +5,7 @@ enum BackupStage {
   checking,
   awaitingConfirmation,
   packing,
+  verifying,
   saving,
   importing,
   committing,

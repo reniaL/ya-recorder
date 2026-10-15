@@ -21,9 +21,11 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
     private var started = false
     private var cleaning = false
     private var lastProgress = 0L
+    private var exportJob: BackupExportJob? = null
     @Volatile var onChanged: (() -> Unit)? = null
 
     init {
+        worker.execute { pruneExpiredExports() }
         if (journal.baseFile.exists()) {
             state = JSONObject(journal.openRead().use { it.readBytes().toString(Charsets.UTF_8) }).let { json ->
                 json.keys().asSequence().associateWith { key -> json.get(key).let { if (it == JSONObject.NULL) null else it } }.toMutableMap()
@@ -34,7 +36,7 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
                 state!!["error"] = "process-interrupted"
                 persist()
                 executing = true
-                worker.execute { try { cleanupInterrupted() } finally { synchronized(this) { executing = false } } }
+                worker.execute { try { cleanupAfterFailure(state!!["taskId"] as String, markReleased = true) } finally { synchronized(this) { executing = false } } }
             }
         }
     }
@@ -53,6 +55,7 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
             "directory" to directory.path, "stagedPath" to File(directory, "payload.zip").path,
             "uri" to uri, "direction" to direction)
         persist()
+        worker.execute { pruneExpiredExports() }
         return state!!.toMap()
     }
 
@@ -66,6 +69,21 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         if (direction == "write") state!!["totalBytes"] = File(state!!["stagedPath"] as String).length()
         state!!["direction"] = direction
         state!!["uri"] = uri
+        state!!["status"] = "running"
+        cancelReason = null
+        executing = true
+        started = false
+        persist()
+    }
+
+    @Synchronized fun reserveExport(id: String, job: BackupExportJob) {
+        requireCurrent(id)
+        check(state!!["status"] == "prepared" && state!!["direction"] == "write" && !executing)
+        exportJob = job
+        state!!["kind"] = "export"
+        state!!["recordingCount"] = job.sources.size
+        state!!["folderCount"] = job.folderCount
+        state!!["stage"] = "preparing"
         state!!["status"] = "running"
         cancelReason = null
         executing = true
@@ -91,6 +109,15 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
                 val uri = Uri.parse(task["uri"] as String)
                 val file = File(task["stagedPath"] as String)
                 val resolver = context.contentResolver
+                if (task["kind"] == "export") {
+                    val job = synchronized(this) { requireNotNull(exportJob) }
+                    val size = BackupZipExporter.create(file, job.sources, job.metadata, job.createdAt, job.folderCount,
+                        { synchronized(this) { cancelReason != null } }, { progress ->
+                            reportProgress(id, progress.stage, progress.bytes, progress.total, progress.recordings)
+                        })
+                    reportProgress(id, "saving", 0, size, 0)
+                    synchronized(this) { state!!["archiveVerified"] = true; persist() }
+                }
                 if (task["direction"] == "read") {
                     (resolver.openInputStream(uri) ?: error("source-open-failed")).use { input ->
                         file.outputStream().use { output -> transfer(id, input, output) }
@@ -106,16 +133,29 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
                 }
                 synchronized(this) {
                     if (cancelReason != null) throw CancellationException()
+                    if (task["kind"] == "export") {
+                        // Fully verified archive + successful provider close is the
+                        // authority even if the Flutter engine disappeared meanwhile.
+                        state!!["accepted"] = true
+                        state!!["cachedArchivePath"] = file.path
+                        state!!["retainedUntilMs"] = System.currentTimeMillis() + RETAIN_MILLIS
+                    }
                     update("completed", null)
                 } // Includes successful close, not just flush.
             } catch (error: Exception) {
                 synchronized(this) {
                     val reason = cancelReason
-                    update(if (reason == "cancelled") "cancelled" else "failed", reason ?: "document-io-failed")
+                    state!!["accepted"] = false
+                    state!!["cachedArchivePath"] = null
+                    state!!["retainedUntilMs"] = 0L
+                    state!!["errorDetail"] = error.message
+                    // Disk-full may also prevent journaling. Keep in-memory failure,
+                    // free our artifacts, then retry persistence during cleanup.
+                    runCatching { update(if (reason == "cancelled") "cancelled" else "failed", reason ?: if (error is SecurityException) "document-permission-denied" else "backup-export-or-io-failed") }
                 }
-                cleanupFiles(id, deleteTarget = true)
+                cleanupAfterFailure(id)
             } finally {
-                synchronized(this) { executing = false }
+                synchronized(this) { executing = false; exportJob = null }
                 onChanged?.invoke()
                 finished()
             }
@@ -124,24 +164,32 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
 
     private fun transfer(id: String, input: java.io.InputStream, output: java.io.OutputStream) {
         BackupStreamCopy.copy(input, output, { synchronized(this) { cancelReason != null } }, { bytes ->
-            val now = System.nanoTime()
-            synchronized(this) {
-                requireCurrent(id)
-                state!!["processedBytes"] = bytes
-                if (now - lastProgress >= 250_000_000L) {
-                    lastProgress = now
-                    state!!["sequence"] = (state!!["sequence"] as Number).toLong() + 1
-                    onChanged?.invoke()
-                }
-            }
+            val snapshot = snapshot()!!
+            reportProgress(id, snapshot["stage"] as? String ?: if (snapshot["direction"] == "read") "checking" else "saving",
+                bytes, (snapshot["totalBytes"] as? Number)?.toLong(), 0)
         })
     }
 
-    @Synchronized fun startFailed(id: String) {
+    @Synchronized private fun reportProgress(id: String, stage: String, bytes: Long, total: Long?, recordings: Int) {
         requireCurrent(id)
-        update("failed", "service-start-failed")
+        val stageChanged = state!!["stage"] != stage
+        state!!["stage"] = stage
+        state!!["processedBytes"] = bytes
+        state!!["totalBytes"] = total
+        state!!["processedRecordings"] = recordings
+        val now = System.nanoTime()
+        if (stageChanged || now - lastProgress >= 250_000_000L || bytes == total) {
+            lastProgress = now
+            state!!["sequence"] = (state!!["sequence"] as Number).toLong() + 1
+            onChanged?.invoke()
+        }
+    }
+
+    @Synchronized fun startFailed(id: String) {
+        if (state?.get("taskId") != id || state?.get("status") != "running") return
+        runCatching { update("failed", "service-start-failed") }
         worker.execute {
-            try { cleanupFiles(id, deleteTarget = true) }
+            try { cleanupAfterFailure(id) }
             finally { synchronized(this) { executing = false }; onChanged?.invoke() }
         }
     }
@@ -163,11 +211,32 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
                 synchronized(this) { requireCurrent(id); check(!executing && state!!["status"] != "running") }
                 cleanupFiles(id, deleteTarget = synchronized(this) { state?.get("accepted") != true }, markReleased = true)
                 done(null)
-            } catch (error: Exception) { done(error) }
+            } catch (error: Exception) {
+                val committed = synchronized(this) {
+                    if (state?.get("taskId") == id && state?.get("kind") == "export" && state?.get("accepted") == true) {
+                        state!!["cleanupPending"] = true
+                        state!!["cleanupError"] = error.message
+                        runCatching { persist() }
+                        true
+                    } else false
+                }
+                done(if (committed) null else error)
+            }
         }
     }
 
-    private fun cleanupInterrupted() { cleanupFiles(snapshot()!!["taskId"] as String, deleteTarget = true, markReleased = true); onChanged?.invoke() }
+    private fun cleanupAfterFailure(id: String, markReleased: Boolean = false) {
+        try { cleanupFiles(id, deleteTarget = true, markReleased = markReleased) }
+        catch (error: Exception) {
+            synchronized(this) {
+                if (state?.get("taskId") != id) return
+                state!!["cleanupPending"] = true
+                state!!["cleanupError"] = error.message
+                if (state!!["direction"] == "write" && state!!["targetRemoved"] != true) state!!["residualUri"] = state!!["uri"]
+                runCatching { persist() }
+            }
+        }
+    }
 
     private fun cleanupFiles(taskId: String, deleteTarget: Boolean, markReleased: Boolean = false) {
         val task = synchronized(this) {
@@ -184,7 +253,15 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
             }
             // Derive ownership from UUID, never trust a persisted arbitrary filesystem path.
             val id = UUID.fromString(task["taskId"] as String).toString()
-            task["cleanupPending"] = !File(root, id).let { !it.exists() || it.deleteRecursively() }
+            val directory = File(root, id)
+            val retainedUntil = (task["retainedUntilMs"] as? Number)?.toLong() ?: 0
+            if (task["accepted"] == true && task["kind"] == "export" && retainedUntil > System.currentTimeMillis()) {
+                File(directory, ".retain-until").writeText(retainedUntil.toString())
+                task["cleanupPending"] = false
+            } else {
+                task["cleanupPending"] = !directory.let { !it.exists() || it.deleteRecursively() }
+                task["cachedArchivePath"] = null
+            }
             if (task["status"] == "prepared") task["status"] = "cancelled"
             if (markReleased) task["released"] = true
             task["sequence"] = (task["sequence"] as Number).toLong() + 1
@@ -209,7 +286,28 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         catch (error: Exception) { journal.failWrite(stream); throw error }
     }
 
+    private fun pruneExpiredExports() {
+        for (directory in root.listFiles().orEmpty()) {
+            try {
+            if (!directory.isDirectory || runCatching { UUID.fromString(directory.name).toString() }.getOrNull() != directory.name) continue
+            val marker = File(directory, ".retain-until")
+            val expires = runCatching { marker.readText().toLong() }.getOrNull() ?: continue
+            if (expires <= System.currentTimeMillis()) {
+                val payload = File(directory, "payload.zip")
+                // Keep the receipt when a share consumer still holds the file.
+                if (!payload.exists() || payload.delete()) {
+                    if (directory.listFiles().orEmpty().all { it.name == marker.name }) {
+                        marker.delete()
+                        if (!directory.delete() && directory.exists()) marker.writeText(expires.toString())
+                    }
+                }
+            }
+            } catch (_: Exception) { /* Preserve receipt and retry on next prepare/startup. */ }
+        }
+    }
+
     companion object {
+        private const val RETAIN_MILLIS = 24 * 60 * 60 * 1000L
         @Volatile private var instance: BackupTaskRuntime? = null
         fun get(context: Context): BackupTaskRuntime = instance ?: synchronized(this) {
             instance ?: BackupTaskRuntime(context.applicationContext).also { instance = it }

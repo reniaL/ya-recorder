@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.net.Uri
 
 /** Owns real streaming work, not an empty foreground lifetime around Activity IO. */
 class BackupTaskService : Service() {
@@ -31,6 +32,11 @@ class BackupTaskService : Service() {
             return START_NOT_STICKY
         }
         if (taskId != null) return START_NOT_STICKY
+        val current = runtime.snapshot()
+        if (current?.get("taskId") != id || current["status"] != "running") {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         taskId = id
         try {
             val notification = notification()
@@ -60,15 +66,22 @@ class BackupTaskService : Service() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val cancel = PendingIntent.getService(this, 82,
-            Intent(this, BackupTaskService::class.java).setAction("cancel").putExtra("taskId", taskId),
+            Intent(this, BackupTaskService::class.java).setAction("cancel")
+                .setData(Uri.parse("ya-backup://cancel/$taskId")).putExtra("taskId", taskId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val snapshot = runtime.snapshot()
         val bytes = (snapshot?.get("processedBytes") as? Number)?.toLong() ?: 0
         val total = (snapshot?.get("totalBytes") as? Number)?.toLong() ?: 0
         val reading = snapshot?.get("direction") == "read"
+        val text = when (snapshot?.get("stage")) {
+            "preparing" -> R.string.backup_preparing
+            "packing" -> R.string.backup_packing
+            "verifying" -> R.string.backup_verifying
+            else -> if (reading) R.string.backup_reading else R.string.backup_writing
+        }
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this)
         return builder.setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle(title)
-            .setContentText(localized.getString(if (reading) R.string.backup_reading else R.string.backup_writing, bytes / 1024))
+            .setContentText(localized.getString(text, bytes / 1024))
             .setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true)
             .setProgress(if (total > 0) 1000 else 0, if (total > 0) ((bytes * 1000) / total).coerceIn(0, 1000).toInt() else 0, total <= 0)
             .addAction(Notification.Action.Builder(null, localized.getString(R.string.backup_cancel), cancel).build()).build()

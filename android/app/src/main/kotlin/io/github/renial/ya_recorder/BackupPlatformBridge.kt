@@ -42,10 +42,11 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
                 }
                 "prepare" -> result.success(runtime.prepare(requireNotNull(call.argument<String>("uri")), requireNotNull(call.argument<String>("direction"))))
                 "snapshot" -> result.success(runtime.snapshot())
-                "startCopy" -> {
+                "startCopy", "startExport" -> {
                     check(activity.hasWindowFocus() && !activity.isFinishing) { "foreground-required" }
                     val id = requireNotNull(call.argument<String>("taskId"))
-                    runtime.reserve(id, requireNotNull(call.argument<String>("direction")), requireNotNull(call.argument<String>("uri")))
+                    if (call.method == "startExport") runtime.reserveExport(id, BackupExportJob.fromMap(requireNotNull(call.argument<Map<*, *>>("export"))))
+                    else runtime.reserve(id, requireNotNull(call.argument<String>("direction")), requireNotNull(call.argument<String>("uri")))
                     try {
                         val intent = Intent(activity, BackupTaskService::class.java).putExtra("taskId", id)
                         if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent) else activity.startService(intent)

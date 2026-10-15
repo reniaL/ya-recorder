@@ -6,4 +6,7 @@
     <string name="backup_reading">正在读取备份 · %1$d KB</string>
     <string name="backup_writing">正在保存备份 · %1$d KB</string>
     <string name="backup_cancel">取消</string>
+    <string name="backup_preparing">正在检查录音 · %1$d KB</string>
+    <string name="backup_packing">正在打包备份 · %1$d KB</string>
+    <string name="backup_verifying">正在复核备份 · %1$d KB</string>
 </resources>

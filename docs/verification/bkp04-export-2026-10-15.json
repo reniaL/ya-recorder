@@ -1,0 +1,85 @@
+{
+    "date":  "2026-10-15",
+    "work_item":  "BKP-04",
+    "base_commit":  "fecde24",
+    "status":  "in_progress",
+    "implementation_complete":  true,
+    "checks":  {
+                   "flutter_analyze_no_pub":  {
+                                                  "result":  "passed, no issues",
+                                                  "log":  "build/bkp04-analysis.log"
+                                              },
+                   "flutter_test_no_pub":  {
+                                               "result":  "passed",
+                                               "tests":  292,
+                                               "log":  "build/bkp04-flutter-tests.log"
+                                           },
+                   "final_export_tests":  {
+                                              "result":  "passed",
+                                              "tests":  8,
+                                              "log":  "build/bkp04-export-tests.log",
+                                              "note":  "Added cleanup-warning assertion after full regression; production Dart code unchanged."
+                                          },
+                   "android_jvm":  {
+                                       "result":  "passed",
+                                       "errors":  0,
+                                       "tests":  114,
+                                       "log":  "build/bkp04-jvm.log",
+                                       "failures":  0
+                                   },
+                   "android_debug_apk":  {
+                                             "path":  "build/app/outputs/flutter-apk/app-debug.apk",
+                                             "result":  "passed",
+                                             "sha256":  "aef300385c0efd3f966d98560a83b09d02bbc0b810cda4d45aab81709f898a3b",
+                                             "log":  "build/bkp04-build.log"
+                                         },
+                   "independent_archive_verification":  {
+                                                            "artifacts":  [
+                                                                              {
+                                                                                  "path":  "build/bkp04-native-samples/mixed.zip",
+                                                                                  "bytes":  2364,
+                                                                                  "sha256":  "4fc360dcd0fc9d803bce9a58615b8f872ecdd7bf025a10d3d85b9a99a79ec65d"
+                                                                              },
+                                                                              {
+                                                                                  "path":  "build/bkp04-native-samples/empty.zip",
+                                                                                  "bytes":  772,
+                                                                                  "sha256":  "bf8c8be1e94f5122b3ce906369f4f8ff517e8f14a2121f88eab1e418f6240cca"
+                                                                              }
+                                                                          ],
+                                                            "result":  "passed, both native-generated ZIPs satisfy Dart v1 contract and all SHA-256 values",
+                                                            "synthetic_media":  true,
+                                                            "log":  "build/bkp04-independent-verification.log",
+                                                            "command":  "dart run tool/verify_backup_export.dart build/bkp04-native-samples/mixed.zip build/bkp04-native-samples/empty.zip"
+                                                        },
+                   "adb_devices":  "no connected devices",
+                   "diff_check":  "passed"
+               },
+    "added_tests":  {
+                        "android_jvm":  9,
+                        "flutter":  8
+                    },
+    "implemented":  [
+                        "Protected SQLite snapshot excludes recently deleted, drafts and settings; preserves folders, IDs and AAC/MP3/M4A",
+                        "Native foreground worker hashes/CRCs sources, writes STORE ZIP and rereads every entry before provider output",
+                        "Source size/extension checks and second-pass digest comparison reject missing or changing input",
+                        "Separate preparing/packing/verifying/saving byte progress; cancellation at chunk boundaries",
+                        "Long-size conservative space estimates and private-volume preflight, unknown provider capacity",
+                        "Native durable success only after verification and successful target stream close; late cancellation does not undo success",
+                        "Failure/partial-target cleanup with residual URI, disk-full journal/cleanup retry behavior",
+                        "24-hour private archive retention with expiry receipts for future share flow"
+                    ],
+    "coverage_limits":  [
+                            "JVM tests execute native ZIP worker and filesystem operations, not Android Service/ContentResolver/AtomicFile lifecycle",
+                            "Independent artifacts contain synthetic byte payloads, not playable media acceptance samples",
+                            "5 GiB arithmetic tested; no actual archive larger than 4 GiB generated or read",
+                            "No production settings entry or share UI; import/merge/SQLite commit marker remain BKP-05/06",
+                            "Independent archive verifier is a developer tool for controlled artifacts, not an untrusted-ZIP import adapter"
+                        ],
+    "pending":  [
+                    "Actual document provider write/close failures, source/target permission loss and destination storage exhaustion",
+                    "Background, lock screen, notification cancellation, Activity/Engine recreation and process termination/restart",
+                    "Real large recording libraries and ZIP64 archives exceeding 4 GiB on supported Android systems",
+                    "Playback of exported three-format media and delayed-reading share consumers",
+                    "BKP-05 merge import and crash-safe database commit recovery"
+                ]
+}
