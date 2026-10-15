@@ -1806,6 +1806,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(recordingStore.folders.single.name, 'Interviews');
+      expect(
+        recordingStore.folders.single.id,
+        matches(RegExp(
+          r'^folder-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        )),
+      );
       expect(find.text('Interviews'), findsOneWidget);
     },
   );

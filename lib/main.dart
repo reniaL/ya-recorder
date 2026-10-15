@@ -15,6 +15,7 @@ import 'sharing/audio_share_service.dart';
 import 'settings/recording_settings_page.dart';
 import 'settings/app_language.dart';
 import 'storage/app_storage_paths.dart';
+import 'storage/folder_id.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
 import 'storage/recently_deleted_page.dart';
@@ -803,10 +804,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               (await _getRecordingStore()).listRecordings(folderId: folderId),
           createFolder: (name) async {
             final store = await _getRecordingStore();
-            return store.createFolder(
-              id: 'folder-${DateTime.now().microsecondsSinceEpoch}',
-              name: name,
-            );
+            return store.createFolder(id: newFolderId(), name: name);
           },
           renameFolder: (folderId, name) async {
             await (await _getRecordingStore()).renameFolder(

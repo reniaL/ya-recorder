@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-15",
+  "work_item": "BKP-01",
+  "base_commit": "7d678d2",
+  "status": "completed",
+  "checks": {
+    "flutter_analyze_no_pub": "passed, no issues",
+    "targeted_tests": "passed: initial 25 tests; additional ZIP64 descriptor test included in final full run",
+    "flutter_test_no_pub": {"result": "passed", "tests": 251},
+    "test_log": "build/bkp01-flutter-tests.log"
+  },
+  "dependencies": {"archive": "4.5.2", "crypto": "3.0.7", "uuid": "4.6.0"},
+  "implemented": [
+    "v1 JSON metadata and raw ZIP-entry inventory contract",
+    "version, field, path, identity, duplicate, encryption and resource validation",
+    "chunked SHA-256 and actual-size verification",
+    "stage byte-progress and cancellation capability contract",
+    "new folders use UUID v4 without rewriting existing IDs or database schema"
+  ],
+  "evidence_limits": [
+    "file-backed STORE ZIP is a test probe, not a production ZIP adapter",
+    "5 GiB descriptor validated without allocating content; actual large ZIP64 I/O not tested",
+    "synthetic three-byte audio fixtures test integrity, not media decoding",
+    "no backup UI, file picker, task lock, export service or import/database commit implemented"
+  ],
+  "not_run": {
+    "android_jvm_tests": "no native changes",
+    "android_apk_build": "only pure Dart packages and code, no platform integration changes",
+    "device_tests": "new device backup/restore and background execution are later-step acceptance requirements"
+  }
+}
