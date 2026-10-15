@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
+import 'backup/library_coordinator.dart';
 import 'playback/audio_playback_service.dart';
 import 'playback/playback_progress.dart';
 import 'playback/recording_detail_page.dart';
@@ -166,6 +167,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   String? _selectedFolderId;
   String? _selectedFolderName;
   Future<RecordingStore>? _openedRecordingStore;
+  LibraryCoordinator? _libraryCoordinator;
+  bool _libraryProtected = false;
   bool _languageChangedInSettings = false;
   AppLocalizations _titleStrings = lookupAppLocalizations(
     AppLanguage.simplifiedChinese.locale,
@@ -230,6 +233,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _libraryCoordinator?.removeListener(_libraryProtectionChanged);
     _successMessageTimer?.cancel();
     _eventSubscription.cancel();
     _playbackSubscription.cancel();
@@ -287,16 +291,19 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (_isRecoveringRecordings) return;
     _isRecoveringRecordings = true;
     try {
-      final batch = await widget.recordingService.recoverRecordings();
-      var indexFailures = 0;
-      for (final ready in batch.recordings) {
-        if (!await _persistSavedRecording(ready)) indexFailures++;
-      }
-      if (indexFailures > 0) {
-        _setServiceError('recoveryIndexFailed');
-      } else if (batch.unresolvedCount > 0) {
-        _setServiceError('recoveryUnresolved');
-      }
+      final store = await _getRecordingStore();
+      await store.coordinator.deferMutation(() async {
+        final batch = await widget.recordingService.recoverRecordings();
+        var indexFailures = 0;
+        for (final ready in batch.recordings) {
+          if (!await _persistSavedRecording(ready)) indexFailures++;
+        }
+        if (indexFailures > 0) {
+          _setServiceError('recoveryIndexFailed');
+        } else if (batch.unresolvedCount > 0) {
+          _setServiceError('recoveryUnresolved');
+        }
+      });
     } catch (_) {
       _setServiceError('recoveryCheckFailed');
     } finally {
@@ -865,36 +872,40 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     });
 
     try {
-      await _playbackService.stop();
-      final granted = await widget.recordingService
-          .requestMicrophonePermission();
-      if (!mounted) {
-        return;
-      }
-      if (!granted) {
-        setState(() {
-          _permissionMessage = 'microphoneRequired';
-        });
-        return;
-      }
+      final store = await _getRecordingStore();
+      await store.coordinator.mutate(() async {
+        await _playbackService.stop();
+        final granted = await widget.recordingService
+            .requestMicrophonePermission();
+        if (!mounted) {
+          return;
+        }
+        if (!granted) {
+          setState(() {
+            _permissionMessage = 'microphoneRequired';
+          });
+          return;
+        }
 
-      final RecordingFormat format;
-      try {
-        format = await (await _getRecordingStore()).getDefaultRecordingFormat();
-      } catch (_) {
-        _setServiceError('defaultFormatReadFailed');
-        return;
-      }
-      if (!mounted) return;
-      setState(() {
-        _status = RecordingSessionStatus(
-          state: RecordingLifecycleState.preparing,
-          format: format,
-          elapsed: Duration.zero,
-          canResume: false,
-        );
+        final RecordingFormat format;
+        try {
+          format = await (await _getRecordingStore())
+              .getDefaultRecordingFormat();
+        } catch (_) {
+          _setServiceError('defaultFormatReadFailed');
+          return;
+        }
+        if (!mounted) return;
+        setState(() {
+          _status = RecordingSessionStatus(
+            state: RecordingLifecycleState.preparing,
+            format: format,
+            elapsed: Duration.zero,
+            canResume: false,
+          );
+        });
+        await widget.recordingService.start(format: format);
       });
-      await widget.recordingService.start(format: format);
     } on PlatformException catch (error) {
       final unavailableMessage = _status.format == RecordingFormat.aac
           ? 'aacUnavailable'
@@ -1152,13 +1163,27 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
-  Future<RecordingStore> _getRecordingStore() {
-    final recordingStore = widget.recordingStore;
-    if (recordingStore != null) {
-      return Future.value(recordingStore);
+  Future<RecordingStore> _getRecordingStore() async {
+    final store =
+        widget.recordingStore ??
+        await (_openedRecordingStore ??= _openDefaultRecordingStore());
+    widget.recordingService.bindLibraryCoordinator(store.coordinator);
+    if (mounted && !identical(_libraryCoordinator, store.coordinator)) {
+      _libraryCoordinator?.removeListener(_libraryProtectionChanged);
+      _libraryCoordinator = store.coordinator;
+      _libraryProtected = store.coordinator.isProtected;
+      store.coordinator.addListener(_libraryProtectionChanged);
     }
+    await store.coordinator.ensureInitialized();
+    return store;
+  }
 
-    return _openedRecordingStore ??= _openDefaultRecordingStore();
+  void _libraryProtectionChanged() {
+    if (!mounted) return;
+    final protected = _libraryCoordinator!.isProtected;
+    if (_libraryProtected == protected) return;
+    setState(() => _libraryProtected = protected);
+    if (!protected) unawaited(_loadRecordings());
   }
 
   static Future<RecordingStore> _openDefaultRecordingStore() async {
@@ -1180,6 +1205,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   }
 
   bool get _canStart =>
+      !_libraryProtected &&
       !_isPersistingRecording &&
       (_status.state == RecordingLifecycleState.idle ||
           _status.state == RecordingLifecycleState.failed);
@@ -1512,7 +1538,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             child: Align(
               alignment: Alignment.centerRight,
               child: FloatingActionButton.extended(
-                onPressed: _isSubmitting ? null : _requestPermissionAndStart,
+                onPressed: _isSubmitting || !_canStart
+                    ? null
+                    : _requestPermissionAndStart,
                 icon: const Icon(Icons.mic_rounded),
                 label: Text(
                   _permissionMessage == null

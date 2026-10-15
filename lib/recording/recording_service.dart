@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 
+import '../backup/library_coordinator.dart';
+import '../backup/backup_progress.dart';
 import 'recording_format.dart';
 
 enum RecordingLifecycleState {
@@ -21,6 +23,7 @@ class RecordingSessionStatus {
     required this.canResume,
     this.sessionId,
     this.format,
+    this.backupBlocked = false,
   });
 
   final RecordingLifecycleState state;
@@ -28,6 +31,9 @@ class RecordingSessionStatus {
   final bool canResume;
   final String? sessionId;
   final RecordingFormat? format;
+
+  /// Native writer leases may outlive an idle/failed UI state after a timeout.
+  final bool backupBlocked;
 
   factory RecordingSessionStatus.fromMap(Map<Object?, Object?> map) {
     final state = _parseState(map['state']);
@@ -45,6 +51,9 @@ class RecordingSessionStatus {
       canResume: _readBool(map, 'canResume'),
       sessionId: sessionId,
       format: format,
+      backupBlocked: map.containsKey('backupBlocked')
+          ? _readBool(map, 'backupBlocked')
+          : false,
     );
   }
 }
@@ -179,6 +188,39 @@ class RecordingService {
   final MethodChannel _commands;
   final EventChannel _events;
   final Stream<RecordingEvent>? _eventStream;
+  LibraryCoordinator _coordinator = LibraryCoordinator();
+
+  LibraryCoordinator get coordinator => _coordinator;
+
+  /// App composition binds the native adapter to its database's shared gate.
+  void bindLibraryCoordinator(LibraryCoordinator value) {
+    if (identical(value, _coordinator)) return;
+    if (_coordinator.isProtected || _coordinator.hasPendingWriters) {
+      throw const LibraryBusyException();
+    }
+    _coordinator = value;
+  }
+
+  Future<bool> isIdleForBackup() async {
+    final status = await getStatus();
+    return !status.backupBlocked &&
+        status.sessionId == null &&
+        (status.state == RecordingLifecycleState.idle ||
+            status.state == RecordingLifecycleState.failed);
+  }
+
+  /// Public application entry always probes the actual native session while
+  /// the same coordinator already blocks new starts and library mutations.
+  Future<T> runBackup<T>({
+    required String taskId,
+    required BackupOperation operation,
+    required Future<T> Function(BackupLease lease) action,
+  }) => coordinator.runBackup(
+    taskId: taskId,
+    operation: operation,
+    recordingIsIdle: isIdleForBackup,
+    action: action,
+  );
 
   Stream<RecordingEvent> get events =>
       _eventStream ??
@@ -208,9 +250,11 @@ class RecordingService {
     return RecordingSessionStatus.fromMap(Map<Object?, Object?>.from(response));
   }
 
-  Future<void> start({required RecordingFormat format}) async {
-    await _commands.invokeMethod<void>('start', {'format': format.wireName});
-  }
+  Future<void> start({required RecordingFormat format}) => coordinator.mutate(
+    () async {
+      await _commands.invokeMethod<void>('start', {'format': format.wireName});
+    },
+  );
 
   Future<List<RecordingFormat>> getAvailableFormats() async {
     final response = await _commands.invokeMethod<Object?>(
@@ -236,13 +280,19 @@ class RecordingService {
 
   Future<void> cancel() => _sendCommand('cancel');
 
-  Future<RecordingRecoveryBatch> recoverRecordings() async {
-    final response = await _commands.invokeMethod<Object?>('recoverRecordings');
-    if (response is! Map) {
-      throw const FormatException('Recovery result must be a map.');
-    }
-    return RecordingRecoveryBatch.fromMap(Map<Object?, Object?>.from(response));
-  }
+  Future<RecordingRecoveryBatch> recoverRecordings() =>
+      coordinator.deferMutation(() async {
+        await coordinator.ensureInitialized();
+        final response = await _commands.invokeMethod<Object?>(
+          'recoverRecordings',
+        );
+        if (response is! Map) {
+          throw const FormatException('Recovery result must be a map.');
+        }
+        return RecordingRecoveryBatch.fromMap(
+          Map<Object?, Object?>.from(response),
+        );
+      });
 
   Future<void> acknowledgeRecording(String id) =>
       _commands.invokeMethod<void>('acknowledgeRecording', {'id': id});

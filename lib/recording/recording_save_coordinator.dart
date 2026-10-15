@@ -59,20 +59,10 @@ class RecordingSaveCoordinator {
   }
 
   Future<RecordingCommitResult> _commit(SavedNativeRecording ready) async {
-    bool inserted;
     try {
       final store = await getStore();
-      inserted = await store.commitNativeRecording(
-        Recording(
-          id: ready.id,
-          title: titleFor(ready.createdAt),
-          filePath: ready.filePath,
-          createdAt: ready.createdAt,
-          duration: ready.duration,
-          fileSizeBytes: ready.fileSizeBytes,
-          format: ready.format,
-          wasInterrupted: ready.wasInterrupted,
-        ),
+      return await store.coordinator.deferMutation(
+        () => _commitToStore(ready, store),
       );
     } catch (_) {
       // Keep the durable READY draft, while ending the foreground wait.
@@ -83,6 +73,24 @@ class RecordingSaveCoordinator {
       }
       rethrow;
     }
+  }
+
+  Future<RecordingCommitResult> _commitToStore(
+    SavedNativeRecording ready,
+    RecordingStore store,
+  ) async {
+    final inserted = await store.commitNativeRecording(
+      Recording(
+        id: ready.id,
+        title: titleFor(ready.createdAt),
+        filePath: ready.filePath,
+        createdAt: ready.createdAt,
+        duration: ready.duration,
+        fileSizeBytes: ready.fileSizeBytes,
+        format: ready.format,
+        wasInterrupted: ready.wasInterrupted,
+      ),
+    );
     try {
       await service.acknowledgeRecording(ready.id);
       return RecordingCommitResult(

@@ -43,6 +43,19 @@ class RecordingSaveProtocolTest {
         assertEquals(listOf("one"), store().ids())
     }
 
+    @Test fun writerSummaryRetainsOtherAndTimedOutLeasesUntilExplicitRelease() {
+        val p = protocol()
+        assertFalse(p.hasActiveWriters())
+        p.begin("one", 1234, RecordingFormat.AAC)
+        p.begin("two", 1235, RecordingFormat.MP3)
+        assertTrue(p.hasActiveWriters())
+        p.releaseLease("one")
+        p.releaseLease("one")
+        assertTrue(p.hasActiveWriters())
+        p.releaseLease("two")
+        assertFalse(p.hasActiveWriters())
+    }
+
     @Test fun fullCommitRetainsReadyDraftUntilIndexAcknowledgement() {
         val p = protocol(); audio(p)
         val ready = p.finish("one", null)

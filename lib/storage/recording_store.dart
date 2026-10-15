@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:path/path.dart' as path;
 
+import '../backup/library_coordinator.dart';
 import '../recording/recording_format.dart';
 import '../settings/app_language.dart';
 import 'models/recording.dart';
@@ -13,13 +15,89 @@ enum FolderDeletionAction {
   moveRecordingsToRecentlyDeleted,
 }
 
+class LibrarySnapshot {
+  LibrarySnapshot(
+    List<RecordingFolder> folders,
+    List<Recording> recordings,
+    Set<String> allRecordingIds,
+  ) : folders = List.unmodifiable(folders),
+      recordings = List.unmodifiable(recordings),
+      allRecordingIds = Set.unmodifiable(allRecordingIds);
+
+  final List<RecordingFolder> folders;
+  final List<Recording> recordings;
+
+  /// Includes soft-deleted and expired-but-not-yet-purged records.
+  final Set<String> allRecordingIds;
+}
+
 class RecordingStore {
   RecordingStore({
     required this.databasePath,
     sqflite.DatabaseFactory? databaseFactory,
     Future<void> Function(String)? deleteAudioFile,
+    LibraryCoordinator? libraryCoordinator,
   }) : _databaseFactory = databaseFactory ?? sqflite.databaseFactory,
+       _requestedCoordinator = libraryCoordinator,
        _deleteAudioFile = deleteAudioFile ?? _deleteFileIfPresent;
+
+  // Multiple store handles for one database must share the same admission gate.
+  // Weak references do not keep a closed library alive just for the registry.
+  static final _coordinators = <String, WeakReference<LibraryCoordinator>>{};
+  final LibraryCoordinator? _requestedCoordinator;
+  late final LibraryCoordinator coordinator = _coordinatorFor(
+    databasePath,
+    _requestedCoordinator,
+  );
+
+  static LibraryCoordinator _coordinatorFor(
+    String databasePath,
+    LibraryCoordinator? requested,
+  ) {
+    final absolute = path.normalize(path.absolute(databasePath));
+    final key = Platform.isWindows ? absolute.toLowerCase() : absolute;
+    final existing = _coordinators[key]?.target;
+    if (existing != null) {
+      if (requested != null && !identical(requested, existing)) {
+        throw StateError('A library already has a different coordinator.');
+      }
+      return existing;
+    }
+    final value = requested ?? LibraryCoordinator();
+    _coordinators[key] = WeakReference(value);
+    return value;
+  }
+
+  /// Snapshot and backup transactions require a current task capability.
+  Future<LibrarySnapshot> snapshotForBackup(BackupLease lease) =>
+      coordinator.ownedAccess(lease, () async {
+        final database = await _openDatabase();
+        return database.transaction((txn) async {
+          final folders = await txn.query(
+            'folders',
+            orderBy: 'sort_order ASC, id ASC',
+          );
+          final recordings = await txn.query(
+            'recordings',
+            where: 'deleted_at IS NULL',
+            orderBy: 'created_at DESC, id DESC',
+          );
+          final allIds = await txn.query('recordings', columns: ['id']);
+          return LibrarySnapshot(
+            folders.map(RecordingFolder.fromDatabaseMap).toList(),
+            recordings.map(Recording.fromDatabaseMap).toList(),
+            allIds.map((row) => row['id']! as String).toSet(),
+          );
+        });
+      });
+
+  Future<T> backupTransaction<T>(
+    BackupLease lease,
+    Future<T> Function(sqflite.Transaction transaction) action,
+  ) => coordinator.ownedAccess(lease, () async {
+    final database = await _openDatabase();
+    return database.transaction(action);
+  });
 
   static const _schemaVersion = 7;
 
@@ -112,7 +190,7 @@ class RecordingStore {
     required String id,
     required String name,
     DateTime? createdAt,
-  }) async {
+  }) => coordinator.mutate(() async {
     _requireNonEmpty(id, 'id');
     final normalizedName = name.trim();
     _requireNonEmpty(normalizedName, 'name');
@@ -131,7 +209,7 @@ class RecordingStore {
       await txn.insert('folders', folder.toDatabaseMap());
       return folder;
     });
-  }
+  });
 
   Future<List<RecordingFolder>> listFolders() async {
     final database = await _openDatabase();
@@ -142,53 +220,52 @@ class RecordingStore {
     return rows.map(RecordingFolder.fromDatabaseMap).toList();
   }
 
-  Future<void> reorderFolders(List<String> folderIds) async {
-    final ids = List<String>.of(folderIds);
-    final database = await _openDatabase();
-    await database.transaction((txn) async {
-      final rows = await txn.query('folders', columns: ['id']);
-      final existing = rows.map((row) => row['id']! as String).toSet();
-      if (ids.length != existing.length ||
-          ids.toSet().length != ids.length ||
-          !existing.containsAll(ids)) {
-        throw StateError(
-          'Folder order must contain every current folder once.',
-        );
-      }
-      for (var index = 0; index < ids.length; index++) {
-        final count = await txn.update(
-          'folders',
-          {'sort_order': index},
-          where: 'id = ?',
-          whereArgs: [ids[index]],
-        );
-        _requireSingleFolder(count, ids[index]);
-      }
-    });
-  }
+  Future<void> reorderFolders(List<String> folderIds) =>
+      coordinator.mutate(() async {
+        final ids = List<String>.of(folderIds);
+        final database = await _openDatabase();
+        await database.transaction((txn) async {
+          final rows = await txn.query('folders', columns: ['id']);
+          final existing = rows.map((row) => row['id']! as String).toSet();
+          if (ids.length != existing.length ||
+              ids.toSet().length != ids.length ||
+              !existing.containsAll(ids)) {
+            throw StateError(
+              'Folder order must contain every current folder once.',
+            );
+          }
+          for (var index = 0; index < ids.length; index++) {
+            final count = await txn.update(
+              'folders',
+              {'sort_order': index},
+              where: 'id = ?',
+              whereArgs: [ids[index]],
+            );
+            _requireSingleFolder(count, ids[index]);
+          }
+        });
+      });
 
-  Future<void> renameFolder({
-    required String folderId,
-    required String name,
-  }) async {
-    _requireNonEmpty(folderId, 'folderId');
-    final normalizedName = name.trim();
-    _requireNonEmpty(normalizedName, 'name');
-    final database = await _openDatabase();
-    final updatedCount = await database.update(
-      'folders',
-      {'name': normalizedName},
-      where: 'id = ?',
-      whereArgs: [folderId],
-    );
-    _requireSingleFolder(updatedCount, folderId);
-  }
+  Future<void> renameFolder({required String folderId, required String name}) =>
+      coordinator.mutate(() async {
+        _requireNonEmpty(folderId, 'folderId');
+        final normalizedName = name.trim();
+        _requireNonEmpty(normalizedName, 'name');
+        final database = await _openDatabase();
+        final updatedCount = await database.update(
+          'folders',
+          {'name': normalizedName},
+          where: 'id = ?',
+          whereArgs: [folderId],
+        );
+        _requireSingleFolder(updatedCount, folderId);
+      });
 
   Future<void> deleteFolder({
     required String folderId,
     FolderDeletionAction? action,
     DateTime? deletedAt,
-  }) async {
+  }) => coordinator.mutate(() async {
     _requireNonEmpty(folderId, 'folderId');
     final database = await _openDatabase();
     await database.transaction((transaction) async {
@@ -234,54 +311,56 @@ class RecordingStore {
       );
       _requireSingleFolder(deletedCount, folderId);
     });
-  }
+  });
 
-  Future<void> saveRecording(Recording recording) async {
-    _validateRecording(recording);
-    final database = await _openDatabase();
+  Future<void> saveRecording(Recording recording) =>
+      coordinator.mutate(() async {
+        _validateRecording(recording);
+        final database = await _openDatabase();
 
-    await database.transaction((transaction) async {
-      await _ensureFolderExists(transaction, recording.folderId);
-      await transaction.insert('recordings', recording.toDatabaseMap());
-    });
-  }
+        await database.transaction((transaction) async {
+          await _ensureFolderExists(transaction, recording.folderId);
+          await transaction.insert('recordings', recording.toDatabaseMap());
+        });
+      });
 
   /// Replayed native commits preserve mutable title/folder/deletion metadata.
   /// A conflicting identity is an error, never an INSERT OR REPLACE.
-  Future<bool> commitNativeRecording(Recording recording) async {
-    _validateRecording(recording);
-    final database = await _openDatabase();
-    return database.transaction((txn) async {
-      final existing = await txn.query(
-        'recordings',
-        where: 'id = ?',
-        whereArgs: [recording.id],
-      );
-      if (existing.isNotEmpty) {
-        final old = Recording.fromDatabaseMap(existing.single);
-        if (old.filePath != recording.filePath ||
-            old.format != recording.format ||
-            old.createdAt != recording.createdAt ||
-            old.duration != recording.duration ||
-            old.fileSizeBytes != recording.fileSizeBytes ||
-            old.wasInterrupted != recording.wasInterrupted) {
-          throw StateError('Conflicting native recording identity.');
-        }
-        return false;
-      }
-      final file = File(recording.filePath);
-      final stat = await file.stat();
-      if (stat.type != FileSystemEntityType.file ||
-          stat.size <= 0 ||
-          stat.size != recording.fileSizeBytes ||
-          recording.duration <= Duration.zero) {
-        throw StateError('Validated recording file is missing or changed.');
-      }
-      await _ensureFolderExists(txn, recording.folderId);
-      await txn.insert('recordings', recording.toDatabaseMap());
-      return true;
-    });
-  }
+  Future<bool> commitNativeRecording(Recording recording) =>
+      coordinator.mutate(() async {
+        _validateRecording(recording);
+        final database = await _openDatabase();
+        return database.transaction((txn) async {
+          final existing = await txn.query(
+            'recordings',
+            where: 'id = ?',
+            whereArgs: [recording.id],
+          );
+          if (existing.isNotEmpty) {
+            final old = Recording.fromDatabaseMap(existing.single);
+            if (old.filePath != recording.filePath ||
+                old.format != recording.format ||
+                old.createdAt != recording.createdAt ||
+                old.duration != recording.duration ||
+                old.fileSizeBytes != recording.fileSizeBytes ||
+                old.wasInterrupted != recording.wasInterrupted) {
+              throw StateError('Conflicting native recording identity.');
+            }
+            return false;
+          }
+          final file = File(recording.filePath);
+          final stat = await file.stat();
+          if (stat.type != FileSystemEntityType.file ||
+              stat.size <= 0 ||
+              stat.size != recording.fileSizeBytes ||
+              recording.duration <= Duration.zero) {
+            throw StateError('Validated recording file is missing or changed.');
+          }
+          await _ensureFolderExists(txn, recording.folderId);
+          await txn.insert('recordings', recording.toDatabaseMap());
+          return true;
+        });
+      });
 
   Future<List<Recording>> listRecordings({String? folderId}) async {
     final database = await _openDatabase();
@@ -312,29 +391,27 @@ class RecordingStore {
     return rows.map(Recording.fromDatabaseMap).toList();
   }
 
-  Future<void> moveRecording({
-    required String recordingId,
-    String? folderId,
-  }) async {
-    _requireNonEmpty(recordingId, 'recordingId');
-    final database = await _openDatabase();
+  Future<void> moveRecording({required String recordingId, String? folderId}) =>
+      coordinator.mutate(() async {
+        _requireNonEmpty(recordingId, 'recordingId');
+        final database = await _openDatabase();
 
-    await database.transaction((transaction) async {
-      await _ensureFolderExists(transaction, folderId);
-      final updatedCount = await transaction.update(
-        'recordings',
-        {'folder_id': folderId},
-        where: 'id = ? AND deleted_at IS NULL',
-        whereArgs: [recordingId],
-      );
-      _requireSingleUpdatedRow(updatedCount, recordingId);
-    });
-  }
+        await database.transaction((transaction) async {
+          await _ensureFolderExists(transaction, folderId);
+          final updatedCount = await transaction.update(
+            'recordings',
+            {'folder_id': folderId},
+            where: 'id = ? AND deleted_at IS NULL',
+            whereArgs: [recordingId],
+          );
+          _requireSingleUpdatedRow(updatedCount, recordingId);
+        });
+      });
 
   Future<void> renameRecording({
     required String recordingId,
     required String title,
-  }) async {
+  }) => coordinator.mutate(() async {
     _requireNonEmpty(recordingId, 'recordingId');
     final normalizedTitle = title.trim();
     _requireNonEmpty(normalizedTitle, 'title');
@@ -346,27 +423,27 @@ class RecordingStore {
       whereArgs: [recordingId],
     );
     _requireSingleUpdatedRow(updatedCount, recordingId);
-  }
+  });
 
   Future<void> moveRecordings({
     required Iterable<String> recordingIds,
     String? folderId,
-  }) async {
+  }) => coordinator.mutate(() async {
     await _updateActiveRecordings(
       recordingIds,
       {'folder_id': folderId},
       validate: (transaction) => _ensureFolderExists(transaction, folderId),
     );
-  }
+  });
 
   Future<void> softDeleteRecordings({
     required Iterable<String> recordingIds,
     required DateTime deletedAt,
-  }) async {
+  }) => coordinator.mutate(() async {
     await _updateActiveRecordings(recordingIds, {
       'deleted_at': deletedAt.toUtc().millisecondsSinceEpoch,
     });
-  }
+  });
 
   Future<void> _updateActiveRecordings(
     Iterable<String> recordingIds,
@@ -402,7 +479,7 @@ class RecordingStore {
   Future<void> softDeleteRecording({
     required String recordingId,
     required DateTime deletedAt,
-  }) async {
+  }) => coordinator.mutate(() async {
     _requireNonEmpty(recordingId, 'recordingId');
     final database = await _openDatabase();
     final updatedCount = await database.update(
@@ -412,39 +489,41 @@ class RecordingStore {
       whereArgs: [recordingId],
     );
     _requireSingleUpdatedRow(updatedCount, recordingId);
-  }
+  });
 
-  Future<void> restoreRecording(String recordingId, {DateTime? now}) async {
-    _requireNonEmpty(recordingId, 'recordingId');
-    final database = await _openDatabase();
-    await database.transaction((transaction) async {
-      final rows = await transaction.query(
-        'recordings',
-        where: 'id = ? AND deleted_at > ?',
-        whereArgs: [
-          recordingId,
-          (now ?? DateTime.now())
-              .toUtc()
-              .subtract(retentionPeriod)
-              .millisecondsSinceEpoch,
-        ],
-      );
-      _requireSingleUpdatedRow(rows.length, recordingId);
-      if (!await File(rows.single['file_path']! as String).exists()) {
-        throw StateError('The recording audio file is missing.');
-      }
-      await transaction.update(
-        'recordings',
-        {'deleted_at': null},
-        where: 'id = ?',
-        whereArgs: [recordingId],
-      );
-    });
-  }
+  Future<void> restoreRecording(String recordingId, {DateTime? now}) =>
+      coordinator.mutate(() async {
+        _requireNonEmpty(recordingId, 'recordingId');
+        final database = await _openDatabase();
+        await database.transaction((transaction) async {
+          final rows = await transaction.query(
+            'recordings',
+            where: 'id = ? AND deleted_at > ?',
+            whereArgs: [
+              recordingId,
+              (now ?? DateTime.now())
+                  .toUtc()
+                  .subtract(retentionPeriod)
+                  .millisecondsSinceEpoch,
+            ],
+          );
+          _requireSingleUpdatedRow(rows.length, recordingId);
+          if (!await File(rows.single['file_path']! as String).exists()) {
+            throw StateError('The recording audio file is missing.');
+          }
+          await transaction.update(
+            'recordings',
+            {'deleted_at': null},
+            where: 'id = ?',
+            whereArgs: [recordingId],
+          );
+        });
+      });
 
-  Future<void> permanentlyDeleteRecording(String recordingId) async {
-    await _deleteRecording(recordingId);
-  }
+  Future<void> permanentlyDeleteRecording(String recordingId) =>
+      coordinator.mutate(() async {
+        await _deleteRecording(recordingId);
+      });
 
   Future<void> _deleteRecording(String recordingId, {DateTime? cutoff}) async {
     _requireNonEmpty(recordingId, 'recordingId');
@@ -477,20 +556,23 @@ class RecordingStore {
 
   /// Returns failures while still attempting every expired recording.
   /// Retained indexes allow a later startup/foreground refresh to retry.
-  Future<List<String>> purgeExpiredRecordings({DateTime? now}) async {
-    final cutoff = (now ?? DateTime.now()).toUtc().subtract(retentionPeriod);
-    final deleted = await listRecentlyDeleted();
-    final failures = <String>[];
-    for (final recording in deleted) {
-      if (recording.deletedAt!.isAfter(cutoff)) continue;
-      try {
-        await _deleteRecording(recording.id, cutoff: cutoff);
-      } catch (_) {
-        failures.add(recording.id);
-      }
-    }
-    return failures;
-  }
+  Future<List<String>> purgeExpiredRecordings({DateTime? now}) =>
+      coordinator.deferMutation(() async {
+        final cutoff = (now ?? DateTime.now()).toUtc().subtract(
+          retentionPeriod,
+        );
+        final deleted = await listRecentlyDeleted();
+        final failures = <String>[];
+        for (final recording in deleted) {
+          if (recording.deletedAt!.isAfter(cutoff)) continue;
+          try {
+            await _deleteRecording(recording.id, cutoff: cutoff);
+          } catch (_) {
+            failures.add(recording.id);
+          }
+        }
+        return failures;
+      });
 
   static Future<void> _deleteFileIfPresent(String filePath) async {
     try {

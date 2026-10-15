@@ -1,0 +1,50 @@
+{
+    "date":  "2026-10-15",
+    "work_item":  "BKP-02",
+    "base_commit":  "37e8b61",
+    "status":  "in_progress",
+    "implementation_complete":  true,
+    "checks":  {
+                   "flutter_analyze_no_pub":  "passed, no issues",
+                   "flutter_test_no_pub":  {
+                                               "result":  "passed",
+                                               "tests":  275,
+                                               "log":  "build/bkp02-flutter-tests.log"
+                                           },
+                   "android_jvm":  {
+                                       "result":  "passed",
+                                       "tests":  99,
+                                       "log":  "build/bkp02-jvm-tests.log",
+                                       "failures":  0
+                                   },
+                   "android_debug_apk":  {
+                                             "path":  "build/app/outputs/flutter-apk/app-debug.apk",
+                                             "result":  "passed",
+                                             "sha256":  "13de412f10a4a5ea304ea637d3e6c6b08cf05c463c57a553b4122684c993eab8",
+                                             "log":  "build/bkp02-build.log"
+                                         },
+                   "adb_devices":  "no connected devices"
+               },
+    "added_tests":  {
+                        "android_jvm":  5,
+                        "flutter":  24
+                    },
+    "implemented":  [
+                        "scoped task reservation, cancellation, byte progress and results",
+                        "shared per-library writer gate and capability-authorized snapshots/transactions",
+                        "deferred fileReady indexing and acknowledgement, recovery and expired cleanup",
+                        "permission-to-start admission and library refresh",
+                        "native queued-start reservation and nonblocking writer-lease summary",
+                        "startup-recovery barrier with injected callback; production callback remains empty until BKP-05"
+                    ],
+    "boundaries":  [
+                       "no production ZIP IO, import/export UI, background task service or persistent task journal",
+                       "Dart coordinator is isolate-local; future workers must use the same authoritative storage interface",
+                       "no device install, microphone recording or actual Android lifecycle validation performed"
+                   ],
+    "pending":  [
+                    "native queued-start and Activity/service recreation timing on device",
+                    "save/recovery/cleanup interleavings on device",
+                    "BKP-03 platform file/background execution and BKP-05 durable import recovery"
+                ]
+}

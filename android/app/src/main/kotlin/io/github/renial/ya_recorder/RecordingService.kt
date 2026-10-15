@@ -16,6 +16,15 @@ import java.io.File
 import java.util.UUID
 
 class RecordingService : Service() {
+    private val statusOwner = Any()
+
+    override fun onCreate() {
+        super.onCreate()
+        synchronized(statusLock) {
+            latestStatusOwner = statusOwner
+            latestStatus = idleStatus()
+        }
+    }
     private val handler = Handler(Looper.getMainLooper())
     private val commands = SerialRecordingCommands()
 
@@ -39,9 +48,16 @@ class RecordingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val startToken = if (intent?.action == ACTION_START) intent.getStringExtra(EXTRA_START_TOKEN) else null
+        if (startToken != null) acceptedStartTokens.add(startToken)
         commands.submit {
             when (intent?.action) {
-                ACTION_START -> startRecording(intent.getStringExtra(EXTRA_FORMAT))
+                ACTION_START -> try {
+                    startRecording(intent.getStringExtra(EXTRA_FORMAT))
+                } finally {
+                    startReservations.complete(startToken)
+                    if (startToken != null) acceptedStartTokens.remove(startToken)
+                }
                 ACTION_PAUSE -> pauseRecording()
                 ACTION_RESUME -> resumeRecording()
                 ACTION_STOP -> stopRecording()
@@ -61,12 +77,20 @@ class RecordingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private val acceptedStartTokens = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         commands.close {
             handler.removeCallbacksAndMessages(null)
             if (releaseBackend()) session?.let { persistence.releaseLease(it.id) }
-            latestStatus = idleStatus()
+            synchronized(statusLock) {
+                if (latestStatusOwner === statusOwner) latestStatus = idleStatus()
+            }
+            // SerialRecordingCommands.close skips queued starts. Release only
+            // this service instance's tokens, not a newly created one's work.
+            for (token in acceptedStartTokens) startReservations.complete(token)
+            acceptedStartTokens.clear()
         }
         super.onDestroy()
     }
@@ -301,7 +325,10 @@ class RecordingService : Service() {
             "sessionId" to activeSession?.id,
             "format" to activeSession?.format?.wireName,
         )
-        latestStatus = status
+        synchronized(statusLock) {
+            if (latestStatusOwner !== statusOwner) return
+            latestStatus = status
+        }
         publish(
             EVENT_STATE,
             Intent().apply {
@@ -420,6 +447,7 @@ class RecordingService : Service() {
         const val EVENT_ERROR = "io.github.renial.ya_recorder.event.RECORDING_ERROR"
 
         const val EXTRA_STATE = "state"
+        const val EXTRA_START_TOKEN = "startToken"
         const val EXTRA_ELAPSED_MS = "elapsedMs"
         const val EXTRA_CAN_RESUME = "canResume"
         const val EXTRA_SESSION_ID = "sessionId"
@@ -442,6 +470,8 @@ class RecordingService : Service() {
 
         @Volatile
         private var latestStatus: Map<String, Any?> = idleStatus()
+        private val statusLock = Any()
+        private var latestStatusOwner: Any? = null
 
         fun commandIntent(context: Context, action: String, format: RecordingFormat? = null): Intent {
             if (action == ACTION_START) require(format != null) { "Start requires a recording format" }
@@ -450,7 +480,10 @@ class RecordingService : Service() {
             }
         }
 
-        fun currentStatus(): Map<String, Any?> = latestStatus
+        internal val startReservations = RecordingStartReservations()
+
+        fun currentStatus(): Map<String, Any?> = startReservations.status { latestStatus } +
+            ("backupBlocked" to AndroidRecordingPersistence.hasActiveWriters())
 
         private fun idleStatus(): Map<String, Any?> {
             return mapOf(

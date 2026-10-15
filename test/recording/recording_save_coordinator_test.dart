@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:ya_recorder/backup/backup_progress.dart';
+import 'package:ya_recorder/backup/library_coordinator.dart';
 import 'package:ya_recorder/recording/recording_format.dart';
 import 'package:ya_recorder/recording/recording_save_coordinator.dart';
 import 'package:ya_recorder/recording/recording_service.dart';
@@ -51,6 +53,60 @@ void main() {
     fileSizeBytes: 128,
     wasInterrupted: wasInterrupted,
     format: format,
+  );
+
+  test(
+    'backup defers fileReady duplicates without discarding or acknowledging the draft',
+    () async {
+      final release = Completer<void>();
+      final backup = store.coordinator.runBackup(
+        taskId: 'backup',
+        operation: BackupOperation.export,
+        recordingIsIdle: () async => true,
+        action: (_) => release.future,
+      );
+      await Future<void>.delayed(Duration.zero);
+      final pending = coordinator.commit(ready('one'));
+      final duplicate = coordinator.commit(ready('one'));
+      expect(identical(pending, duplicate), isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(trace, isEmpty);
+      expect(store.rows, isEmpty);
+      release.complete();
+      await backup;
+      expect((await pending).inserted, isTrue);
+      expect(trace, [
+        'insert:one',
+        'committed:one',
+        'acknowledgeRecording:one',
+      ]);
+    },
+  );
+
+  test(
+    'accepted save includes native acknowledgement in protected writer lifetime',
+    () async {
+      final acknowledgement = Completer<void>();
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        trace.add('${call.method}:${(call.arguments as Map)['id']}');
+        await acknowledgement.future;
+        return null;
+      });
+      final pending = coordinator.commit(ready('one'));
+      await Future<void>.delayed(Duration.zero);
+      expect(trace.last, 'acknowledgeRecording:one');
+      await expectLater(
+        store.coordinator.runBackup(
+          taskId: 'backup',
+          operation: BackupOperation.export,
+          recordingIsIdle: () async => true,
+          action: (_) async {},
+        ),
+        throwsA(isA<LibraryBusyException>()),
+      );
+      acknowledgement.complete();
+      await pending;
+    },
   );
 
   test('acknowledges only after a committed index transaction', () async {

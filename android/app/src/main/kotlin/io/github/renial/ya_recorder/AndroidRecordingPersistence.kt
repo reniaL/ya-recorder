@@ -6,6 +6,7 @@ import java.io.File
 
 internal object AndroidRecordingPersistence {
     @Volatile private var protocol: RecordingSaveProtocol? = null
+    fun hasActiveWriters(): Boolean = protocol?.hasActiveWriters() == true
     @Synchronized fun get(context: Context): RecordingSaveProtocol {
         protocol?.let { return it }
         val root = File(context.applicationContext.filesDir, "ya_recorder")

@@ -96,6 +96,9 @@ internal class RecordingSaveProtocol(
 ) {
     // A timed-out writer stays leased until process exit: recovery cannot touch it.
     private val leases = mutableSetOf<String>()
+    // Status queries must not block Android's main thread on media validation.
+    @Volatile private var activeWriterCount = 0
+    fun hasActiveWriters(): Boolean = activeWriterCount != 0
 
     @Synchronized fun begin(id: String, createdAtMs: Long, format: RecordingFormat): RecordingDraft {
         check(File(root, "recordings").mkdirs() || File(root, "recordings").isDirectory)
@@ -104,10 +107,14 @@ internal class RecordingSaveProtocol(
         val draft = RecordingDraft(id, createdAtMs, format)
         drafts.write(draft) // Must precede encoder allocation and audio writes.
         leases.add(id)
+        activeWriterCount = leases.size
         return draft
     }
 
-    @Synchronized fun releaseLease(id: String) { leases.remove(id) }
+    @Synchronized fun releaseLease(id: String) {
+        leases.remove(id)
+        activeWriterCount = leases.size
+    }
 
     @Synchronized fun finish(id: String, acceptedDurationMs: Long?): ReadyRecording {
         val draft = drafts.read(id)

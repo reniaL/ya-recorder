@@ -218,8 +218,13 @@ class RecordingPlatformBridge(
             return
         }
 
+        var startToken: String? = null
         try {
             val commandIntent = RecordingService.commandIntent(activity, action, format)
+            if (action == RecordingService.ACTION_START) {
+                startToken = RecordingService.startReservations.reserve(requireNotNull(format).wireName)
+                commandIntent.putExtra(RecordingService.EXTRA_START_TOKEN, startToken)
+            }
             if (action == RecordingService.ACTION_START && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 activity.startForegroundService(commandIntent)
             } else {
@@ -227,6 +232,7 @@ class RecordingPlatformBridge(
             }
             result.success(null)
         } catch (error: Exception) {
+            RecordingService.startReservations.complete(startToken)
             result.error("recording-command-failed", error.message, null)
         }
     }

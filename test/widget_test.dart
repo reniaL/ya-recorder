@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:ya_recorder/backup/backup_progress.dart';
+import 'package:ya_recorder/backup/library_coordinator.dart';
 import 'package:ya_recorder/main.dart';
 import 'package:ya_recorder/l10n/localization.dart';
 import 'package:ya_recorder/playback/audio_playback_service.dart';
@@ -34,6 +36,7 @@ void main() {
   );
 
   late bool permissionGranted;
+  Completer<bool>? permissionReply;
   late String initialState;
   late RecordingFormat initialFormat;
   late bool initialCanResume;
@@ -48,6 +51,7 @@ void main() {
 
   setUp(() {
     permissionGranted = false;
+    permissionReply = null;
     initialState = 'idle';
     initialFormat = RecordingFormat.m4a;
     initialCanResume = false;
@@ -70,7 +74,9 @@ void main() {
             'canResume': initialCanResume,
           };
         case 'requestMicrophonePermission':
-          return permissionGranted;
+          return permissionReply == null
+              ? permissionGranted
+              : await permissionReply!.future;
         case 'start':
           expect(call.arguments, {'format': expectedStartFormat.wireName});
           if ((expectedStartFormat == RecordingFormat.aac && !aacAvailable) ||
@@ -114,6 +120,64 @@ void main() {
     messenger.setMockMethodCallHandler(commandChannel, null);
     messenger.setMockMethodCallHandler(eventChannel, null);
   });
+
+  testWidgets(
+    'permission dialog holds admission until a delayed recording start finishes',
+    (tester) async {
+      final store = _RecordingStoreSpy();
+      final service = RecordingService(commands: commandChannel);
+      permissionReply = Completer<bool>();
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, recordingService: service),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('开始录音'));
+      await tester.pump();
+      expect(invokedMethods, contains('requestMicrophonePermission'));
+      await expectLater(
+        service.runBackup(
+          taskId: 'race',
+          operation: BackupOperation.export,
+          action: (_) async {},
+        ),
+        throwsA(isA<LibraryBusyException>()),
+      );
+      permissionReply!.complete(true);
+      await tester.pumpAndSettle();
+      expect(invokedMethods, contains('start'));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'library observes backup protection and enables recording again on release',
+    (tester) async {
+      final store = _RecordingStoreSpy();
+      final service = RecordingService(commands: commandChannel);
+      await tester.pumpWidget(
+        MyApp(recordingStore: store, recordingService: service),
+      );
+      await tester.pumpAndSettle();
+      final release = Completer<void>();
+      final task = service.runBackup(
+        taskId: 'visible',
+        operation: BackupOperation.export,
+        action: (_) => release.future,
+      );
+      await tester.pumpAndSettle();
+      final button = find.widgetWithText(FloatingActionButton, '开始录音');
+      try {
+        expect(tester.widget<FloatingActionButton>(button).onPressed, isNull);
+        expect(store.coordinator.isProtected, isTrue);
+      } finally {
+        release.complete();
+      }
+      await tester.pumpAndSettle();
+      await task;
+      expect(tester.widget<FloatingActionButton>(button).onPressed, isNotNull);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'system theme tracks brightness; explicit choices apply immediately and restore',
