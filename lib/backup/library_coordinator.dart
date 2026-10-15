@@ -28,6 +28,7 @@ class BackupLease {
 
   BackupProgress? get progress => _progress;
   bool get cancelRequested => _cancelRequested;
+  Future<void> get whenCancelled => _cancelSignal.future;
 
   void checkCancelled() {
     if (_cancelRequested) throw const BackupCancelledException();

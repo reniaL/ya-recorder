@@ -108,6 +108,43 @@ class BackupDocumentService {
   Future<BackupTransferSnapshot> release(String taskId) =>
       _call('release', {'taskId': taskId});
 
+  /// Confirmation must be made from the foreground before restarting work.
+  Future<void> placeImport(
+    BackupLease lease,
+    List<Map<String, Object?>> files,
+    LibraryCoordinator coordinator,
+  ) async {
+    lease.checkCancelled();
+    await _call('placeImport', {'taskId': lease.taskId, 'files': files});
+    while (true) {
+      if (lease.cancelRequested) {
+        await _commands.invokeMethod<void>('cancel', {'taskId': lease.taskId});
+      }
+      final value = await snapshot();
+      if (value == null || value.taskId != lease.taskId) {
+        throw StateError('Native import task was replaced');
+      }
+      coordinator.report(
+        lease,
+        BackupProgress(
+          taskId: lease.taskId,
+          sequence: (lease.progress?.sequence ?? 0) + 1,
+          operation: lease.operation,
+          stage: BackupStage.importing,
+          processedBytes: value.processedBytes,
+          totalBytes: value.totalBytes,
+          processedRecordings: value.processedRecordings,
+        ),
+      );
+      if (!value.isRunning) {
+        lease.checkCancelled();
+        if (value.status != 'completed') throw BackupTransferException(value);
+        return;
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+  }
+
   /// New engine/process startup barrier. A surviving native transfer drains
   /// before any recording recovery or library writes. Never resumes a workflow.
   Future<void> recoverInterruptedTransfer() async {
@@ -130,6 +167,11 @@ class BackupDocumentService {
     required RecordingService recordingService,
     required BackupDocument document,
     required bool write,
+    bool importArchive = false,
+    Future<T> Function(BackupTransferSnapshot value, BackupLease lease)?
+    consumeImport,
+    Future<void> Function()? afterTransfer,
+    void Function(Object error)? onImportCleanupError,
     Future<void> Function(String stagedPath)? prepareOutput,
     Future<Map<String, Object?>> Function(BackupLease lease)?
     createExportRequest,
@@ -146,16 +188,25 @@ class BackupDocumentService {
         operation: write ? BackupOperation.export : BackupOperation.import,
         action: (lease) async {
           admitted = true;
+          T? committedImport;
+          var importCommitted = false;
           try {
             final export = await createExportRequest?.call(lease);
             await prepareOutput?.call(prepared.stagedPath);
             lease.checkCancelled();
-            await _call(export == null ? 'startCopy' : 'startExport', {
-              'taskId': prepared.taskId,
-              'direction': write ? 'write' : 'read',
-              'uri': document.uri,
-              'export': ?export,
-            });
+            await _call(
+              importArchive
+                  ? 'startImport'
+                  : export == null
+                  ? 'startCopy'
+                  : 'startExport',
+              {
+                'taskId': prepared.taskId,
+                'direction': write ? 'write' : 'read',
+                'uri': document.uri,
+                'export': ?export,
+              },
+            );
             var lastSequence = -1;
             var cancelled = false;
             while (true) {
@@ -203,9 +254,17 @@ class BackupDocumentService {
                   throw BackupTransferException(value);
                 }
                 if (!value.exportCommitted) lease.checkCancelled();
-                final result = await consume(value);
+                final result = consumeImport == null
+                    ? await consume(value)
+                    : await consumeImport(value, lease);
+                if (importArchive) {
+                  committedImport = result;
+                  importCommitted = true;
+                }
                 if (!value.exportCommitted) {
-                  lease.checkCancelled();
+                  // A successful import callback has committed SQLite. Late
+                  // cancellation must never turn that success into a rollback.
+                  if (!importArchive) lease.checkCancelled();
                   await _commands.invokeMethod<void>('accept', {
                     'taskId': lease.taskId,
                   });
@@ -214,8 +273,18 @@ class BackupDocumentService {
               }
               await Future<void>.delayed(pollInterval);
             }
+          } catch (error) {
+            if (!importCommitted) rethrow;
+            onImportCleanupError?.call(error);
+            return committedImport as T;
           } finally {
-            await _settle(prepared.taskId);
+            try {
+              await _settle(prepared.taskId);
+              await afterTransfer?.call();
+            } catch (error) {
+              if (!importCommitted) rethrow;
+              onImportCleanupError?.call(error);
+            }
           }
         },
       );

@@ -42,17 +42,20 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
                 }
                 "prepare" -> result.success(runtime.prepare(requireNotNull(call.argument<String>("uri")), requireNotNull(call.argument<String>("direction"))))
                 "snapshot" -> result.success(runtime.snapshot())
-                "startCopy", "startExport" -> {
+                "startCopy", "startExport", "startImport", "placeImport" -> {
                     check(activity.hasWindowFocus() && !activity.isFinishing) { "foreground-required" }
                     val id = requireNotNull(call.argument<String>("taskId"))
-                    if (call.method == "startExport") runtime.reserveExport(id, BackupExportJob.fromMap(requireNotNull(call.argument<Map<*, *>>("export"))))
+                    if (call.method == "startImport") runtime.reserveImport(id)
+                    else if (call.method == "placeImport") runtime.reserveImport(id, requireNotNull(call.argument<List<Map<*, *>>>("files")))
+                    else if (call.method == "startExport") runtime.reserveExport(id, BackupExportJob.fromMap(requireNotNull(call.argument<Map<*, *>>("export"))))
                     else runtime.reserve(id, requireNotNull(call.argument<String>("direction")), requireNotNull(call.argument<String>("uri")))
                     try {
                         val intent = Intent(activity, BackupTaskService::class.java).putExtra("taskId", id)
                         if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent) else activity.startService(intent)
                     } catch (_: Exception) { runtime.startFailed(id) }
                     val processRuntime = runtime
-                    main.postDelayed({ processRuntime.expireUnstarted(id) }, 10_000)
+                    val sequence = (runtime.snapshot()!!["sequence"] as Number).toLong()
+                    main.postDelayed({ processRuntime.expireUnstarted(id, sequence) }, 10_000)
                     result.success(runtime.snapshot())
                 }
                 "cancel" -> { runtime.cancel(requireNotNull(call.argument<String>("taskId"))); result.success(null) }

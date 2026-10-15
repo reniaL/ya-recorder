@@ -99,7 +99,35 @@ class RecordingStore {
     return database.transaction(action);
   });
 
-  static const _schemaVersion = 7;
+  /// Includes recently deleted entries, for ID-only import decisions.
+  Future<List<Recording>> allRecordingsForBackup(BackupLease lease) =>
+      coordinator.ownedAccess(lease, () async {
+        final db = await _openDatabase();
+        return (await db.query(
+          'recordings',
+        )).map(Recording.fromDatabaseMap).toList();
+      });
+
+  // Recovery reads the commit authority before ordinary mutations are admitted.
+  Future<bool> importWasCommitted(String taskId) async {
+    final db = await _openDatabase();
+    return (await db.query(
+      'backup_import_commits',
+      where: 'task_id = ?',
+      whereArgs: [taskId],
+    )).isNotEmpty;
+  }
+
+  Future<void> forgetImportCommit(String taskId) async {
+    final db = await _openDatabase();
+    await db.delete(
+      'backup_import_commits',
+      where: 'task_id = ?',
+      whereArgs: [taskId],
+    );
+  }
+
+  static const _schemaVersion = 8;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -646,6 +674,7 @@ class RecordingStore {
           if (oldVersion < 7) {
             await _migrateAacFormats(database);
           }
+          if (oldVersion < 8) await _createImportCommitSchema(database);
         },
       ),
     );
@@ -674,7 +703,14 @@ class RecordingStore {
     ''');
     await _createRecordingsTable(database);
     await _createRecordingIndexes(database);
+    await _createImportCommitSchema(database);
   }
+
+  static Future<void> _createImportCommitSchema(sqflite.Database database) =>
+      database.execute(
+        'CREATE TABLE backup_import_commits ('
+        'task_id TEXT PRIMARY KEY NOT NULL, committed_at INTEGER NOT NULL)',
+      );
 
   static Future<void> _createRecordingsTable(
     sqflite.Database database, {

@@ -61,6 +61,7 @@ void main() {
       );
       var db = await database();
       await db.execute('ALTER TABLE app_preferences DROP COLUMN language');
+      await db.execute('DROP TABLE backup_import_commits');
       await db.setVersion(5);
       await store.close();
       expect(await store.getAppLanguage(), AppLanguage.simplifiedChinese);
@@ -111,6 +112,7 @@ void main() {
       final folder = await store.createFolder(id: 'keep', name: '保留');
       var db = await database();
       await db.execute('DROP TABLE app_preferences');
+      await db.execute('DROP TABLE backup_import_commits');
       await db.setVersion(4);
       await store.close();
       expect(await store.getThemeMode(), ThemeMode.system);
@@ -196,6 +198,7 @@ void main() {
       final db = await database();
       await db.execute('DROP TABLE recording_preferences');
       await db.execute('DROP TABLE app_preferences');
+      await db.execute('DROP TABLE backup_import_commits');
       await db.setVersion(3);
       await store.close();
 
@@ -217,7 +220,7 @@ void main() {
           [1, 2, 3],
         );
       }
-      expect(await (await database()).getVersion(), 7);
+      expect(await (await database()).getVersion(), 8);
     },
   );
 
@@ -226,6 +229,7 @@ void main() {
     () async {
       final folder = await store.createFolder(id: 'one', name: '保留');
       final db = await database();
+      await db.execute('DROP TABLE backup_import_commits');
       await db.setVersion(3); // Existing table causes CREATE TABLE to fail.
       await store.close();
       await expectLater(store.open(), throwsA(isA<DatabaseException>()));

@@ -18,10 +18,12 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
     private var state: MutableMap<String, Any?>? = null
     private var cancelReason: String? = null
     private var executing = false
+    private var serviceActive = false
     private var started = false
     private var cleaning = false
     private var lastProgress = 0L
     private var exportJob: BackupExportJob? = null
+    private var placement: List<Pair<File, File>>? = null
     @Volatile var onChanged: (() -> Unit)? = null
 
     init {
@@ -41,7 +43,14 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         }
     }
 
-    @Synchronized fun snapshot(): Map<String, Any?>? = state?.toMap()
+    @Synchronized fun snapshot(): Map<String, Any?>? = state?.toMutableMap()?.also {
+        // A second import phase cannot start until the previous worker AND
+        // service have closed. In particular, completion polling must not race
+        // the old service's posted stopSelf callback.
+        if ((executing || serviceActive) && it["status"] in listOf("completed", "cancelled", "failed")) it["status"] = "running"
+    }
+
+    @Synchronized fun serviceStopped() { serviceActive = false }
 
     @Synchronized fun prepare(uri: String, direction: String): Map<String, Any?> {
         check(!executing && !cleaning && state?.get("status") !in listOf("prepared", "running")) { "backup-busy" }
@@ -91,6 +100,31 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         persist()
     }
 
+    @Synchronized fun reserveImport(id: String, files: List<Map<*, *>>? = null) {
+        requireCurrent(id)
+        check(!executing && state!!["direction"] == "read")
+        if (files == null) {
+            check(state!!["status"] == "prepared")
+            state!!["kind"] = "import"
+        } else {
+            check(state!!["status"] == "completed" && state!!["kind"] == "import")
+            require(files.size <= 10000)
+            val extracted = File(File(state!!["stagedPath"] as String).parentFile, "extracted")
+            placement = files.map {
+                val name = it["name"] as String
+                require(Regex("recording-[A-Za-z0-9_-]{1,128}\\.(aac|mp3|m4a)").matches(name))
+                File(extracted, name) to File(it["target"] as String)
+            }
+            state!!["stage"] = "importing"
+        }
+        state!!["processedBytes"] = 0L
+        state!!["processedRecordings"] = 0
+        state!!["totalBytes"] = null
+        state!!["status"] = "running"
+        cancelReason = null; executing = true; started = false
+        persist()
+    }
+
     @Synchronized fun cancel(id: String, reason: String = "cancelled") {
         if (state?.get("taskId") == id && state?.get("status") == "running" && cancelReason == null) {
             cancelReason = reason
@@ -103,12 +137,20 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         requireCurrent(id)
         check(executing && !started && state!!["status"] == "running")
         started = true
-        worker.execute {
+        serviceActive = true
+        worker.execute job@{
             try {
                 val task = synchronized(this) { requireCurrent(id); state!!.toMap() }
                 val uri = Uri.parse(task["uri"] as String)
                 val file = File(task["stagedPath"] as String)
                 val resolver = context.contentResolver
+                if (task["kind"] == "import" && placement != null) {
+                    BackupZipImporter.place(requireNotNull(placement),
+                        { synchronized(this) { cancelReason != null } },
+                        { reportProgress(id, it.stage, it.bytes, it.total, it.recordings) })
+                    synchronized(this) { update("completed", null) }
+                    return@job
+                }
                 if (task["kind"] == "export") {
                     val job = synchronized(this) { requireNotNull(exportJob) }
                     val size = BackupZipExporter.create(file, job.sources, job.metadata, job.createdAt, job.folderCount,
@@ -130,6 +172,16 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
                     file.inputStream().use { input ->
                         (resolver.openOutputStream(uri, "wt") ?: error("target-open-failed")).use { output -> transfer(id, input, output) }
                     }
+                }
+                if (task["kind"] == "import") {
+                    val extracted = File(file.parentFile, "extracted")
+                    val entries = BackupZipImporter.extract(file, extracted,
+                        { synchronized(this) { cancelReason != null } },
+                        { reportProgress(id, it.stage, it.bytes, it.total, it.recordings) })
+                    val report = JSONObject().put("manifest", File(extracted, "manifest.json").readText())
+                        .put("metadata", File(extracted, "metadata.json").readText())
+                        .put("entries", org.json.JSONArray(entries.map { JSONObject().put("path", it.path).put("size", it.size).put("sha256", it.sha256) }))
+                    File(file.parentFile, "verified.json").writeText(report.toString())
                 }
                 synchronized(this) {
                     if (cancelReason != null) throw CancellationException()
@@ -155,7 +207,7 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
                 }
                 cleanupAfterFailure(id)
             } finally {
-                synchronized(this) { executing = false; exportJob = null }
+                synchronized(this) { executing = false; exportJob = null; placement = null }
                 onChanged?.invoke()
                 finished()
             }
@@ -167,7 +219,7 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
             val snapshot = snapshot()!!
             reportProgress(id, snapshot["stage"] as? String ?: if (snapshot["direction"] == "read") "checking" else "saving",
                 bytes, (snapshot["totalBytes"] as? Number)?.toLong(), 0)
-        })
+        }, limit = if (snapshot()?.get("kind") == "import") 0xfffffffeL else BackupStreamCopy.MAX_BYTES)
     }
 
     @Synchronized private fun reportProgress(id: String, stage: String, bytes: Long, total: Long?, recordings: Int) {
@@ -194,8 +246,9 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         }
     }
 
-    @Synchronized fun expireUnstarted(id: String) {
-        if (state?.get("taskId") == id && state?.get("status") == "running" && !started) startFailed(id)
+    @Synchronized fun expireUnstarted(id: String, sequence: Long) {
+        if (state?.get("taskId") == id && state?.get("status") == "running" &&
+            (state?.get("sequence") as? Number)?.toLong() == sequence && !started) startFailed(id)
     }
 
     @Synchronized fun accept(id: String) {

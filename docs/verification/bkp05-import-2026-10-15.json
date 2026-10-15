@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-15",
+  "work_item": "BKP-05",
+  "base_commit": "94108a5",
+  "status": "in_progress",
+  "implementation_delivered": true,
+  "checks": {
+    "flutter_analyze": {
+      "result": "passed, no issues",
+      "log": "build/bkp05-analysis.log"
+    },
+    "flutter_test": {
+      "result": "passed",
+      "tests": 311,
+      "log": "build/bkp05-flutter.log"
+    },
+    "android_jvm": {
+      "result": "passed",
+      "tests": 123,
+      "failures": 0,
+      "errors": 0,
+      "log": "build/bkp05-jvm.log"
+    },
+    "android_debug_apk": {
+      "result": "passed",
+      "path": "build/app/outputs/flutter-apk/app-debug.apk",
+      "sha256": "d14bd8185e2325d23da498637d9ddd62ee39913bc8c6120444addc3dbedb52ed",
+      "log": "build/bkp05-build.log"
+    },
+    "adb_devices": "no connected devices",
+    "diff_check": "passed"
+  },
+  "added_tests": {"flutter": 19, "android_jvm": 9},
+  "implemented": [
+    "Native foreground URI staging, bounded raw ZIP directory preflight before ZipFile allocation, STORE-only regular entries and local-name/header checks",
+    "Native streaming extraction of every entry with size/CRC/SHA-256, followed by Dart v1 metadata and inventory validation in an independent isolate",
+    "All local recording IDs including recently deleted participate in ID-only skip decisions; unavailable local audio fails explicitly",
+    "SQLite ASCII NOCASE folder suffix allocation and append ordering; original folder/recording IDs preserved",
+    "Foreground-confirmed second service phase places new audio without overwriting into a journal-owned UUID directory",
+    "SQLite v8 migration adds backup_import_commits; one transaction inserts folders, recordings and commit authority",
+    "Startup drains native work before import journal recovery and ordinary recording recovery/writes",
+    "Uncommitted files are cleaned only with ownership proof; committed audio survives journal/bridge/cleanup failures",
+    "Journal removal precedes commit-marker removal; ambiguous ownership is retained and reported; partial cleanup retries are idempotent",
+    "Waiting confirmation can be cancelled; committing refuses cancellation; postcommit failures keep result and coordinator completed with cleanup warning",
+    "Service closure barrier, progress reset and sequence-bound delayed startup expiry protect multi-phase task transitions"
+  ],
+  "coverage_limits": [
+    "Flutter tests use real temporary SQLite but mock Android MethodChannels; JVM tests execute actual ZIP/filesystem workers, not Android Service/ContentResolver/AtomicFile lifecycle",
+    "File-boundary, transaction and postcommit interruption scenarios are deterministic fault injection, not actual Android process kills",
+    "Synthetic audio payloads verify bytes and metadata, not playback",
+    "Import explicitly rejects ZIP64, including ZIP64 extra fields and sentinels; source ZIP must be smaller than 0xffffffff bytes",
+    "Local duplicate audio hashing is isolated but cancellation may wait for the current local file hash; native IO phases check each chunk",
+    "Directory-entry durability under device power loss is not verified",
+    "A kill between journal deletion and marker deletion may retain a harmless unreferenced commit marker",
+    "Production settings entry, pages, localized results and notification navigation remain BKP-06"
+  ],
+  "pending": [
+    "Actual Android document URI permission/space failures, background/lock-screen/notification interaction and Activity/Engine recreation",
+    "Real process termination/restart before and after SQLite commit, and actual filesystem cleanup failures",
+    "ZIP64 import implementation and actual archives exceeding 4 GiB before large-backup restore acceptance",
+    "New-device restore and three-format playback with current settings preserved"
+  ]
+}

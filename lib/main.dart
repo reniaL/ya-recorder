@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'backup/library_coordinator.dart';
 import 'backup/backup_document_service.dart';
+import 'backup/backup_import_service.dart';
 import 'playback/audio_playback_service.dart';
 import 'playback/playback_progress.dart';
 import 'playback/recording_detail_page.dart';
@@ -1189,10 +1190,14 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   static Future<RecordingStore> _openDefaultRecordingStore() async {
     final paths = await AppStoragePaths.create();
-    final store = RecordingStore(
+    late final RecordingStore store;
+    store = RecordingStore(
       databasePath: paths.databasePath,
       libraryCoordinator: LibraryCoordinator(
-        recoverInterruptedTask: BackupDocumentService().recoverInterruptedTransfer,
+        recoverInterruptedTask: () async {
+          await BackupDocumentService().recoverInterruptedTransfer();
+          await BackupImportRecovery(paths, store).recover();
+        },
       ),
     );
     await store.open();

@@ -1,6 +1,6 @@
 # 手动备份与恢复：七步实现计划
 
-制定日期：2026-10-15。状态：BKP-01 已完成；BKP-02 实现及自动化已完成，原生真实生命周期待设备验收，保留进行中；BKP-03 平台运输层实现及自动化已交付，文档服务/生命周期待真机验收，保留进行中；BKP-04 完整导出实现及自动化已交付，真实保存/后台/故障及大容量 ZIP64 待验收，保留进行中；BKP-05～07 未开始。证据见 [第一步](manual-backup-step1.md)、[第二步](manual-backup-step2.md)、[第三步](manual-backup-step3.md)和 [第四步](manual-backup-step4.md)。下一开发项为 BKP-05，设备事项继续独立跟踪。
+制定日期：2026-10-15。状态：BKP-01 已完成；BKP-02～04 实现及自动化已交付，各自原生生命周期、文档服务/后台/故障及大容量验收待补充，保留进行中；BKP-05 合并导入、SQLite v8 提交标记与启动恢复已交付，311 项 Flutter、123 项 JVM、分析及 debug APK 通过，实际进程终止/恢复待设备，保留进行中；当前导入明确拒绝 ZIP64，大包恢复仍是发布缺口。BKP-06～07 未开始。证据见 [第一步](manual-backup-step1.md)、[第二步](manual-backup-step2.md)、[第三步](manual-backup-step3.md)、[第四步](manual-backup-step4.md)和 [第五步](manual-backup-step5.md)。下一开发项为 BKP-06，设备及 ZIP64 事项继续独立跟踪。
 
 产品行为以 [第一版设计](manual-backup-and-restore-design.md) 为准。本计划明确开发顺序、实现边界和验证关口，不表示功能已实现。既有录音保存协议、AAC/MP3 和旧 M4A 兼容必须保持。
 
@@ -12,7 +12,7 @@
 | 2 / BKP-02 | 全局任务协调、业务写入保护与快照接口 | BKP-01 | 进行中（实现/自动化完成，真机待验收） |
 | 3 / BKP-03 | Android 文档读写、后台执行与通知骨架 | BKP-02 | 进行中（实现/自动化交付，真机待验收） |
 | 4 / BKP-04 | 可取消的完整 ZIP 导出 | BKP-01～03 | 进行中（实现/自动化交付，平台及大容量待验收） |
-| 5 / BKP-05 | 校验、合并导入、事务与中断恢复 | BKP-01～04 | 未开始 |
+| 5 / BKP-05 | 校验、合并导入、事务与中断恢复 | BKP-01～04 | 进行中（实现/自动化交付，真机及 ZIP64 待验收） |
 | 6 / BKP-06 | 设置入口、预览、进度、结果和双语言交互 | BKP-04～05 | 未开始 |
 | 7 / BKP-07 | 全量回归、故障边界与真机换机验收 | BKP-01～06 | 未开始 |
 
@@ -142,4 +142,4 @@
 - [前台服务类型](https://developer.android.com/develop/background-work/services/fgs/service-types)：`dataSync` 包括备份、导入导出和本地文件处理，Android 14 起需适当类型及权限。
 - [前台服务超时](https://developer.android.com/develop/background-work/services/fgs/timeout)：实现时按实际 targetSdk/系统版本处理时间限制及停止回调，不承诺无限后台运行。
 
-第一步固定库版本、协议字段和资源上限；第三步固定工作执行器、FlutterEngine/平台桥生命周期、URI 读写及服务时限；第五步固定提交标记表及迁移版本。这些是实施细节，不重新打开已确认的产品规则。
+第一步固定库版本、协议字段和资源上限；第三步固定原生工作执行器、FlutterEngine/平台桥生命周期、URI 读写及服务时限；第五步固定 SQLite v8 的 `backup_import_commits` 表和专属文件目录/journal 协议，当前明确拒绝 ZIP64 导入。这些是实施细节，不重新打开已确认的产品规则。

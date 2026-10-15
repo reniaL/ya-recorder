@@ -99,15 +99,19 @@ class BackupTaskService : Service() {
     }
 
     private fun finish() {
+        main.removeCallbacksAndMessages(null)
         taskId = null
         runtime.onChanged = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+        runtime.serviceStopped()
     }
 
     override fun onDestroy() {
+        main.removeCallbacksAndMessages(null)
         runtime.onChanged = null
         taskId?.let { runtime.cancel(it, "service-destroyed") }
+        runtime.serviceStopped()
         taskId = null
         super.onDestroy()
     }

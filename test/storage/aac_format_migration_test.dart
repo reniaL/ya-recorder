@@ -182,7 +182,7 @@ void main() {
 
           final db = await inspectDatabase();
           try {
-            expect(await db.getVersion(), 7);
+            expect(await db.getVersion(), 8);
             expect(await db.rawQuery('PRAGMA foreign_key_check'), isEmpty);
             final indexes = await db.rawQuery(
               "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'recordings'",
