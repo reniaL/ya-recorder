@@ -1,0 +1,221 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
+
+import '../recording/recording_service.dart';
+import 'backup_progress.dart';
+import 'library_coordinator.dart';
+
+class BackupDocument {
+  const BackupDocument({required this.uri, required this.displayName});
+  final String uri;
+  final String displayName;
+
+  factory BackupDocument.fromMap(Map<Object?, Object?> map) => BackupDocument(
+    uri: map['uri']! as String,
+    displayName: map['displayName']! as String,
+  );
+}
+
+/// Native snapshots are also the event stream: each poll starts with current
+/// state, so reattachment cannot miss completion between subscribe and query.
+class BackupTransferSnapshot {
+  BackupTransferSnapshot.fromMap(Map<Object?, Object?> map)
+    : taskId = map['taskId']! as String,
+      sequence = map['sequence']! as int,
+      status = map['status']! as String,
+      processedBytes = map['processedBytes']! as int,
+      stagedPath = map['stagedPath']! as String,
+      error = map['error'] as String?,
+      totalBytes = map['totalBytes'] as int?,
+      cancelRequested = map['cancelRequested'] == true,
+      residualUri = map['residualUri'] as String?,
+      cleanupPending = map['cleanupPending'] == true;
+
+  final String taskId;
+  final int sequence;
+  final String status;
+  final int processedBytes;
+  final String stagedPath;
+  final String? error;
+  final int? totalBytes;
+  final bool cancelRequested;
+  final String? residualUri;
+  final bool cleanupPending;
+  bool get isRunning => status == 'running';
+}
+
+class BackupTransferException implements Exception {
+  const BackupTransferException(this.snapshot);
+  final BackupTransferSnapshot snapshot;
+  @override
+  String toString() =>
+      'BackupTransferException: ${snapshot.error ?? snapshot.status}'
+      '${snapshot.residualUri == null ? '' : '; residual: ${snapshot.residualUri}'}';
+}
+
+class BackupDocumentService {
+  BackupDocumentService({
+    MethodChannel? commands,
+    this.pollInterval = const Duration(milliseconds: 250),
+  }) : _commands =
+           commands ??
+           const MethodChannel('io.github.renial.ya_recorder/backup_commands');
+
+  final MethodChannel _commands;
+  final Duration pollInterval;
+
+  Future<BackupDocument?> pickSource() => _pick('pickSource');
+  Future<BackupDocument?> pickTarget(String name) =>
+      _pick('pickTarget', {'name': name});
+
+  Future<BackupDocument?> _pick(
+    String method, [
+    Map<String, Object?>? args,
+  ]) async {
+    final value = await _commands.invokeMapMethod<Object?, Object?>(
+      method,
+      args,
+    );
+    return value == null ? null : BackupDocument.fromMap(value);
+  }
+
+  Future<BackupTransferSnapshot?> snapshot() async {
+    final map = await _commands.invokeMapMethod<Object?, Object?>('snapshot');
+    return map == null ? null : BackupTransferSnapshot.fromMap(map);
+  }
+
+  Future<BackupTransferSnapshot> _call(
+    String method, [
+    Map<String, Object?>? args,
+  ]) async => BackupTransferSnapshot.fromMap(
+    (await _commands.invokeMapMethod<Object?, Object?>(method, args))!,
+  );
+
+  Future<BackupTransferSnapshot> release(String taskId) =>
+      _call('release', {'taskId': taskId});
+
+  /// New engine/process startup barrier. A surviving native transfer drains
+  /// before any recording recovery or library writes. Never resumes a workflow.
+  Future<void> recoverInterruptedTransfer() async {
+    var value = await snapshot();
+    while (value?.isRunning ?? false) {
+      await Future<void>.delayed(pollInterval);
+      value = await snapshot();
+    }
+    if (value == null) return;
+    final cleaned = await release(value.taskId);
+    if (cleaned.cleanupPending) throw BackupTransferException(cleaned);
+    // A residual provider target is reported in the retained snapshot. It is
+    // never treated as a usable backup, and native admission rejects a new job.
+  }
+
+  /// Platform probe/future transport adapter, not a ZIP import/export operation.
+  /// Select the document first, so picker cancellation never acquires the gate.
+  Future<T> copy<T>({
+    required RecordingService recordingService,
+    required BackupDocument document,
+    required bool write,
+    Future<void> Function(String stagedPath)? prepareOutput,
+    required Future<T> Function(BackupTransferSnapshot value) consume,
+  }) async {
+    final prepared = await _call('prepare', {
+      'uri': document.uri,
+      'direction': write ? 'write' : 'read',
+    });
+    var admitted = false;
+    try {
+      return await recordingService.runBackup(
+        taskId: prepared.taskId,
+        operation: write ? BackupOperation.export : BackupOperation.import,
+        action: (lease) async {
+          admitted = true;
+          try {
+            await prepareOutput?.call(prepared.stagedPath);
+            lease.checkCancelled();
+            await _call('startCopy', {
+              'taskId': prepared.taskId,
+              'direction': write ? 'write' : 'read',
+              'uri': document.uri,
+            });
+            var lastSequence = -1;
+            var cancelled = false;
+            while (true) {
+              if (lease.cancelRequested && !cancelled) {
+                await _commands.invokeMethod<void>('cancel', {
+                  'taskId': prepared.taskId,
+                });
+                cancelled = true;
+              }
+              final value = await snapshot();
+              if (value == null || value.taskId != lease.taskId) {
+                throw StateError('Native backup task was replaced');
+              }
+              if (value.sequence > lastSequence) {
+                lastSequence = value.sequence;
+                final coordinator = recordingService.coordinator;
+                coordinator.report(
+                  lease,
+                  BackupProgress(
+                    taskId: lease.taskId,
+                    sequence: (lease.progress?.sequence ?? 0) + 1,
+                    operation: lease.operation,
+                    stage: cancelled || value.cancelRequested
+                        ? BackupStage.cancelling
+                        : write
+                        ? BackupStage.saving
+                        : BackupStage.checking,
+                    processedBytes: value.processedBytes,
+                    totalBytes: value.totalBytes,
+                    processedRecordings: 0,
+                  ),
+                );
+              }
+              if (!value.isRunning) {
+                if (value.status == 'cancelled') {
+                  throw const BackupCancelledException();
+                }
+                if (value.status != 'completed') {
+                  throw BackupTransferException(value);
+                }
+                lease.checkCancelled();
+                final result = await consume(value);
+                lease.checkCancelled();
+                await _commands.invokeMethod<void>('accept', {
+                  'taskId': lease.taskId,
+                });
+                return result;
+              }
+              await Future<void>.delayed(pollInterval);
+            }
+          } finally {
+            await _settle(prepared.taskId);
+          }
+        },
+      );
+    } finally {
+      if (!admitted) await _settle(prepared.taskId);
+    }
+  }
+
+  Future<void> _settle(String id) async {
+    var value = await snapshot();
+    if (value?.taskId != id) {
+      throw StateError('Native backup task was replaced');
+    }
+    if (value!.isRunning) {
+      await _commands.invokeMethod<void>('cancel', {'taskId': id});
+      do {
+        await Future<void>.delayed(pollInterval);
+        value = await snapshot();
+        if (value?.taskId != id) {
+          throw StateError('Native backup task was replaced');
+        }
+      } while (value!.isRunning);
+    }
+    final cleaned = await release(id);
+    if (cleaned.cleanupPending || cleaned.residualUri != null) {
+      throw BackupTransferException(cleaned);
+    }
+  }
+}

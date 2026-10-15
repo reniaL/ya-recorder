@@ -1,10 +1,12 @@
 package io.github.renial.ya_recorder
 
+import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
 	private var recordingPlatformBridge: RecordingPlatformBridge? = null
+	private var backupPlatformBridge: BackupPlatformBridge? = null
 
 	override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
 		super.configureFlutterEngine(flutterEngine)
@@ -12,6 +14,12 @@ class MainActivity : FlutterActivity() {
 			this,
 			flutterEngine.dartExecutor.binaryMessenger,
 		)
+		backupPlatformBridge = BackupPlatformBridge(this, flutterEngine.dartExecutor.binaryMessenger)
+	}
+
+	override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+		if (backupPlatformBridge?.onActivityResult(requestCode, resultCode, data) == true) return
+		super.onActivityResult(requestCode, resultCode, data)
 	}
 
 	override fun onRequestPermissionsResult(
@@ -31,6 +39,8 @@ class MainActivity : FlutterActivity() {
 	}
 
 	override fun onDestroy() {
+		backupPlatformBridge?.dispose()
+		backupPlatformBridge = null
 		recordingPlatformBridge?.dispose()
 		recordingPlatformBridge = null
 		super.onDestroy()

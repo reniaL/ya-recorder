@@ -1,0 +1,67 @@
+{
+    "date":  "2026-10-15",
+    "work_item":  "BKP-03",
+    "base_commit":  "e71b286",
+    "status":  "in_progress",
+    "implementation_complete":  true,
+    "checks":  {
+                   "flutter_analyze_no_pub":  {
+                                                  "result":  "passed, no issues",
+                                                  "log":  "build/bkp03-analysis-final.log"
+                                              },
+                   "flutter_test_no_pub":  {
+                                               "result":  "passed",
+                                               "tests":  284,
+                                               "log":  "build/bkp03-flutter-tests-final.log"
+                                           },
+                   "final_targeted_test":  {
+                                               "result":  "passed",
+                                               "tests":  9,
+                                               "log":  "build/bkp03-targeted-tests.log",
+                                               "note":  "Acceptance-marker assertions added after full regression; production Dart code unchanged."
+                                           },
+                   "android_jvm":  {
+                                       "result":  "passed",
+                                       "errors":  0,
+                                       "tests":  105,
+                                       "log":  "build/bkp03-jvm-final.log",
+                                       "failures":  0
+                                   },
+                   "android_debug_apk":  {
+                                             "path":  "build/app/outputs/flutter-apk/app-debug.apk",
+                                             "result":  "passed",
+                                             "sha256":  "4a0d7799cc357f96e09ebd93b067769fae3b061f635f6ae206958bd439ef02e9",
+                                             "log":  "build/bkp03-build.log"
+                                         },
+                   "adb_devices":  "no connected devices",
+                   "diff_check":  "passed"
+               },
+    "added_tests":  {
+                        "android_jvm":  6,
+                        "flutter":  9
+                    },
+    "execution_path":  "Native process-owned serial stream worker in a dedicated dataSync foreground service; no background FlutterEngine or SQLite writer.",
+    "implemented":  [
+                        "ACTION_CREATE_DOCUMENT / ACTION_OPEN_DOCUMENT with content URI and display name",
+                        "64 KiB bounded non-seekable URI staging/output with cancellation and progress",
+                        "foreground service, localized notification, return-to-app and cancel intents",
+                        "10-second start watchdog, 30-minute transport timeout, Android 15+ onTimeout",
+                        "atomic transport journal, explicit acceptance and scoped cleanup with residual URI reporting",
+                        "Dart lease held through consume and cleanup; startup barrier drains native worker before recovery",
+                        "manual transport probe entrypoint without production settings entry"
+                    ],
+    "boundaries":  [
+                       "No backup ZIP generation, archive verification, merge import, SQLite commit marker or production UI.",
+                       "Native copy survives Activity/Engine detach; a new engine drains/cleans the old transport and does not resume old Dart callbacks.",
+                       "Probe output is a 4 MiB zero-filled transport sample, not a valid backup; standalone probe APK not built or installed.",
+                       "Automated native coverage tests stream copy, not real Android Service/ContentResolver/process lifecycle.",
+                       "A provider blocked within an IO call may delay cancellation until the call returns; the guard is not forcibly released."
+                   ],
+    "pending":  [
+                    "Real document picker/provider URI permissions, non-seekable source and write/readback hashes",
+                    "Notification denial, return/cancel, background and lock screen",
+                    "Activity reconstruction, service-start restrictions, Android timeout and process termination/restart",
+                    "Source/target access loss, space exhaustion, partial-target deletion and cleanup retries",
+                    "BKP-04/05 native ZIP work and durable import transaction/recovery"
+                ]
+}
