@@ -303,5 +303,132 @@
   "recordingSaveFailed": "无法保存录音，残留文件已保留。",
   "permissionRequestActive": "正在请求麦克风权限，请先完成授权。",
   "shareInvalidRecording": "只能分享格式正确的已完成录音。",
-  "recordingBaseName": "录音"
+  "recordingBaseName": "录音",
+  "backupTitle": "备份与恢复",
+  "backupDescription": "导出全部正常录音，或将备份合并到当前录音库。",
+  "backupExport": "导出备份",
+  "backupImport": "导入备份",
+  "backupCurrentTask": "查看当前任务",
+  "backupLastResult": "查看上次结果",
+  "backupReview": "导出摘要",
+  "backupPreview": "导入预览",
+  "backupScope": "包含全部正常录音和文件夹（含空文件夹），不包含最近删除、草稿和应用设置。",
+  "backupUnencrypted": "备份未加密，获得文件的人可以读取原始音频和录音信息。",
+  "backupSpace": "音频总大小：{audio}。临时 ZIP 预计最多需要 {temporary}，本地保存位置可能还需要同等大小的副本空间。无法预先确认目标容量，开始导出时会重新检查录音库。",
+  "@backupSpace": {
+    "placeholders": {
+      "audio": {
+        "type": "String"
+      },
+      "temporary": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSave": "选择保存位置",
+  "backupConfirm": "确认导入",
+  "backupMerge": "相同录音 ID 一律跳过（含最近删除），保留已有音频和信息，不提供覆盖或保留副本选项。",
+  "backupProtected": "备份任务正在保护录音库，暂时无法新建录音或修改数据。仍可浏览、播放和调整设置。",
+  "backupCanLeave": "可以离开本页，从设置或任务通知重新进入。返回不会取消任务。",
+  "backupZip64": "当前暂不支持导入 ZIP64 备份或达到 4 GiB 的 ZIP 文件。",
+  "backupPreparing": "准备备份",
+  "backupChecking": "检查备份",
+  "backupPacking": "打包文件",
+  "backupVerifying": "校验备份",
+  "backupSaving": "保存备份",
+  "backupImporting": "导入文件",
+  "backupCommitting": "正在完成导入，暂不可取消",
+  "backupCancelling": "正在安全取消",
+  "backupPicking": "请在系统文件选择器中选择文件或保存位置。",
+  "backupWorking": "正在准备任务",
+  "backupCancel": "取消任务",
+  "backupExported": "备份已保存",
+  "backupImported": "导入完成",
+  "backupNoAdditions": "内容均已存在，没有新增录音或文件夹。",
+  "backupCancelled": "任务已取消，已有录音保持不变。",
+  "backupFailed": "任务未能完成",
+  "backupOutsidePhone": "请将备份复制到电脑、外置存储或其他设备，仅保存在本机无法防范手机丢失。",
+  "backupShare": "分享备份",
+  "backupShareHandoff": "已将备份交给所选应用，这不代表远端上传成功。",
+  "backupShareFailed": "无法分享备份，临时副本可能已过期，请重新导出后再试。",
+  "backupCleanupPending": "导入已提交，部分任务文件仍待清理，重新打开应用后会重试。已导入音频会保留。",
+  "backupResidual": "此位置可能留有不可用的备份半成品，请清理后再试：",
+  "backupRecoveredImport": "上次导入已提交，已导入的录音已保留。",
+  "backupInterrupted": "上次任务意外中断，启动恢复已执行，请检查录音库后再试。",
+  "backupErrorBusy": "请先结束录音，等待保存或其他数据修改完成后再试。",
+  "backupErrorInvalid": "备份损坏或格式不正确，未导入包内内容。",
+  "backupErrorVersion": "暂不支持此备份版本，请使用兼容版本的应用。",
+  "backupErrorSpace": "存储空间不足，请清理应用所在存储和保存位置的空间后重试。",
+  "backupErrorPermission": "文件访问权限被拒绝或已失效，请重新选择文件或保存位置。",
+  "backupErrorLocal": "本地音频或目标路径存在异常，已有文件已保留，请检查录音库后重试。",
+  "backupErrorCleanup": "任务清理未完成，归属不明的文件已保留。请重新打开应用重试恢复。",
+  "backupErrorUnknown": "任务失败，请检查文件访问权限和可用空间后重试，已有录音已保留。",
+  "backupRenamedTitle": "导入时改名的文件夹",
+  "backupCreatedAt": "备份时间：{date}",
+  "@backupCreatedAt": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "backupByteProgress": "{done} / {total}",
+  "@backupByteProgress": {
+    "placeholders": {
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRecordingsCount": "{count} 条录音",
+  "@backupRecordingsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupFoldersCount": "{count} 个文件夹",
+  "@backupFoldersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupAddedCount": "新增录音：{count} 条",
+  "@backupAddedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupDuplicateCount": "重复跳过：{count} 条",
+  "@backupDuplicateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupConflictCount": "差异冲突跳过：{count} 条",
+  "@backupConflictCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupAddedResult": "已新增录音：{count} 条",
+  "@backupAddedResult": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

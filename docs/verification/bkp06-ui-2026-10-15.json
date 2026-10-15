@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-15",
+  "work_item": "BKP-06",
+  "base_commit": "3d7039b",
+  "status": "in_progress",
+  "implementation_delivered": true,
+  "checks": {
+    "flutter_analyze": {"result": "passed, no issues", "log": "build/bkp06-analysis.log"},
+    "flutter_test": {"result": "passed", "tests": 335, "log": "build/bkp06-flutter.log"},
+    "android_jvm": {"result": "passed", "tests": 125, "failures": 0, "errors": 0, "log": "build/bkp06-jvm.log"},
+    "android_debug_apk": {
+      "result": "passed",
+      "path": "build/app/outputs/flutter-apk/app-debug.apk",
+      "sha256": "7621bbcbf82044c7a6cf9682d3b890dae2d2495c19d413722c47fc82081722d4",
+      "log": "build/bkp06-build.log"
+    },
+    "adb_devices": "no connected devices",
+    "diff_check": "passed"
+  },
+  "added_tests": {"flutter": 24, "android_jvm": 2},
+  "implemented": [
+    "Settings entry with current-task or last-result status, without a new main navigation destination",
+    "Application-owned BackupController; pages observe and confirm without owning task futures or cancelling on back",
+    "Export scope/count/space/unencrypted summary and picker cancellation without admission",
+    "Validated import preview, duplicate/conflict counts, folder rename sheet and explicit merge confirmation",
+    "Stage byte/count progress, safe cancellation and disabled cancellation during SQLite commit",
+    "Library, folder management and recently deleted protection explanations and disabled management actions; browsing/playback remain available",
+    "Lists and already-open folder scope sheet refresh on task release; protected trash browsing does not wait for deferred purge",
+    "Retained export/import/cancel/failure results, localized error categories and residual target location",
+    "ZIP sharing uses retained native copy, application/zip and filename override; reports handoff only and preserves successful export on share errors",
+    "Native display name and bounded import summary receipts; SQLite-authoritative matching-task recovery controls restored import success",
+    "Startup recovery failure review/retry without bypassing the business barrier; successful retry refreshes library",
+    "Cold Intent and warm onNewIntent notification routing with current task matching and duplicate-route protection",
+    "Chinese/English ARB strings, natural plural quantities, localized dates/bytes, theme adaptation and language-triggered notification refresh",
+    "Workflow generations prevent stale startup snapshots overwriting new user actions; a new failure clears old success details",
+    "Native import progress excludes JSON entries from recording counts"
+  ],
+  "ui_coverage": {
+    "locales": ["zh", "en"],
+    "brightness": ["light", "dark"],
+    "viewport": {"width": 320, "height": 640},
+    "text_scale": 2,
+    "minimum_tested_button_height": 48,
+    "checks": ["export review", "import preview", "result", "semantic labels", "scroll reachability", "no layout exceptions"]
+  },
+  "coverage_limits": [
+    "Widget/controller tests use real temporary SQLite and import engine with mocked native document transport/share invoker; native Service/ContentResolver/Intent lifecycle is not device-verified",
+    "JVM tests run actual ZIP/filesystem workers and bounded summary validation, not Android notification or share UI",
+    "Reopened import receipts retain statistics; the full folder-rename list is retained in the live application session rather than a backup history database",
+    "Import continues to reject ZIP64 and ZIP files at the 32-bit archive limit; the UI states this limitation",
+    "Local duplicate-file hashing can delay cancellation until that file finishes, as recorded in BKP-05",
+    "Synthetic media payloads do not establish three-format playback or new-device restore acceptance"
+  ],
+  "pending": [
+    "Real Android back/gesture behavior, notification re-entry/cancellation, background/lock-screen and Activity/Engine recreation",
+    "Process termination/restart and actual provider permission/storage/cleanup failures",
+    "Device checks of disabled operations with browsing/playback, and delayed share consumer reads",
+    "ZIP64 import and real large-archive recovery before release acceptance",
+    "BKP-07 fault-boundary and new-device restore acceptance"
+  ]
+}

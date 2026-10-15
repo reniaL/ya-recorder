@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'backup/library_coordinator.dart';
 import 'backup/backup_document_service.dart';
 import 'backup/backup_import_service.dart';
+import 'backup/backup_controller.dart';
+import 'backup/backup_page.dart';
 import 'playback/audio_playback_service.dart';
 import 'playback/playback_progress.dart';
 import 'playback/recording_detail_page.dart';
@@ -19,6 +21,7 @@ import 'settings/recording_settings_page.dart';
 import 'settings/app_language.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/folder_id.dart';
+import 'storage/folder_scope_picker.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
 import 'storage/recently_deleted_page.dart';
@@ -171,6 +174,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   Future<RecordingStore>? _openedRecordingStore;
   LibraryCoordinator? _libraryCoordinator;
   bool _libraryProtected = false;
+  BackupController? _backupController;
+  bool _backupRouteOpen = false;
+  bool _backupStartupFailed = false;
   bool _languageChangedInSettings = false;
   AppLocalizations _titleStrings = lookupAppLocalizations(
     AppLanguage.simplifiedChinese.locale,
@@ -236,6 +242,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _libraryCoordinator?.removeListener(_libraryProtectionChanged);
+    _backupController?.removeListener(_backupUiChanged);
+    _backupController?.dispose();
     _successMessageTimer?.cancel();
     _eventSubscription.cancel();
     _playbackSubscription.cancel();
@@ -342,7 +350,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   Future<void> _openRecordingSettings() async {
     try {
-      final store = await _getRecordingStore();
+      final store = await _getRecordingStore(allowRecoveryFailure: true);
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
@@ -351,11 +359,27 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             service: widget.recordingService,
             onThemeChanged: widget.onThemeChanged,
             onLanguageChanged: _languageChanged,
+            backupController: _backupController,
+            onOpenBackup: _openBackup,
           ),
         ),
       );
     } catch (_) {
       _setServiceError('openSettingsFailed');
+    }
+  }
+
+  Future<void> _openBackup() async {
+    if (!mounted || _backupRouteOpen || _backupController == null) return;
+    _backupRouteOpen = true;
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => BackupPage(controller: _backupController!),
+        ),
+      );
+    } finally {
+      _backupRouteOpen = false;
     }
   }
 
@@ -423,39 +447,14 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   Future<void> _chooseFolderScope() async {
     try {
-      final folders = await (await _getRecordingStore()).listFolders();
+      final store = await _getRecordingStore();
       if (!mounted) {
         return;
       }
       final selectedFolderId = await showModalBottomSheet<String?>(
         context: context,
-        builder: (context) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              ListTile(title: Text(l10n(context).selectScope)),
-              ListTile(
-                key: const Key('folderScope-all'),
-                leading: const Icon(Icons.library_music_outlined),
-                title: Text(l10n(context).allRecordings),
-                trailing: _selectedFolderId == null
-                    ? const Icon(Icons.check_rounded)
-                    : null,
-                onTap: () => Navigator.pop(context, ''),
-              ),
-              for (final folder in folders)
-                ListTile(
-                  key: Key('folderScope-${folder.id}'),
-                  leading: const Icon(Icons.folder_outlined),
-                  title: Text(folder.name),
-                  trailing: _selectedFolderId == folder.id
-                      ? const Icon(Icons.check_rounded)
-                      : null,
-                  onTap: () => Navigator.pop(context, folder.id),
-                ),
-            ],
-          ),
-        ),
+        builder: (_) =>
+            FolderScopePicker(store: store, selectedId: _selectedFolderId),
       );
       if (!mounted || selectedFolderId == null) {
         return;
@@ -465,6 +464,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         return;
       }
 
+      final folders = await store.listFolders();
+      if (!mounted) return;
       final selectedFolder = folders.where((folder) => folder.id == folderId);
       setState(() {
         _selectedFolderId = folderId;
@@ -803,9 +804,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   }
 
   Future<void> _openFolderManagement() async {
+    final store = await _getRecordingStore();
+    if (!mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (context) => _FolderManagementPage(
+          coordinator: store.coordinator,
           listFolders: () async => (await _getRecordingStore()).listFolders(),
           reorderFolders: (ids) async =>
               (await _getRecordingStore()).reorderFolders(ids),
@@ -1165,7 +1169,18 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
-  Future<RecordingStore> _getRecordingStore() async {
+  void _backupUiChanged() {
+    if (!mounted) return;
+    final failed = _backupController?.startupFailure ?? false;
+    if (failed != _backupStartupFailed) {
+      setState(() => _backupStartupFailed = failed);
+      if (!failed) unawaited(_loadRecordings());
+    }
+  }
+
+  Future<RecordingStore> _getRecordingStore({
+    bool allowRecoveryFailure = false,
+  }) async {
     final store =
         widget.recordingStore ??
         await (_openedRecordingStore ??= _openDefaultRecordingStore());
@@ -1176,7 +1191,32 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       _libraryProtected = store.coordinator.isProtected;
       store.coordinator.addListener(_libraryProtectionChanged);
     }
-    await store.coordinator.ensureInitialized();
+    var newController = false;
+    if (mounted && _backupController == null) {
+      _backupController =
+          BackupController(
+              store: store,
+              recordingService: widget.recordingService,
+            )
+            ..onOpenRequested = () {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) unawaited(_openBackup());
+              });
+              WidgetsBinding.instance.ensureVisualUpdate();
+            };
+      newController = true;
+      _backupController!.addListener(_backupUiChanged);
+    }
+    try {
+      await store.coordinator.ensureInitialized();
+    } catch (error) {
+      _backupController?.showStartupFailure(error);
+      if (!allowRecoveryFailure) rethrow;
+      return store;
+    }
+    if (newController || (_backupController?.startupFailure ?? false)) {
+      unawaited(_backupController!.initialize());
+    }
     return store;
   }
 
@@ -1184,7 +1224,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (!mounted) return;
     final protected = _libraryCoordinator!.isProtected;
     if (_libraryProtected == protected) return;
-    setState(() => _libraryProtected = protected);
+    setState(() {
+      _libraryProtected = protected;
+      if (protected) {
+        _isSelecting = false;
+        _selectedRecordingIds.clear();
+      }
+    });
     if (!protected) unawaited(_loadRecordings());
   }
 
@@ -1196,7 +1242,14 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       libraryCoordinator: LibraryCoordinator(
         recoverInterruptedTask: () async {
           await BackupDocumentService().recoverInterruptedTransfer();
-          await BackupImportRecovery(paths, store).recover();
+          await BackupImportRecovery(
+            paths,
+            store,
+            onRecovered: (taskId, committed) {
+              store.coordinator.recoveredImportTaskId = taskId;
+              store.coordinator.recoveredImportCommitted = committed;
+            },
+          ).recover();
         },
       ),
     );
@@ -1217,6 +1270,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   bool get _canStart =>
       !_libraryProtected &&
+      !_backupStartupFailed &&
       !_isPersistingRecording &&
       (_status.state == RecordingLifecycleState.idle ||
           _status.state == RecordingLifecycleState.failed);
@@ -1397,6 +1451,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           child: Column(
             children: [
               if (_permissionMessage != null ||
+                  _libraryProtected ||
+                  _backupStartupFailed ||
                   _serviceError != null ||
                   _successMessage != null ||
                   _playbackError != null)
@@ -1408,6 +1464,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          if (_libraryProtected)
+                            BackupProtectionNotice(onOpen: _openBackup),
+                          if (_backupStartupFailed) ...[
+                            Text(l10n(context).backupErrorCleanup),
+                            TextButton(
+                              onPressed: _openBackup,
+                              child: Text(l10n(context).backupLastResult),
+                            ),
+                          ],
                           if (_permissionMessage != null) ...[
                             _MessagePanel(
                               icon: Icons.mic_off_rounded,
@@ -1718,10 +1783,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                         itemBuilder: (context) => [
                           PopupMenuItem(
                             value: 'rename',
+                            enabled: !_libraryProtected,
                             child: Text(l10n(context).rename),
                           ),
                           PopupMenuItem(
                             value: 'move',
+                            enabled: !_libraryProtected,
                             child: Text(l10n(context).moveToFolder),
                           ),
                           PopupMenuItem(
@@ -1730,6 +1797,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                           ),
                           PopupMenuItem(
                             value: 'delete',
+                            enabled: !_libraryProtected,
                             child: Text(l10n(context).delete),
                           ),
                         ],
@@ -2140,9 +2208,11 @@ class _FolderManagementPage extends StatefulWidget {
     required this.renameFolder,
     required this.deleteFolder,
     required this.reorderFolders,
+    required this.coordinator,
   });
 
   final Future<List<RecordingFolder>> Function() listFolders;
+  final LibraryCoordinator coordinator;
   final Future<void> Function(List<String> ids) reorderFolders;
   final Future<List<Recording>> Function(String folderId) listRecordings;
   final Future<RecordingFolder> Function(String name) createFolder;
@@ -2160,6 +2230,30 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
   List<RecordingFolder>? _draft;
   List<String> _originalIds = [];
   bool _savingOrder = false;
+  bool get _protected => widget.coordinator.isProtected;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.coordinator.addListener(_protectionChanged);
+    _wasProtected = _protected;
+  }
+
+  bool _wasProtected = false;
+  void _protectionChanged() {
+    if (!mounted || _wasProtected == _protected) return;
+    _wasProtected = _protected;
+    setState(() {
+      if (!_savingOrder) _draft = null;
+      if (!_protected) _folders = widget.listFolders();
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.coordinator.removeListener(_protectionChanged);
+    super.dispose();
+  }
 
   void _cancelSort() {
     if (_savingOrder) return;
@@ -2313,8 +2407,8 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
 
   Widget _folderRow(RecordingFolder folder, int index, int count) {
     final sorting = _draft != null;
-    final up = index > 0 && !_savingOrder;
-    final down = index < count - 1 && !_savingOrder;
+    final up = index > 0 && !_savingOrder && !_protected;
+    final down = index < count - 1 && !_savingOrder && !_protected;
     return ListTile(
       key: ValueKey(folder.id),
       leading: const Icon(Icons.folder_outlined),
@@ -2370,6 +2464,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
               ],
             )
           : PopupMenuButton<String>(
+              enabled: !_protected,
               key: Key('folderActions-${folder.id}'),
               tooltip: l10n(context).folderActions,
               onSelected: (action) {
@@ -2422,7 +2517,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                 if (sorting)
                   TextButton(
                     key: const Key('saveFolderSort'),
-                    onPressed: _savingOrder ? null : _saveOrder,
+                    onPressed: _savingOrder || _protected ? null : _saveOrder,
                     child: Text(l10n(context).done),
                   )
                 else
@@ -2430,6 +2525,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                     key: const Key('startFolderSort'),
                     onPressed:
                         snapshot.connectionState != ConnectionState.done ||
+                            _protected ||
                             snapshot.hasError ||
                             folders.length < 2
                         ? null
@@ -2450,6 +2546,13 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                 ? Center(child: Text(l10n(context).foldersReadFailed))
                 : Column(
                     children: [
+                      if (_protected)
+                        const Flexible(
+                          fit: FlexFit.loose,
+                          child: SingleChildScrollView(
+                            child: BackupProtectionNotice(),
+                          ),
+                        ),
                       if (sorting)
                         Padding(
                           padding: EdgeInsets.all(16),
@@ -2504,7 +2607,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                 ? null
                 : FloatingActionButton.extended(
                     key: const Key('createFolderButton'),
-                    onPressed: _createFolder,
+                    onPressed: _protected ? null : _createFolder,
                     icon: const Icon(Icons.create_new_folder_outlined),
                     label: Text(l10n(context).createFolder),
                   ),

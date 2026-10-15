@@ -52,7 +52,7 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
 
     @Synchronized fun serviceStopped() { serviceActive = false }
 
-    @Synchronized fun prepare(uri: String, direction: String): Map<String, Any?> {
+    @Synchronized fun prepare(uri: String, direction: String, displayName: String? = null): Map<String, Any?> {
         check(!executing && !cleaning && state?.get("status") !in listOf("prepared", "running")) { "backup-busy" }
         check(state == null || state?.get("released") == true) { "backup-release-required" }
         check(state?.get("residualUri") == null && state?.get("cleanupPending") != true) { "backup-cleanup-pending" }
@@ -62,7 +62,7 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         val directory = File(root, id).apply { check(mkdir()) }
         state = mutableMapOf("taskId" to id, "sequence" to 0L, "status" to "prepared", "processedBytes" to 0L,
             "directory" to directory.path, "stagedPath" to File(directory, "payload.zip").path,
-            "uri" to uri, "direction" to direction)
+            "uri" to uri, "direction" to direction, "displayName" to displayName?.take(4096))
         persist()
         worker.execute { pruneExpiredExports() }
         return state!!.toMap()
@@ -255,6 +255,13 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         requireCurrent(id)
         check(state!!["status"] == "completed")
         state!!["accepted"] = true
+        persist()
+    }
+
+    @Synchronized fun recordImportSummary(id: String, summary: BackupImportSummary) {
+        requireCurrent(id)
+        check(state!!["kind"] == "import" && state!!["status"] == "completed" && !executing)
+        state!!.putAll(summary.fields())
         persist()
     }
 

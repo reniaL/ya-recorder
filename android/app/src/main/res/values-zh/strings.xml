@@ -9,4 +9,5 @@
     <string name="backup_preparing">正在检查录音 · %1$d KB</string>
     <string name="backup_packing">正在打包备份 · %1$d KB</string>
     <string name="backup_verifying">正在复核备份 · %1$d KB</string>
+    <string name="backup_importing">正在导入文件 · %1$d KB</string>
 </resources>

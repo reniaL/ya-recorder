@@ -1,5 +1,6 @@
 import '../l10n/localization.dart';
 import 'package:flutter/material.dart';
+import '../backup/backup_controller.dart';
 
 import '../recording/recording_format.dart';
 import '../recording/recording_service.dart';
@@ -13,12 +14,16 @@ class RecordingSettingsPage extends StatefulWidget {
     required this.service,
     this.onThemeChanged,
     this.onLanguageChanged,
+    this.backupController,
+    this.onOpenBackup,
   });
 
   final RecordingStore store;
   final RecordingService service;
   final ValueChanged<ThemeMode>? onThemeChanged;
   final ValueChanged<AppLanguage>? onLanguageChanged;
+  final BackupController? backupController;
+  final VoidCallback? onOpenBackup;
 
   @override
   State<RecordingSettingsPage> createState() => _RecordingSettingsPageState();
@@ -231,6 +236,23 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
               : ListView(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   children: [
+                    if (widget.backupController != null)
+                      AnimatedBuilder(
+                        animation: widget.backupController!,
+                        builder: (context, _) => ListTile(
+                          key: const Key('backupSettings'),
+                          title: Text(l10n(context).backupTitle),
+                          subtitle: Text(
+                            widget.backupController!.busy
+                                ? l10n(context).backupCurrentTask
+                                : widget.backupController!.outcome == null
+                                ? l10n(context).backupDescription
+                                : l10n(context).backupLastResult,
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: widget.onOpenBackup,
+                        ),
+                      ),
                     Semantics(
                       value: _language?.nativeName,
                       child: ListTile(

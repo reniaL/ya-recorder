@@ -1189,6 +1189,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recording'**
   String get recordingBaseName;
+
+  /// No description provided for @backupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup and restore'**
+  String get backupTitle;
+
+  /// No description provided for @backupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Export all saved recordings, or merge a backup into this library.'**
+  String get backupDescription;
+
+  /// No description provided for @backupExport.
+  ///
+  /// In en, this message translates to:
+  /// **'Export backup'**
+  String get backupExport;
+
+  /// No description provided for @backupImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import backup'**
+  String get backupImport;
+
+  /// No description provided for @backupCurrentTask.
+  ///
+  /// In en, this message translates to:
+  /// **'View current task'**
+  String get backupCurrentTask;
+
+  /// No description provided for @backupLastResult.
+  ///
+  /// In en, this message translates to:
+  /// **'View last result'**
+  String get backupLastResult;
+
+  /// No description provided for @backupReview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review export'**
+  String get backupReview;
+
+  /// No description provided for @backupPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Review import'**
+  String get backupPreview;
+
+  /// No description provided for @backupScope.
+  ///
+  /// In en, this message translates to:
+  /// **'Includes saved recordings and all folders, including empty folders. Recently Deleted, drafts and app settings are excluded.'**
+  String get backupScope;
+
+  /// No description provided for @backupUnencrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'This backup is not encrypted. Anyone with the file can read the audio and recording information.'**
+  String get backupUnencrypted;
+
+  /// No description provided for @backupSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio: {audio}. Estimated temporary ZIP: up to {temporary}. A local destination may need another copy of that size. Destination capacity cannot be checked in advance. The library is checked again when export starts.'**
+  String backupSpace(String audio, String temporary);
+
+  /// No description provided for @backupSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose save location'**
+  String get backupSave;
+
+  /// No description provided for @backupConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm import'**
+  String get backupConfirm;
+
+  /// No description provided for @backupMerge.
+  ///
+  /// In en, this message translates to:
+  /// **'Existing recording IDs are skipped, including Recently Deleted. Existing audio and metadata will be kept. No overwrite or extra-copy options are offered.'**
+  String get backupMerge;
+
+  /// No description provided for @backupProtected.
+  ///
+  /// In en, this message translates to:
+  /// **'A backup task is protecting your library. Recording and management changes are temporarily unavailable. You can still browse, play audio and change settings.'**
+  String get backupProtected;
+
+  /// No description provided for @backupCanLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'You can leave this page and return from Settings or the task notification. Going back does not cancel the task.'**
+  String get backupCanLeave;
+
+  /// No description provided for @backupZip64.
+  ///
+  /// In en, this message translates to:
+  /// **'ZIP64 backups and ZIP files of 4 GiB or more cannot currently be imported.'**
+  String get backupZip64;
+
+  /// No description provided for @backupPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking recordings'**
+  String get backupPreparing;
+
+  /// No description provided for @backupChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking backup'**
+  String get backupChecking;
+
+  /// No description provided for @backupPacking.
+  ///
+  /// In en, this message translates to:
+  /// **'Packing files'**
+  String get backupPacking;
+
+  /// No description provided for @backupVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying backup'**
+  String get backupVerifying;
+
+  /// No description provided for @backupSaving.
+  ///
+  /// In en, this message translates to:
+  /// **'Saving backup'**
+  String get backupSaving;
+
+  /// No description provided for @backupImporting.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing files'**
+  String get backupImporting;
+
+  /// No description provided for @backupCommitting.
+  ///
+  /// In en, this message translates to:
+  /// **'Finishing import — cancellation is unavailable'**
+  String get backupCommitting;
+
+  /// No description provided for @backupCancelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling safely'**
+  String get backupCancelling;
+
+  /// No description provided for @backupPicking.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a file or save location in the system picker.'**
+  String get backupPicking;
+
+  /// No description provided for @backupWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing task'**
+  String get backupWorking;
+
+  /// No description provided for @backupCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel task'**
+  String get backupCancel;
+
+  /// No description provided for @backupExported.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup saved'**
+  String get backupExported;
+
+  /// No description provided for @backupImported.
+  ///
+  /// In en, this message translates to:
+  /// **'Import complete'**
+  String get backupImported;
+
+  /// No description provided for @backupNoAdditions.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything already exists. No recordings or folders were added.'**
+  String get backupNoAdditions;
+
+  /// No description provided for @backupCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Task cancelled. Existing recordings are unchanged.'**
+  String get backupCancelled;
+
+  /// No description provided for @backupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Task could not be completed'**
+  String get backupFailed;
+
+  /// No description provided for @backupOutsidePhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy this backup to a computer, external drive or other device. A backup kept only on this phone cannot protect against losing the phone.'**
+  String get backupOutsidePhone;
+
+  /// No description provided for @backupShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share backup'**
+  String get backupShare;
+
+  /// No description provided for @backupShareHandoff.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup was handed to the selected app. This does not confirm a remote upload.'**
+  String get backupShareHandoff;
+
+  /// No description provided for @backupShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not share the backup. Its temporary copy may have expired; export again to retry.'**
+  String get backupShareFailed;
+
+  /// No description provided for @backupCleanupPending.
+  ///
+  /// In en, this message translates to:
+  /// **'The import is committed. Some task files still need cleanup; reopening the app will retry. Imported audio will be kept.'**
+  String get backupCleanupPending;
+
+  /// No description provided for @backupResidual.
+  ///
+  /// In en, this message translates to:
+  /// **'An unusable partial backup may remain at this location. Remove it before trying again:'**
+  String get backupResidual;
+
+  /// No description provided for @backupRecoveredImport.
+  ///
+  /// In en, this message translates to:
+  /// **'The previous import was committed. Your imported recordings have been kept.'**
+  String get backupRecoveredImport;
+
+  /// No description provided for @backupInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'The previous task stopped unexpectedly. Startup recovery has run. Check your recording library before trying again.'**
+  String get backupInterrupted;
+
+  /// No description provided for @backupErrorBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish recording or other library changes before starting a backup task.'**
+  String get backupErrorBusy;
+
+  /// No description provided for @backupErrorInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is damaged or invalid. No backup content was imported.'**
+  String get backupErrorInvalid;
+
+  /// No description provided for @backupErrorVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'This backup version is not supported. Use a compatible app version.'**
+  String get backupErrorVersion;
+
+  /// No description provided for @backupErrorSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'There is not enough storage. Free space in the app storage and save location, then try again.'**
+  String get backupErrorSpace;
+
+  /// No description provided for @backupErrorPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'File access was denied or expired. Select the file or save location again.'**
+  String get backupErrorPermission;
+
+  /// No description provided for @backupErrorLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Existing audio or a target path is inconsistent. Existing files were kept. Check your library before retrying.'**
+  String get backupErrorLocal;
+
+  /// No description provided for @backupErrorCleanup.
+  ///
+  /// In en, this message translates to:
+  /// **'Task cleanup could not finish. Files with uncertain ownership were kept. Reopen the app to retry recovery.'**
+  String get backupErrorCleanup;
+
+  /// No description provided for @backupErrorUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'The task failed. Check file access and available storage, then try again. Existing recordings were kept.'**
+  String get backupErrorUnknown;
+
+  /// No description provided for @backupRenamedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder names changed for import'**
+  String get backupRenamedTitle;
+
+  /// No description provided for @backupCreatedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup created: {date}'**
+  String backupCreatedAt(String date);
+
+  /// No description provided for @backupByteProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{done} / {total}'**
+  String backupByteProgress(String done, String total);
+
+  /// No description provided for @backupRecordingsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 recordings} =1{1 recording} other{{count} recordings}}'**
+  String backupRecordingsCount(int count);
+
+  /// No description provided for @backupFoldersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 folders} =1{1 folder} other{{count} folders}}'**
+  String backupFoldersCount(int count);
+
+  /// No description provided for @backupAddedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 recordings to add} =1{1 recording to add} other{{count} recordings to add}}'**
+  String backupAddedCount(int count);
+
+  /// No description provided for @backupDuplicateCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 duplicates skipped} =1{1 duplicate skipped} other{{count} duplicates skipped}}'**
+  String backupDuplicateCount(int count);
+
+  /// No description provided for @backupConflictCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 conflicting recordings skipped} =1{1 conflicting recording skipped} other{{count} conflicting recordings skipped}}'**
+  String backupConflictCount(int count);
+
+  /// No description provided for @backupAddedResult.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{0 recordings added} =1{1 recording added} other{{count} recordings added}}'**
+  String backupAddedResult(int count);
 }
 
 class _AppLocalizationsDelegate

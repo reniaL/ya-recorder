@@ -1,5 +1,6 @@
 import '../l10n/localization.dart';
 import 'package:flutter/material.dart';
+import '../backup/backup_page.dart';
 
 import 'models/recording.dart';
 import 'recording_store.dart';
@@ -26,13 +27,26 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    widget.store.coordinator.addListener(_protectionChanged);
+    _wasProtected = widget.store.coordinator.isProtected;
     _load();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.store.coordinator.removeListener(_protectionChanged);
     super.dispose();
+  }
+
+  bool _wasProtected = false;
+  void _protectionChanged() {
+    if (!mounted || _wasProtected == widget.store.coordinator.isProtected) {
+      return;
+    }
+    _wasProtected = widget.store.coordinator.isProtected;
+    setState(() {});
+    if (!_wasProtected && !_busy) _load();
   }
 
   @override
@@ -44,7 +58,9 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
     setState(() => _busy = true);
     try {
       final now = _now;
-      final failures = await widget.store.purgeExpiredRecordings(now: now);
+      final failures = widget.store.coordinator.isProtected
+          ? <String>[]
+          : await widget.store.purgeExpiredRecordings(now: now);
       final recordings = await widget.store.listRecentlyDeleted();
       if (!mounted) return;
       setState(() {
@@ -157,6 +173,8 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (widget.store.coordinator.isProtected)
+                const SliverToBoxAdapter(child: BackupProtectionNotice()),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -206,7 +224,8 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
                       subtitle: Text(_deletionInfo(recording)),
                       isThreeLine: true,
                       trailing: PopupMenuButton<String>(
-                        enabled: !_busy,
+                        enabled:
+                            !_busy && !widget.store.coordinator.isProtected,
                         tooltip: l10n(context).titleActions(recording.title),
                         onSelected: (action) =>
                             _apply(recording, permanently: action == 'delete'),

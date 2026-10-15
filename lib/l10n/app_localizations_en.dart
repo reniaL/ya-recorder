@@ -652,4 +652,264 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recordingBaseName => 'Recording';
+
+  @override
+  String get backupTitle => 'Backup and restore';
+
+  @override
+  String get backupDescription =>
+      'Export all saved recordings, or merge a backup into this library.';
+
+  @override
+  String get backupExport => 'Export backup';
+
+  @override
+  String get backupImport => 'Import backup';
+
+  @override
+  String get backupCurrentTask => 'View current task';
+
+  @override
+  String get backupLastResult => 'View last result';
+
+  @override
+  String get backupReview => 'Review export';
+
+  @override
+  String get backupPreview => 'Review import';
+
+  @override
+  String get backupScope =>
+      'Includes saved recordings and all folders, including empty folders. Recently Deleted, drafts and app settings are excluded.';
+
+  @override
+  String get backupUnencrypted =>
+      'This backup is not encrypted. Anyone with the file can read the audio and recording information.';
+
+  @override
+  String backupSpace(String audio, String temporary) {
+    return 'Audio: $audio. Estimated temporary ZIP: up to $temporary. A local destination may need another copy of that size. Destination capacity cannot be checked in advance. The library is checked again when export starts.';
+  }
+
+  @override
+  String get backupSave => 'Choose save location';
+
+  @override
+  String get backupConfirm => 'Confirm import';
+
+  @override
+  String get backupMerge =>
+      'Existing recording IDs are skipped, including Recently Deleted. Existing audio and metadata will be kept. No overwrite or extra-copy options are offered.';
+
+  @override
+  String get backupProtected =>
+      'A backup task is protecting your library. Recording and management changes are temporarily unavailable. You can still browse, play audio and change settings.';
+
+  @override
+  String get backupCanLeave =>
+      'You can leave this page and return from Settings or the task notification. Going back does not cancel the task.';
+
+  @override
+  String get backupZip64 =>
+      'ZIP64 backups and ZIP files of 4 GiB or more cannot currently be imported.';
+
+  @override
+  String get backupPreparing => 'Checking recordings';
+
+  @override
+  String get backupChecking => 'Checking backup';
+
+  @override
+  String get backupPacking => 'Packing files';
+
+  @override
+  String get backupVerifying => 'Verifying backup';
+
+  @override
+  String get backupSaving => 'Saving backup';
+
+  @override
+  String get backupImporting => 'Importing files';
+
+  @override
+  String get backupCommitting =>
+      'Finishing import — cancellation is unavailable';
+
+  @override
+  String get backupCancelling => 'Cancelling safely';
+
+  @override
+  String get backupPicking =>
+      'Choose a file or save location in the system picker.';
+
+  @override
+  String get backupWorking => 'Preparing task';
+
+  @override
+  String get backupCancel => 'Cancel task';
+
+  @override
+  String get backupExported => 'Backup saved';
+
+  @override
+  String get backupImported => 'Import complete';
+
+  @override
+  String get backupNoAdditions =>
+      'Everything already exists. No recordings or folders were added.';
+
+  @override
+  String get backupCancelled =>
+      'Task cancelled. Existing recordings are unchanged.';
+
+  @override
+  String get backupFailed => 'Task could not be completed';
+
+  @override
+  String get backupOutsidePhone =>
+      'Copy this backup to a computer, external drive or other device. A backup kept only on this phone cannot protect against losing the phone.';
+
+  @override
+  String get backupShare => 'Share backup';
+
+  @override
+  String get backupShareHandoff =>
+      'The backup was handed to the selected app. This does not confirm a remote upload.';
+
+  @override
+  String get backupShareFailed =>
+      'Could not share the backup. Its temporary copy may have expired; export again to retry.';
+
+  @override
+  String get backupCleanupPending =>
+      'The import is committed. Some task files still need cleanup; reopening the app will retry. Imported audio will be kept.';
+
+  @override
+  String get backupResidual =>
+      'An unusable partial backup may remain at this location. Remove it before trying again:';
+
+  @override
+  String get backupRecoveredImport =>
+      'The previous import was committed. Your imported recordings have been kept.';
+
+  @override
+  String get backupInterrupted =>
+      'The previous task stopped unexpectedly. Startup recovery has run. Check your recording library before trying again.';
+
+  @override
+  String get backupErrorBusy =>
+      'Finish recording or other library changes before starting a backup task.';
+
+  @override
+  String get backupErrorInvalid =>
+      'The backup is damaged or invalid. No backup content was imported.';
+
+  @override
+  String get backupErrorVersion =>
+      'This backup version is not supported. Use a compatible app version.';
+
+  @override
+  String get backupErrorSpace =>
+      'There is not enough storage. Free space in the app storage and save location, then try again.';
+
+  @override
+  String get backupErrorPermission =>
+      'File access was denied or expired. Select the file or save location again.';
+
+  @override
+  String get backupErrorLocal =>
+      'Existing audio or a target path is inconsistent. Existing files were kept. Check your library before retrying.';
+
+  @override
+  String get backupErrorCleanup =>
+      'Task cleanup could not finish. Files with uncertain ownership were kept. Reopen the app to retry recovery.';
+
+  @override
+  String get backupErrorUnknown =>
+      'The task failed. Check file access and available storage, then try again. Existing recordings were kept.';
+
+  @override
+  String get backupRenamedTitle => 'Folder names changed for import';
+
+  @override
+  String backupCreatedAt(String date) {
+    return 'Backup created: $date';
+  }
+
+  @override
+  String backupByteProgress(String done, String total) {
+    return '$done / $total';
+  }
+
+  @override
+  String backupRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings',
+      one: '1 recording',
+      zero: '0 recordings',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String backupFoldersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count folders',
+      one: '1 folder',
+      zero: '0 folders',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String backupAddedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings to add',
+      one: '1 recording to add',
+      zero: '0 recordings to add',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String backupDuplicateCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count duplicates skipped',
+      one: '1 duplicate skipped',
+      zero: '0 duplicates skipped',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String backupConflictCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conflicting recordings skipped',
+      one: '1 conflicting recording skipped',
+      zero: '0 conflicting recordings skipped',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String backupAddedResult(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings added',
+      one: '1 recording added',
+      zero: '0 recordings added',
+    );
+    return '$_temp0';
+  }
 }

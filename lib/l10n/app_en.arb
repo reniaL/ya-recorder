@@ -303,5 +303,132 @@
   "recordingSaveFailed": "Couldn't save the recording. The remaining audio files have been kept.",
   "permissionRequestActive": "A microphone permission request is already in progress.",
   "shareInvalidRecording": "Only completed recordings with a valid format can be shared.",
-  "recordingBaseName": "Recording"
+  "recordingBaseName": "Recording",
+  "backupTitle": "Backup and restore",
+  "backupDescription": "Export all saved recordings, or merge a backup into this library.",
+  "backupExport": "Export backup",
+  "backupImport": "Import backup",
+  "backupCurrentTask": "View current task",
+  "backupLastResult": "View last result",
+  "backupReview": "Review export",
+  "backupPreview": "Review import",
+  "backupScope": "Includes saved recordings and all folders, including empty folders. Recently Deleted, drafts and app settings are excluded.",
+  "backupUnencrypted": "This backup is not encrypted. Anyone with the file can read the audio and recording information.",
+  "backupSpace": "Audio: {audio}. Estimated temporary ZIP: up to {temporary}. A local destination may need another copy of that size. Destination capacity cannot be checked in advance. The library is checked again when export starts.",
+  "@backupSpace": {
+    "placeholders": {
+      "audio": {
+        "type": "String"
+      },
+      "temporary": {
+        "type": "String"
+      }
+    }
+  },
+  "backupSave": "Choose save location",
+  "backupConfirm": "Confirm import",
+  "backupMerge": "Existing recording IDs are skipped, including Recently Deleted. Existing audio and metadata will be kept. No overwrite or extra-copy options are offered.",
+  "backupProtected": "A backup task is protecting your library. Recording and management changes are temporarily unavailable. You can still browse, play audio and change settings.",
+  "backupCanLeave": "You can leave this page and return from Settings or the task notification. Going back does not cancel the task.",
+  "backupZip64": "ZIP64 backups and ZIP files of 4 GiB or more cannot currently be imported.",
+  "backupPreparing": "Checking recordings",
+  "backupChecking": "Checking backup",
+  "backupPacking": "Packing files",
+  "backupVerifying": "Verifying backup",
+  "backupSaving": "Saving backup",
+  "backupImporting": "Importing files",
+  "backupCommitting": "Finishing import — cancellation is unavailable",
+  "backupCancelling": "Cancelling safely",
+  "backupPicking": "Choose a file or save location in the system picker.",
+  "backupWorking": "Preparing task",
+  "backupCancel": "Cancel task",
+  "backupExported": "Backup saved",
+  "backupImported": "Import complete",
+  "backupNoAdditions": "Everything already exists. No recordings or folders were added.",
+  "backupCancelled": "Task cancelled. Existing recordings are unchanged.",
+  "backupFailed": "Task could not be completed",
+  "backupOutsidePhone": "Copy this backup to a computer, external drive or other device. A backup kept only on this phone cannot protect against losing the phone.",
+  "backupShare": "Share backup",
+  "backupShareHandoff": "The backup was handed to the selected app. This does not confirm a remote upload.",
+  "backupShareFailed": "Could not share the backup. Its temporary copy may have expired; export again to retry.",
+  "backupCleanupPending": "The import is committed. Some task files still need cleanup; reopening the app will retry. Imported audio will be kept.",
+  "backupResidual": "An unusable partial backup may remain at this location. Remove it before trying again:",
+  "backupRecoveredImport": "The previous import was committed. Your imported recordings have been kept.",
+  "backupInterrupted": "The previous task stopped unexpectedly. Startup recovery has run. Check your recording library before trying again.",
+  "backupErrorBusy": "Finish recording or other library changes before starting a backup task.",
+  "backupErrorInvalid": "The backup is damaged or invalid. No backup content was imported.",
+  "backupErrorVersion": "This backup version is not supported. Use a compatible app version.",
+  "backupErrorSpace": "There is not enough storage. Free space in the app storage and save location, then try again.",
+  "backupErrorPermission": "File access was denied or expired. Select the file or save location again.",
+  "backupErrorLocal": "Existing audio or a target path is inconsistent. Existing files were kept. Check your library before retrying.",
+  "backupErrorCleanup": "Task cleanup could not finish. Files with uncertain ownership were kept. Reopen the app to retry recovery.",
+  "backupErrorUnknown": "The task failed. Check file access and available storage, then try again. Existing recordings were kept.",
+  "backupRenamedTitle": "Folder names changed for import",
+  "backupCreatedAt": "Backup created: {date}",
+  "@backupCreatedAt": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "backupByteProgress": "{done} / {total}",
+  "@backupByteProgress": {
+    "placeholders": {
+      "done": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "backupRecordingsCount": "{count, plural, =0{0 recordings} =1{1 recording} other{{count} recordings}}",
+  "@backupRecordingsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupFoldersCount": "{count, plural, =0{0 folders} =1{1 folder} other{{count} folders}}",
+  "@backupFoldersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupAddedCount": "{count, plural, =0{0 recordings to add} =1{1 recording to add} other{{count} recordings to add}}",
+  "@backupAddedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupDuplicateCount": "{count, plural, =0{0 duplicates skipped} =1{1 duplicate skipped} other{{count} duplicates skipped}}",
+  "@backupDuplicateCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupConflictCount": "{count, plural, =0{0 conflicting recordings skipped} =1{1 conflicting recording skipped} other{{count} conflicting recordings skipped}}",
+  "@backupConflictCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "backupAddedResult": "{count, plural, =0{0 recordings added} =1{1 recording added} other{{count} recordings added}}",
+  "@backupAddedResult": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

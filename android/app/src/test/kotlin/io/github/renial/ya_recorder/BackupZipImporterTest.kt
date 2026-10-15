@@ -38,6 +38,7 @@ class BackupZipImporterTest {
         assertEquals(5, entries.size)
         assertTrue(entries.all { it.sha256 == "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81" })
         assertEquals(15L, progress.last().bytes)
+        assertEquals(3, progress.last().recordings)
         assertEquals(progress.last().total, progress.last().bytes)
         for (entry in entries) assertArrayEquals(byteArrayOf(1, 2, 3), File(temporary.root, "extracted/${entry.path.substringAfterLast('/')}").readBytes())
     }

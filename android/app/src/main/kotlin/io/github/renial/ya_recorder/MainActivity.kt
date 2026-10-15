@@ -22,6 +22,12 @@ class MainActivity : FlutterActivity() {
 		super.onActivityResult(requestCode, resultCode, data)
 	}
 
+	override fun onNewIntent(intent: Intent) {
+		super.onNewIntent(intent)
+		setIntent(intent)
+		intent.getStringExtra("backupTaskId")?.let { backupPlatformBridge?.openTask(it) }
+	}
+
 	override fun onRequestPermissionsResult(
 		requestCode: Int,
 		permissions: Array<out String>,

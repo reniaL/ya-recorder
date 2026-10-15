@@ -588,4 +588,196 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordingBaseName => '录音';
+
+  @override
+  String get backupTitle => '备份与恢复';
+
+  @override
+  String get backupDescription => '导出全部正常录音，或将备份合并到当前录音库。';
+
+  @override
+  String get backupExport => '导出备份';
+
+  @override
+  String get backupImport => '导入备份';
+
+  @override
+  String get backupCurrentTask => '查看当前任务';
+
+  @override
+  String get backupLastResult => '查看上次结果';
+
+  @override
+  String get backupReview => '导出摘要';
+
+  @override
+  String get backupPreview => '导入预览';
+
+  @override
+  String get backupScope => '包含全部正常录音和文件夹（含空文件夹），不包含最近删除、草稿和应用设置。';
+
+  @override
+  String get backupUnencrypted => '备份未加密，获得文件的人可以读取原始音频和录音信息。';
+
+  @override
+  String backupSpace(String audio, String temporary) {
+    return '音频总大小：$audio。临时 ZIP 预计最多需要 $temporary，本地保存位置可能还需要同等大小的副本空间。无法预先确认目标容量，开始导出时会重新检查录音库。';
+  }
+
+  @override
+  String get backupSave => '选择保存位置';
+
+  @override
+  String get backupConfirm => '确认导入';
+
+  @override
+  String get backupMerge => '相同录音 ID 一律跳过（含最近删除），保留已有音频和信息，不提供覆盖或保留副本选项。';
+
+  @override
+  String get backupProtected => '备份任务正在保护录音库，暂时无法新建录音或修改数据。仍可浏览、播放和调整设置。';
+
+  @override
+  String get backupCanLeave => '可以离开本页，从设置或任务通知重新进入。返回不会取消任务。';
+
+  @override
+  String get backupZip64 => '当前暂不支持导入 ZIP64 备份或达到 4 GiB 的 ZIP 文件。';
+
+  @override
+  String get backupPreparing => '准备备份';
+
+  @override
+  String get backupChecking => '检查备份';
+
+  @override
+  String get backupPacking => '打包文件';
+
+  @override
+  String get backupVerifying => '校验备份';
+
+  @override
+  String get backupSaving => '保存备份';
+
+  @override
+  String get backupImporting => '导入文件';
+
+  @override
+  String get backupCommitting => '正在完成导入，暂不可取消';
+
+  @override
+  String get backupCancelling => '正在安全取消';
+
+  @override
+  String get backupPicking => '请在系统文件选择器中选择文件或保存位置。';
+
+  @override
+  String get backupWorking => '正在准备任务';
+
+  @override
+  String get backupCancel => '取消任务';
+
+  @override
+  String get backupExported => '备份已保存';
+
+  @override
+  String get backupImported => '导入完成';
+
+  @override
+  String get backupNoAdditions => '内容均已存在，没有新增录音或文件夹。';
+
+  @override
+  String get backupCancelled => '任务已取消，已有录音保持不变。';
+
+  @override
+  String get backupFailed => '任务未能完成';
+
+  @override
+  String get backupOutsidePhone => '请将备份复制到电脑、外置存储或其他设备，仅保存在本机无法防范手机丢失。';
+
+  @override
+  String get backupShare => '分享备份';
+
+  @override
+  String get backupShareHandoff => '已将备份交给所选应用，这不代表远端上传成功。';
+
+  @override
+  String get backupShareFailed => '无法分享备份，临时副本可能已过期，请重新导出后再试。';
+
+  @override
+  String get backupCleanupPending => '导入已提交，部分任务文件仍待清理，重新打开应用后会重试。已导入音频会保留。';
+
+  @override
+  String get backupResidual => '此位置可能留有不可用的备份半成品，请清理后再试：';
+
+  @override
+  String get backupRecoveredImport => '上次导入已提交，已导入的录音已保留。';
+
+  @override
+  String get backupInterrupted => '上次任务意外中断，启动恢复已执行，请检查录音库后再试。';
+
+  @override
+  String get backupErrorBusy => '请先结束录音，等待保存或其他数据修改完成后再试。';
+
+  @override
+  String get backupErrorInvalid => '备份损坏或格式不正确，未导入包内内容。';
+
+  @override
+  String get backupErrorVersion => '暂不支持此备份版本，请使用兼容版本的应用。';
+
+  @override
+  String get backupErrorSpace => '存储空间不足，请清理应用所在存储和保存位置的空间后重试。';
+
+  @override
+  String get backupErrorPermission => '文件访问权限被拒绝或已失效，请重新选择文件或保存位置。';
+
+  @override
+  String get backupErrorLocal => '本地音频或目标路径存在异常，已有文件已保留，请检查录音库后重试。';
+
+  @override
+  String get backupErrorCleanup => '任务清理未完成，归属不明的文件已保留。请重新打开应用重试恢复。';
+
+  @override
+  String get backupErrorUnknown => '任务失败，请检查文件访问权限和可用空间后重试，已有录音已保留。';
+
+  @override
+  String get backupRenamedTitle => '导入时改名的文件夹';
+
+  @override
+  String backupCreatedAt(String date) {
+    return '备份时间：$date';
+  }
+
+  @override
+  String backupByteProgress(String done, String total) {
+    return '$done / $total';
+  }
+
+  @override
+  String backupRecordingsCount(int count) {
+    return '$count 条录音';
+  }
+
+  @override
+  String backupFoldersCount(int count) {
+    return '$count 个文件夹';
+  }
+
+  @override
+  String backupAddedCount(int count) {
+    return '新增录音：$count 条';
+  }
+
+  @override
+  String backupDuplicateCount(int count) {
+    return '重复跳过：$count 条';
+  }
+
+  @override
+  String backupConflictCount(int count) {
+    return '差异冲突跳过：$count 条';
+  }
+
+  @override
+  String backupAddedResult(int count) {
+    return '已新增录音：$count 条';
+  }
 }

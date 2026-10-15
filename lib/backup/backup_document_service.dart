@@ -36,7 +36,16 @@ class BackupTransferSnapshot {
       totalBytes = map['totalBytes'] as int?,
       cancelRequested = map['cancelRequested'] == true,
       residualUri = map['residualUri'] as String?,
-      cleanupPending = map['cleanupPending'] == true;
+      cleanupPending = map['cleanupPending'] == true,
+      kind = map['kind'] as String?,
+      accepted = map['accepted'] == true,
+      uri = map['uri'] as String?,
+      displayName = map['displayName'] as String?,
+      recordingCount = map['recordingCount'] as int? ?? 0,
+      folderCount = map['folderCount'] as int? ?? 0,
+      duplicateCount = map['duplicateCount'] as int? ?? 0,
+      conflictCount = map['conflictCount'] as int? ?? 0,
+      importSummaryKnown = map['importSummaryKnown'] == true;
 
   final String taskId;
   final int sequence;
@@ -55,6 +64,17 @@ class BackupTransferSnapshot {
   final String? residualUri;
   final bool cleanupPending;
   bool get isRunning => status == 'running';
+
+  // Optional receipt fields from the process-owned native journal.
+  final String? kind;
+  final bool accepted;
+  final String? uri;
+  final String? displayName;
+  final int recordingCount;
+  final int folderCount;
+  final int duplicateCount;
+  final int conflictCount;
+  final bool importSummaryKnown;
 }
 
 class BackupTransferException implements Exception {
@@ -77,6 +97,35 @@ class BackupDocumentService {
 
   final MethodChannel _commands;
   final Duration pollInterval;
+
+  void setOpenTaskHandler(Future<void> Function(String taskId)? handler) {
+    _commands.setMethodCallHandler(
+      handler == null
+          ? null
+          : (call) async {
+              if (call.method == 'openTask' && call.arguments is String) {
+                await handler(call.arguments as String);
+              }
+            },
+    );
+  }
+
+  Future<String?> takeOpenTask() =>
+      _commands.invokeMethod<String>('takeOpenTask');
+
+  Future<void> recordImportSummary(
+    BackupLease lease, {
+    required int recordings,
+    required int folders,
+    required int duplicates,
+    required int conflicts,
+  }) => _commands.invokeMethod<void>('recordImportSummary', {
+    'taskId': lease.taskId,
+    'recordings': recordings,
+    'folders': folders,
+    'duplicates': duplicates,
+    'conflicts': conflicts,
+  });
 
   Future<BackupDocument?> pickSource() => _pick('pickSource');
   Future<BackupDocument?> pickTarget(String name) =>
@@ -179,6 +228,7 @@ class BackupDocumentService {
   }) async {
     final prepared = await _call('prepare', {
       'uri': document.uri,
+      'displayName': document.displayName,
       'direction': write ? 'write' : 'read',
     });
     var admitted = false;

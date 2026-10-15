@@ -150,6 +150,28 @@ void main() {
   );
 
   testWidgets(
+    'settings opens backup and restore without adding main navigation',
+    (tester) async {
+      final store = _RecordingStoreSpy();
+      await tester.pumpWidget(MyApp(recordingStore: store));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('更多').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('设置'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('backupSettings')));
+      await tester.pumpAndSettle();
+      expect(find.text('备份与恢复'), findsOneWidget);
+      expect(find.byKey(const Key('exportBackup')), findsOneWidget);
+      expect(find.byKey(const Key('importBackup')), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('appLanguage')), findsOneWidget);
+      expect(invokedMethods, isNot(contains('requestMicrophonePermission')));
+    },
+  );
+
+  testWidgets(
     'library observes backup protection and enables recording again on release',
     (tester) async {
       final store = _RecordingStoreSpy();
@@ -169,6 +191,7 @@ void main() {
       try {
         expect(tester.widget<FloatingActionButton>(button).onPressed, isNull);
         expect(store.coordinator.isProtected, isTrue);
+        expect(find.textContaining('备份任务正在保护录音库'), findsOneWidget);
       } finally {
         release.complete();
       }
@@ -1847,38 +1870,39 @@ void main() {
     expect(find.text('播放进度测试'), findsNothing);
   });
 
-  testWidgets(
-    'creates a uniquely named logical folder from folder management',
-    (WidgetTester tester) async {
-      final recordingStore = _RecordingStoreSpy();
-      await tester.pumpWidget(MyApp(recordingStore: recordingStore));
-      await tester.pump();
+  testWidgets('creates a uniquely named logical folder from folder management', (
+    WidgetTester tester,
+  ) async {
+    final recordingStore = _RecordingStoreSpy();
+    await tester.pumpWidget(MyApp(recordingStore: recordingStore));
+    await tester.pump();
 
-      await tester.tap(find.byKey(const Key('manageFoldersMenu')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('文件夹管理'));
-      await tester.pumpAndSettle();
-      expect(find.text('文件夹管理'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('文件夹管理'));
+    await tester.pumpAndSettle();
+    expect(find.text('文件夹管理'), findsOneWidget);
 
-      await tester.tap(find.byKey(const Key('createFolderButton')));
-      await tester.pump();
-      await tester.enterText(
-        find.byKey(const Key('folderNameField')),
-        '  Interviews  ',
-      );
-      await tester.tap(find.text('创建'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('createFolderButton')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const Key('folderNameField')),
+      '  Interviews  ',
+    );
+    await tester.tap(find.text('创建'));
+    await tester.pumpAndSettle();
 
-      expect(recordingStore.folders.single.name, 'Interviews');
-      expect(
-        recordingStore.folders.single.id,
-        matches(RegExp(
+    expect(recordingStore.folders.single.name, 'Interviews');
+    expect(
+      recordingStore.folders.single.id,
+      matches(
+        RegExp(
           r'^folder-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-        )),
-      );
-      expect(find.text('Interviews'), findsOneWidget);
-    },
-  );
+        ),
+      ),
+    );
+    expect(find.text('Interviews'), findsOneWidget);
+  });
 
   testWidgets('switches between all recordings and a selected folder', (
     WidgetTester tester,

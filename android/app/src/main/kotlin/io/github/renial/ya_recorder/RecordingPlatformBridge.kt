@@ -79,6 +79,7 @@ class RecordingPlatformBridge(
                         (call.arguments as? Map<*, *>)?.get("language") as? String,
                     )
                     AppLanguagePreferences.save(activity, code)
+                    BackupTaskRuntime.get(activity).onChanged?.invoke()
                     if (RecordingService.currentStatus()["sessionId"] != null) {
                         activity.startService(RecordingService.commandIntent(activity, RecordingService.ACTION_LANGUAGE_CHANGED))
                     }

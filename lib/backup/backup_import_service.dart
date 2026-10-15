@@ -45,9 +45,10 @@ class BackupImportResult {
 
 /// Filesystem journal only establishes ownership. SQLite is the commit authority.
 class BackupImportRecovery {
-  BackupImportRecovery(this.paths, this.store);
+  BackupImportRecovery(this.paths, this.store, {this.onRecovered});
   final AppStoragePaths paths;
   final RecordingStore store;
+  final void Function(String taskId, bool committed)? onRecovered;
   Directory get journals =>
       Directory(path.join(paths.rootDirectory.path, 'backup-imports'));
   static final _uuid = RegExp(
@@ -123,7 +124,8 @@ class BackupImportRecovery {
         )) {
       throw StateError('Invalid import ownership inventory');
     }
-    if (!await store.importWasCommitted(id)) {
+    final committed = await store.importWasCommitted(id);
+    if (!committed) {
       final directory = destination(id);
       final type = await FileSystemEntity.type(
         directory.path,
@@ -156,6 +158,7 @@ class BackupImportRecovery {
     // must never observe a missing marker for already committed audio.
     await file.delete();
     await store.forgetImportCommit(id);
+    onRecovered?.call(id, committed);
   }
 }
 
@@ -199,6 +202,13 @@ class BackupImportService {
           final local = await store.allRecordingsForBackup(lease);
           final snapshot = await store.snapshotForBackup(lease);
           final plan = await createPlan(backup, local, snapshot.folders, lease);
+          await documents.recordImportSummary(
+            lease,
+            recordings: plan.recordings.length,
+            folders: plan.folders.length,
+            duplicates: plan.duplicates,
+            conflicts: plan.conflicts,
+          );
           void report(BackupStage stage) => store.coordinator.report(
             lease,
             BackupProgress(

@@ -77,6 +77,7 @@ class BackupTaskService : Service() {
             "preparing" -> R.string.backup_preparing
             "packing" -> R.string.backup_packing
             "verifying" -> R.string.backup_verifying
+            "importing" -> R.string.backup_importing
             else -> if (reading) R.string.backup_reading else R.string.backup_writing
         }
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL) else Notification.Builder(this)

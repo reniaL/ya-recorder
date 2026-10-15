@@ -59,6 +59,10 @@ class LibraryCoordinator extends ChangeNotifier {
   Object? get lastError => _lastError;
   Object? get lastResult => _lastResult;
 
+  /// Startup journal recovery's database-authoritative outcome, for the UI.
+  bool? recoveredImportCommitted;
+  String? recoveredImportTaskId;
+
   /// Future task-journal recovery must be supplied before normal app startup.
   /// Failure remains fail-closed and is retryable, never treated as recovered.
   Future<void> ensureInitialized() {

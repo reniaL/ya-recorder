@@ -40,7 +40,12 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
                     try { activity.startActivityForResult(intent, PICKER) }
                     catch (error: Exception) { picker = null; throw error }
                 }
-                "prepare" -> result.success(runtime.prepare(requireNotNull(call.argument<String>("uri")), requireNotNull(call.argument<String>("direction"))))
+                "prepare" -> result.success(runtime.prepare(requireNotNull(call.argument<String>("uri")), requireNotNull(call.argument<String>("direction")), call.argument<String>("displayName")))
+                "takeOpenTask" -> {
+                    val id = activity.intent?.getStringExtra("backupTaskId")
+                    activity.intent?.removeExtra("backupTaskId")
+                    result.success(id)
+                }
                 "snapshot" -> result.success(runtime.snapshot())
                 "startCopy", "startExport", "startImport", "placeImport" -> {
                     check(activity.hasWindowFocus() && !activity.isFinishing) { "foreground-required" }
@@ -60,6 +65,12 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
                 }
                 "cancel" -> { runtime.cancel(requireNotNull(call.argument<String>("taskId"))); result.success(null) }
                 "accept" -> { runtime.accept(requireNotNull(call.argument<String>("taskId"))); result.success(null) }
+                "recordImportSummary" -> {
+                    runtime.recordImportSummary(requireNotNull(call.argument<String>("taskId")), BackupImportSummary(
+                        requireNotNull(call.argument<Int>("recordings")), requireNotNull(call.argument<Int>("folders")),
+                        requireNotNull(call.argument<Int>("duplicates")), requireNotNull(call.argument<Int>("conflicts"))))
+                    result.success(null)
+                }
                 "release" -> runtime.release(requireNotNull(call.argument<String>("taskId"))) { error ->
                     main.post { if (error == null) result.success(runtime.snapshot()) else result.error("backup-cleanup-failed", error.message, null) }
                 }
@@ -97,6 +108,8 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
         channel.setMethodCallHandler(null)
         metadataWorker.shutdown()
     }
+
+    fun openTask(id: String) { if (!disposed) channel.invokeMethod("openTask", id) }
 
     companion object { private const val PICKER = 8102 }
 }

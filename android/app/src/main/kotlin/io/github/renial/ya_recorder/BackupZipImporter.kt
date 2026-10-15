@@ -25,7 +25,8 @@ internal object BackupZipImporter {
             val total = entries.sumOf { it.size }
             if (output.usableSpace < total + 65536) throw IOException("insufficient-import-space")
             var processed = 0L
-            for ((index, item) in entries.withIndex()) {
+            var recordings = 0
+            for (item in entries) {
                 val hash = MessageDigest.getInstance("SHA-256")
                 val crc = CRC32()
                 val target = File(output, item.name.substringAfterLast('/'))
@@ -36,15 +37,16 @@ internal object BackupZipImporter {
                             override fun write(b: ByteArray, off: Int, len: Int) {
                                 hash.update(b, off, len); crc.update(b, off, len); sink.write(b, off, len)
                             }
-                        }, cancelled, { bytes -> report(BackupExportProgress("checking", processed + bytes, total, index)) }, item.size)
+                        }, cancelled, { bytes -> report(BackupExportProgress("checking", processed + bytes, total, recordings)) }, item.size)
                         require(count == item.size && crc.value == item.crc) { "archive-size-or-crc-mismatch" }
                         sink.fd.sync()
                     }
                 }
                 processed += item.size
+                if (item.name.startsWith("recordings/")) recordings++
                 result += BackupImportEntry(item.name, item.size, hash.digest().joinToString("") { "%02x".format(it) })
             }
-            report(BackupExportProgress("checking", processed, total, entries.size))
+            report(BackupExportProgress("checking", processed, total, recordings))
         }
         return result
     }
