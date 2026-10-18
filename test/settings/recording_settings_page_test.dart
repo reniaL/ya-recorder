@@ -35,6 +35,53 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  InkWell choiceInkWell(WidgetTester tester, Finder row) =>
+      tester.widget<InkWell>(
+        find.descendant(of: row, matching: find.byType(InkWell)),
+      );
+
+  void expectEqualUnclippedRows(WidgetTester tester, List<Finder> rows) {
+    final list = find.byKey(const Key('settingsChoiceList'));
+    final listRect = tester.getRect(list);
+    final height = tester.getSize(rows.first).height;
+    for (final row in rows) {
+      final rect = tester.getRect(row);
+      expect(rect.height, height);
+      expect(rect.top, greaterThanOrEqualTo(listRect.top + 6 - 0.01));
+      expect(rect.bottom, lessThanOrEqualTo(listRect.bottom - 6 + 0.01));
+    }
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(of: list, matching: find.byType(Scrollable)),
+    );
+    expect(scrollable.position.maxScrollExtent, 0);
+  }
+
+  testWidgets(
+    'all preference menus have equal rows and show the full last row',
+    (tester) async {
+      await open(tester);
+      for (final entry in {
+        'appLanguage': ['chooseLanguage-zh', 'chooseLanguage-en'],
+        'themeMode': [
+          'chooseTheme-system',
+          'chooseTheme-light',
+          'chooseTheme-dark',
+        ],
+        'defaultRecordingFormat': ['chooseFormat-aac', 'chooseFormat-mp3'],
+      }.entries) {
+        await tester.tap(find.byKey(Key(entry.key)));
+        await tester.pumpAndSettle();
+        expectEqualUnclippedRows(tester, [
+          for (final key in entry.value) find.byKey(Key(key)),
+        ]);
+        await tester.tapAt(const Offset(4, 400));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('settingsChoiceList')), findsNothing);
+      }
+      expect(store.writes, 0);
+    },
+  );
+
   testWidgets('theme selection persists; failed save keeps old selection', (
     tester,
   ) async {
@@ -150,10 +197,8 @@ void main() {
       expect(find.byKey(const Key('chooseFormat-m4a')), findsNothing);
 
       expect(
-        tester
-            .widget<ListTile>(find.byKey(const Key('chooseFormat-aac')))
-            .enabled,
-        isTrue,
+        choiceInkWell(tester, find.byKey(const Key('chooseFormat-aac'))).onTap,
+        isNotNull,
       );
       await tester.tap(find.byKey(const Key('chooseFormat-aac')));
       await tester.pumpAndSettle();
@@ -174,7 +219,7 @@ void main() {
       expect(find.text('MP3'), findsOneWidget);
       await choose(tester);
       final mp3 = find.byKey(const Key('chooseFormat-mp3'));
-      expect(tester.widget<ListTile>(mp3).enabled, isFalse);
+      expect(choiceInkWell(tester, mp3).onTap, isNull);
       expect(find.text('MP3 暂不可用'), findsOneWidget);
       await tester.tap(mp3);
       await tester.pumpAndSettle();
@@ -195,6 +240,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('无法保存录音格式，请重试。'), findsOneWidget);
     expect(store.format, RecordingFormat.aac);
+    await choose(tester);
     final semantics = tester.ensureSemantics();
     expect(
       tester.getSemantics(find.byKey(const Key('chooseFormat-aac'))),
@@ -209,6 +255,7 @@ void main() {
         isFocusable: true,
         isButton: true,
         hasSelectedState: true,
+        isSelected: true,
         label: 'AAC\nADTS 文件，后缀 .aac',
       ),
     );
@@ -220,7 +267,7 @@ void main() {
     expect(store.writes, 2);
   });
 
-  testWidgets('pending save blocks duplicate writes, dismissal and back', (
+  testWidgets('pending save blocks duplicate writes and page navigation', (
     tester,
   ) async {
     final gate = Completer<void>();
@@ -229,13 +276,20 @@ void main() {
     await choose(tester);
     await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('chooseFormat-aac')));
-    await tester.tap(find.text('取消'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const Key('settingsChoiceList')), findsNothing);
+    final row = tester.widget<ListTile>(
+      find.byKey(const Key('defaultRecordingFormat')),
+    );
+    expect(row.onTap, isNull);
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(store.writes, 1);
     expect(store.format, RecordingFormat.aac);
-    expect(find.text('正在保存'), findsOneWidget);
+    expect(
+      tester.widget<PopScope>(find.byType(PopScope).first).canPop,
+      isFalse,
+    );
     gate.complete();
     await tester.pumpAndSettle();
     expect(store.format, RecordingFormat.mp3);
@@ -247,7 +301,7 @@ void main() {
   ) async {
     await open(tester);
     await choose(tester);
-    await tester.tap(find.text('取消'));
+    await tester.tapAt(const Offset(4, 400));
     await tester.pumpAndSettle();
     await choose(tester);
     await tester.binding.handlePopRoute();
@@ -283,10 +337,8 @@ void main() {
     await tester.pumpAndSettle();
     await choose(tester);
     expect(
-      tester
-          .widget<ListTile>(find.byKey(const Key('chooseFormat-mp3')))
-          .enabled,
-      isTrue,
+      choiceInkWell(tester, find.byKey(const Key('chooseFormat-mp3'))).onTap,
+      isNotNull,
     );
   });
 
@@ -320,6 +372,10 @@ void main() {
           'AAC',
         );
         await choose(tester);
+        expectEqualUnclippedRows(tester, [
+          find.byKey(const Key('chooseFormat-aac')),
+          find.byKey(const Key('chooseFormat-mp3')),
+        ]);
         for (final format in [RecordingFormat.aac, RecordingFormat.mp3]) {
           final row = find.byKey(Key('chooseFormat-${format.wireName}'));
           expect(tester.getSize(row).height, greaterThanOrEqualTo(48));

@@ -76,7 +76,11 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       selected: _language!,
       choices: [
         for (final language in AppLanguage.values)
-          _PopupChoice(language, language.nativeName),
+          _PopupChoice(
+            language,
+            language.nativeName,
+            key: Key('chooseLanguage-${language.code}'),
+          ),
       ],
     );
     if (selected != null && mounted) await _selectLanguage(selected);
@@ -134,7 +138,11 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       selected: _themeMode!,
       choices: [
         for (final mode in ThemeMode.values)
-          _PopupChoice(mode, _themeLabel(mode)),
+          _PopupChoice(
+            mode,
+            _themeLabel(mode),
+            key: Key('chooseTheme-${mode.name}'),
+          ),
       ],
     );
     if (selected != null && mounted) await _selectTheme(selected);
@@ -197,6 +205,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
           _PopupChoice(
             format,
             format.label,
+            key: Key('chooseFormat-${format.wireName}'),
             subtitle: _available.contains(format)
                 ? format == RecordingFormat.aac
                       ? l10n(context).aacFormatDescription
@@ -269,23 +278,50 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
           final safeTop = media.padding.top + 12;
           final safeBottom = constraints.maxHeight - media.padding.bottom - 12;
           final width = math.min(340.0, constraints.maxWidth - 32);
-          final rowHeights = [
-            for (final choice in choices) choice.subtitle == null ? 60.0 : 76.0,
-          ];
+          const verticalPadding = 6.0;
+          // Reserve the checkmark column in every row and use the tallest
+          // choice for all rows, including wrapped descriptions and large text.
+          final textWidth = width - 44 - 36;
+          final theme = Theme.of(context);
+          double textHeight(String text, TextStyle style) {
+            final painter = TextPainter(
+              text: TextSpan(text: text, style: style),
+              textDirection: Directionality.of(context),
+              textScaler: media.textScaler,
+              locale: Localizations.maybeLocaleOf(context),
+            )..layout(maxWidth: textWidth);
+            final height = painter.height;
+            painter.dispose();
+            return height;
+          }
+
+          final rowHeight = choices.fold<double>(60, (height, choice) {
+            final titleHeight = textHeight(
+              choice.label,
+              theme.textTheme.titleMedium!.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            );
+            final subtitleHeight = choice.subtitle == null
+                ? 0.0
+                : 2 + textHeight(choice.subtitle!, theme.textTheme.bodySmall!);
+            return math.max(
+              height,
+              math.max(
+                choice.subtitle == null ? 60.0 : 76.0,
+                titleHeight + subtitleHeight + 20,
+              ),
+            );
+          }).ceilToDouble();
           final menuHeight = math.min(
-            rowHeights.fold<double>(0, (sum, height) => sum + height),
+            rowHeight * choices.length + verticalPadding * 2,
             safeBottom - safeTop,
           );
-          final beforeSelected = selectedIndex < 0
-              ? 0.0
-              : rowHeights
-                    .take(selectedIndex)
-                    .fold<double>(0, (sum, height) => sum + height);
-          final selectedHeight = selectedIndex < 0
-              ? 60.0
-              : rowHeights[selectedIndex];
           final desiredTop =
-              anchorRect.center.dy - beforeSelected - selectedHeight / 2;
+              anchorRect.center.dy -
+              verticalPadding -
+              math.max(0, selectedIndex) * rowHeight -
+              rowHeight / 2;
           final top = desiredTop
               .clamp(safeTop, safeBottom - menuHeight)
               .toDouble();
@@ -308,12 +344,17 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: menuHeight),
                     child: ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      key: const Key('settingsChoiceList'),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: verticalPadding,
+                      ),
                       shrinkWrap: true,
                       children: [
                         for (final choice in choices)
                           _PopupChoiceTile<T>(
+                            key: choice.key,
                             choice: choice,
+                            height: rowHeight,
                             selected: choice.value == selected,
                             onTap: choice.enabled
                                 ? () => Navigator.of(
@@ -469,7 +510,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                                   child: CircularProgressIndicator(),
                                 )
                               : Icon(Icons.unfold_more_rounded),
-                          onTap: _chooseFormat,
+                          onTap: _savingFormat ? null : _chooseFormat,
                         ),
                       ),
                       if (_formatError != null)
@@ -494,11 +535,13 @@ class _PopupChoice<T> {
   const _PopupChoice(
     this.value,
     this.label, {
+    required this.key,
     this.subtitle,
     this.enabled = true,
   });
 
   final T value;
+  final Key key;
   final String label;
   final String? subtitle;
   final bool enabled;
@@ -506,12 +549,15 @@ class _PopupChoice<T> {
 
 class _PopupChoiceTile<T> extends StatelessWidget {
   const _PopupChoiceTile({
+    super.key,
     required this.choice,
+    required this.height,
     required this.selected,
     required this.onTap,
   });
 
   final _PopupChoice<T> choice;
+  final double height;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -521,13 +567,13 @@ class _PopupChoiceTile<T> extends StatelessWidget {
     return Semantics(
       checked: selected,
       enabled: choice.enabled,
+      button: true,
+      selected: selected,
       inMutuallyExclusiveGroup: true,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          constraints: BoxConstraints(
-            minHeight: choice.subtitle == null ? 60 : 76,
-          ),
+          height: height,
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
           color: selected
               ? colors.primaryContainer.withValues(alpha: 0.72)
@@ -560,10 +606,13 @@ class _PopupChoiceTile<T> extends StatelessWidget {
                   ],
                 ),
               ),
-              if (selected) ...[
-                const SizedBox(width: 12),
-                Icon(Icons.check_rounded, color: colors.primary),
-              ],
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 24,
+                child: selected
+                    ? Icon(Icons.check_rounded, color: colors.primary)
+                    : null,
+              ),
             ],
           ),
         ),

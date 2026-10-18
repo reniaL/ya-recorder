@@ -686,9 +686,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<ListTile>(find.byKey(const Key('chooseFormat-aac')))
-          .enabled,
-      isFalse,
+          .widget<InkWell>(
+            find.descendant(
+              of: find.byKey(const Key('chooseFormat-aac')),
+              matching: find.byType(InkWell),
+            ),
+          )
+          .onTap,
+      isNull,
     );
     await tester.tap(find.byKey(const Key('chooseFormat-mp3')));
     await tester.pumpAndSettle();
