@@ -21,7 +21,6 @@ import 'settings/recording_settings_page.dart';
 import 'settings/app_language.dart';
 import 'storage/app_storage_paths.dart';
 import 'storage/folder_id.dart';
-import 'storage/folder_scope_picker.dart';
 import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
 import 'storage/recently_deleted_page.dart';
@@ -189,8 +188,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   String _searchQuery = '';
   String? _selectedFolderId;
   String? _selectedFolderName;
-  bool _folderScopeExpanded = false;
-  RecordingStore? _folderPickerStore;
+  final GlobalKey _folderScopeButtonKey = GlobalKey();
   Future<RecordingStore>? _openedRecordingStore;
   LibraryCoordinator? _libraryCoordinator;
   bool _libraryProtected = false;
@@ -224,7 +222,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       _isSearching = false;
       _searchQuery = '';
       _selectedRecordingIds.clear();
-      _folderScopeExpanded = false;
     });
   }
 
@@ -466,29 +463,94 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
-  Future<void> _toggleFolderScope() async {
+  Future<void> _openFolderScopeMenu() async {
     if (_isSubmitting || _isSearching || _isSelecting) return;
-    if (_folderScopeExpanded) {
-      setState(() => _folderScopeExpanded = false);
-      return;
-    }
     try {
       final store = await _getRecordingStore();
+      final folders = await store.listFolders();
       if (!mounted) return;
-      setState(() {
-        _folderPickerStore = store;
-        _folderScopeExpanded = true;
-      });
+      final buttonBox =
+          _folderScopeButtonKey.currentContext?.findRenderObject()
+              as RenderBox?;
+      final overlay =
+          Navigator.of(context).overlay?.context.findRenderObject()
+              as RenderBox?;
+      if (buttonBox == null || overlay == null) return;
+      final position = RelativeRect.fromRect(
+        Rect.fromPoints(
+          buttonBox.localToGlobal(Offset.zero, ancestor: overlay),
+          buttonBox.localToGlobal(
+            buttonBox.size.bottomRight(Offset.zero),
+            ancestor: overlay,
+          ),
+        ),
+        Offset.zero & overlay.size,
+      );
+      final selected = await showMenu<String>(
+        context: context,
+        position: position,
+        initialValue: _selectedFolderId ?? '',
+        semanticLabel: l10n(context).selectScope,
+        elevation: 8,
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.65,
+          maxWidth: MediaQuery.sizeOf(context).width - 24,
+        ),
+        items: [
+          _folderScopeMenuItem(
+            id: '',
+            title: l10n(context).allRecordings,
+            icon: Icons.library_music_outlined,
+          ),
+          for (final folder in folders)
+            _folderScopeMenuItem(
+              id: folder.id,
+              title: folder.name,
+              icon: Icons.folder_outlined,
+            ),
+        ],
+      );
+      if (!mounted || selected == null) return;
+      await _selectFolderScope(store, selected.isEmpty ? null : selected);
     } catch (_) {
       _setLibraryError('foldersReadFailed');
     }
   }
 
-  Future<void> _selectFolderScope(String? folderId) async {
-    final store = _folderPickerStore;
-    if (store == null || _isSubmitting) return;
+  PopupMenuItem<String> _folderScopeMenuItem({
+    required String id,
+    required String title,
+    required IconData icon,
+  }) {
+    final selected = (_selectedFolderId ?? '') == id;
+    final colors = Theme.of(context).colorScheme;
+    return PopupMenuItem<String>(
+      value: id,
+      height: 52,
+      child: Row(
+        children: [
+          Icon(icon, color: selected ? colors.primary : null),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+          ),
+          if (selected) ...[
+            const SizedBox(width: 8),
+            Icon(Icons.check_rounded, color: colors.primary, size: 20),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _selectFolderScope(
+    RecordingStore store,
+    String? folderId,
+  ) async {
+    if (_isSubmitting) return;
     if (folderId == _selectedFolderId) {
-      setState(() => _folderScopeExpanded = false);
       return;
     }
     try {
@@ -501,7 +563,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         _selectedFolderName = selectedFolder.isEmpty
             ? null
             : selectedFolder.single.name;
-        _folderScopeExpanded = false;
         _isLoadingRecordings = true;
         _libraryError = null;
       });
@@ -742,7 +803,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (_isSubmitting) return;
     setState(() {
       _isSelecting = true;
-      _folderScopeExpanded = false;
       if (!_selectedRecordingIds.add(id)) {
         _selectedRecordingIds.remove(id);
       }
@@ -1281,7 +1341,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       _libraryProtected = protected;
       if (protected) {
         _isSelecting = false;
-        _folderScopeExpanded = false;
         _selectedRecordingIds.clear();
       }
     });
@@ -1368,13 +1427,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   Widget _buildRecordingLibrary(BuildContext context) {
     return PopScope(
-      canPop: !_isSelecting && !_isSubmitting && !_folderScopeExpanded,
+      canPop: !_isSelecting && !_isSubmitting,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _folderScopeExpanded) {
-          setState(() => _folderScopeExpanded = false);
-        } else if (!didPop && _isSelecting) {
-          _exitSelection();
-        }
+        if (!didPop && _isSelecting) _exitSelection();
       },
       child: Scaffold(
         appBar: AppBar(
@@ -1400,41 +1455,40 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   ),
                   button: true,
                   enabled: !_isSubmitting,
-                  onTap: _isSubmitting ? null : _toggleFolderScope,
+                  onTap: _isSubmitting ? null : _openFolderScopeMenu,
                   child: ExcludeSemantics(
-                    child: TextButton(
+                    child: KeyedSubtree(
                       key: const Key('folderScopeSelector'),
-                      onPressed: _isSubmitting ? null : _toggleFolderScope,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Theme.of(
-                          context,
-                        ).colorScheme.onSurface,
-                        minimumSize: const Size(48, 48),
-                        padding: EdgeInsets.zero,
-                        alignment: Alignment.centerLeft,
-                        textStyle: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
+                      child: TextButton(
+                        key: _folderScopeButtonKey,
+                        onPressed: _isSubmitting ? null : _openFolderScopeMenu,
+                        style: TextButton.styleFrom(
+                          foregroundColor: Theme.of(
+                            context,
+                          ).colorScheme.onSurface,
+                          minimumSize: const Size(48, 48),
+                          padding: EdgeInsets.zero,
+                          alignment: Alignment.centerLeft,
+                          textStyle: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              _selectedFolderName ??
-                                  l10n(context).allRecordings,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _selectedFolderName ??
+                                    l10n(context).allRecordings,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            _folderScopeExpanded
-                                ? Icons.arrow_drop_up_rounded
-                                : Icons.arrow_drop_down_rounded,
-                          ),
-                        ],
+                            const SizedBox(width: 4),
+                            const Icon(Icons.arrow_drop_down_rounded),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1456,7 +1510,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                     ? null
                     : () => setState(() {
                         _isSelecting = true;
-                        _folderScopeExpanded = false;
                       }),
                 icon: const Icon(Icons.checklist),
               ),
@@ -1473,7 +1526,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       } else {
                         setState(() {
                           _isSearching = true;
-                          _folderScopeExpanded = false;
                         });
                       }
                     },
@@ -1578,14 +1630,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       ),
                     ),
                   ),
-                ),
-              if (_folderPickerStore != null)
-                FolderScopePicker(
-                  store: _folderPickerStore!,
-                  selectedId: _selectedFolderId,
-                  expanded: _folderScopeExpanded,
-                  onSelected: (folderId) =>
-                      unawaited(_selectFolderScope(folderId)),
                 ),
               Expanded(child: _buildRecordingList(context)),
               if (_isSelecting)
