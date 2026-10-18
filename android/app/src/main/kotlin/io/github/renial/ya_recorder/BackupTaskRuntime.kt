@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.AtomicFile
+import android.util.Log
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
@@ -195,6 +196,7 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
                     update("completed", null)
                 } // Includes successful close, not just flush.
             } catch (error: Exception) {
+                Log.e("BackupTask", "Task failed: $id", error)
                 synchronized(this) {
                     val reason = cancelReason
                     state!!["accepted"] = false
@@ -237,8 +239,10 @@ internal class BackupTaskRuntime private constructor(private val context: Contex
         }
     }
 
-    @Synchronized fun startFailed(id: String) {
+    @Synchronized fun startFailed(id: String, error: Exception? = null) {
         if (state?.get("taskId") != id || state?.get("status") != "running") return
+        Log.e("BackupTask", "Service could not start: $id", error)
+        state!!["errorDetail"] = error?.let { "${it.javaClass.simpleName}: ${it.message}" }
         runCatching { update("failed", "service-start-failed") }
         worker.execute {
             try { cleanupAfterFailure(id) }

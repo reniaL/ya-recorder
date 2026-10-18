@@ -289,6 +289,10 @@ void main() {
         'zip64-unsupported': BackupFailure.zip64,
         'insufficient-space': BackupFailure.space,
         'document-permission-denied': BackupFailure.permission,
+        'foreground-required': BackupFailure.startup,
+        'backup-foreground-timeout': BackupFailure.startup,
+        'backup-activity-detached': BackupFailure.startup,
+        'service-start-failed: SecurityException': BackupFailure.startup,
         'Local audio unavailable': BackupFailure.local,
         'process-interrupted': BackupFailure.interrupted,
       }.entries) {

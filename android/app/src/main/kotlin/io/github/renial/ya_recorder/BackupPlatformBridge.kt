@@ -7,6 +7,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
+import android.util.Log
+import android.view.ViewTreeObserver
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -19,10 +21,33 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
     private var picker: MethodChannel.Result? = null
     private var disposed = false
     private val runtime get() = BackupTaskRuntime.get(activity)
+    private val foreground = BackupForegroundGate(
+        ready = { !activity.isFinishing && !activity.isDestroyed && activity.hasWindowFocus() },
+        scheduleTimeout = { callback ->
+            val timeout = Runnable { callback() }
+            main.postDelayed(timeout, 5_000)
+            val cancel: () -> Unit = { main.removeCallbacks(timeout) }
+            cancel
+        },
+    )
+    private val focusListener = ViewTreeObserver.OnWindowFocusChangeListener { foreground.onReadyChanged() }
 
-    init { channel.setMethodCallHandler(this) }
+    init {
+        channel.setMethodCallHandler(this)
+        activity.window.decorView.viewTreeObserver.addOnWindowFocusChangeListener(focusListener)
+    }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (call.method in listOf("startCopy", "startExport", "startImport", "placeImport")) {
+            if (!activity.hasWindowFocus()) Log.i("BackupPlatform", "Waiting for returning window: ${call.method}")
+            foreground.submit({ handleCall(call, result) }, { code ->
+                Log.w("BackupPlatform", "${call.method}: $code")
+                result.error(code, "Return to the app and try again", null)
+            })
+        } else handleCall(call, result)
+    }
+
+    private fun handleCall(call: MethodCall, result: MethodChannel.Result) {
         try {
             when (call.method) {
                 "pickSource", "pickTarget" -> {
@@ -57,7 +82,7 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
                     try {
                         val intent = Intent(activity, BackupTaskService::class.java).putExtra("taskId", id)
                         if (Build.VERSION.SDK_INT >= 26) activity.startForegroundService(intent) else activity.startService(intent)
-                    } catch (_: Exception) { runtime.startFailed(id) }
+                    } catch (error: Exception) { runtime.startFailed(id, error) }
                     val processRuntime = runtime
                     val sequence = (runtime.snapshot()!!["sequence"] as Number).toLong()
                     main.postDelayed({ processRuntime.expireUnstarted(id, sequence) }, 10_000)
@@ -76,7 +101,10 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
                 }
                 else -> result.notImplemented()
             }
-        } catch (error: Exception) { result.error("backup-platform-failed", error.message, null) }
+        } catch (error: Exception) {
+            Log.e("BackupPlatform", "Command failed: ${call.method}", error)
+            result.error("backup-platform-failed", error.message, null)
+        }
     }
 
     fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
@@ -103,6 +131,8 @@ internal class BackupPlatformBridge(private val activity: Activity, messenger: B
 
     fun dispose() {
         disposed = true
+        activity.window.decorView.viewTreeObserver.takeIf { it.isAlive }?.removeOnWindowFocusChangeListener(focusListener)
+        foreground.dispose()
         picker?.error("backup-picker-detached", "Activity detached; choose again", null)
         picker = null
         channel.setMethodCallHandler(null)

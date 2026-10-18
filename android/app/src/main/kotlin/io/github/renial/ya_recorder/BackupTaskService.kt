@@ -47,8 +47,8 @@ class BackupTaskService : Service() {
             // Bound even on Android versions without onTimeout. A blocked provider
             // may delay cancellation until its current read/write returns.
             main.postDelayed({ runtime.cancel(id, "task-timeout") }, 30 * 60 * 1000L)
-        } catch (_: Exception) {
-            runtime.startFailed(id)
+        } catch (error: Exception) {
+            runtime.startFailed(id, error)
             finish()
         }
         return START_NOT_STICKY

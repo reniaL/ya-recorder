@@ -1478,10 +1478,16 @@ abstract class AppLocalizations {
   /// **'Task cleanup could not finish. Files with uncertain ownership were kept. Reopen the app to retry recovery.'**
   String get backupErrorCleanup;
 
+  /// No description provided for @backupErrorStartup.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup task could not start. Return to the app and try again. Existing recordings were kept.'**
+  String get backupErrorStartup;
+
   /// No description provided for @backupErrorUnknown.
   ///
   /// In en, this message translates to:
-  /// **'The task failed. Check file access and available storage, then try again. Existing recordings were kept.'**
+  /// **'The task could not be completed. Try again. If it keeps failing, keep a note of the steps for troubleshooting. Existing recordings were kept.'**
   String get backupErrorUnknown;
 
   /// No description provided for @backupRenamedTitle.

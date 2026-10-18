@@ -362,7 +362,8 @@
   "backupErrorPermission": "File access was denied or expired. Select the file or save location again.",
   "backupErrorLocal": "Existing audio or a target path is inconsistent. Existing files were kept. Check your library before retrying.",
   "backupErrorCleanup": "Task cleanup could not finish. Files with uncertain ownership were kept. Reopen the app to retry recovery.",
-  "backupErrorUnknown": "The task failed. Check file access and available storage, then try again. Existing recordings were kept.",
+  "backupErrorStartup": "The backup task could not start. Return to the app and try again. Existing recordings were kept.",
+  "backupErrorUnknown": "The task could not be completed. Try again. If it keeps failing, keep a note of the steps for troubleshooting. Existing recordings were kept.",
   "backupRenamedTitle": "Folder names changed for import",
   "backupCreatedAt": "Backup created: {date}",
   "@backupCreatedAt": {

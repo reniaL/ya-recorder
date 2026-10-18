@@ -736,7 +736,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupErrorCleanup => '任务清理未完成，归属不明的文件已保留。请重新打开应用重试恢复。';
 
   @override
-  String get backupErrorUnknown => '任务失败，请检查文件访问权限和可用空间后重试，已有录音已保留。';
+  String get backupErrorStartup => '备份任务未能启动，请返回应用后重试，已有录音已保留。';
+
+  @override
+  String get backupErrorUnknown => '任务未能完成，请重试。若仍然失败，请保留失败时的操作信息以便排查，已有录音已保留。';
 
   @override
   String get backupRenamedTitle => '导入时改名的文件夹';

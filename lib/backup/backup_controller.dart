@@ -22,6 +22,7 @@ enum BackupFailure {
   version,
   zip64,
   space,
+  startup,
   permission,
   local,
   interrupted,
@@ -39,6 +40,12 @@ BackupFailure classifyBackupFailure(Object error) {
   final detail = error is transport.BackupTransferException
       ? '${error.snapshot.error} ${error.snapshot.errorDetail}'
       : error.toString();
+  if (detail.contains('foreground-required') ||
+      detail.contains('backup-foreground-timeout') ||
+      detail.contains('backup-activity-detached') ||
+      detail.contains('service-start-failed')) {
+    return BackupFailure.startup;
+  }
   if (detail.contains('zip64')) return BackupFailure.zip64;
   if (detail.contains('space') ||
       detail.contains('ENOSPC') ||
@@ -388,6 +395,7 @@ class BackupController extends ChangeNotifier {
   }
 
   void _fail(Object error) {
+    debugPrint('Backup workflow failed: $error');
     _reset();
     outcome = error is BackupCancelledException
         ? BackupOutcome.cancelled

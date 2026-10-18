@@ -50,7 +50,9 @@ class _FolderScopePickerState extends State<FolderScopePicker> {
     if (next == _protected || !mounted) return;
     _protected = next;
     if (!next) {
-      setState(() => _folders = widget.store.listFolders());
+      setState(() {
+        _folders = widget.store.listFolders();
+      });
     }
   }
 
@@ -89,9 +91,9 @@ class _FolderScopePickerState extends State<FolderScopePicker> {
                         children: [
                           Text(l10n(context).foldersReadFailed),
                           TextButton(
-                            onPressed: () => setState(
-                              () => _folders = widget.store.listFolders(),
-                            ),
+                            onPressed: () => setState(() {
+                              _folders = widget.store.listFolders();
+                            }),
                             child: Text(l10n(context).retry),
                           ),
                         ],

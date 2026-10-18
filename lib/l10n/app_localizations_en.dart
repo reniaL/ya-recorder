@@ -825,8 +825,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Task cleanup could not finish. Files with uncertain ownership were kept. Reopen the app to retry recovery.';
 
   @override
+  String get backupErrorStartup =>
+      'The backup task could not start. Return to the app and try again. Existing recordings were kept.';
+
+  @override
   String get backupErrorUnknown =>
-      'The task failed. Check file access and available storage, then try again. Existing recordings were kept.';
+      'The task could not be completed. Try again. If it keeps failing, keep a note of the steps for troubleshooting. Existing recordings were kept.';
 
   @override
   String get backupRenamedTitle => 'Folder names changed for import';

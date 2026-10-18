@@ -38,6 +38,7 @@ String backupFailureLabel(AppLocalizations s, BackupFailure? failure) =>
       BackupFailure.version => s.backupErrorVersion,
       BackupFailure.zip64 => s.backupZip64,
       BackupFailure.space => s.backupErrorSpace,
+      BackupFailure.startup => s.backupErrorStartup,
       BackupFailure.permission => s.backupErrorPermission,
       BackupFailure.local => s.backupErrorLocal,
       BackupFailure.interrupted => s.backupInterrupted,
