@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../l10n/localization.dart';
 import 'package:flutter/material.dart';
 import '../backup/backup_controller.dart';
@@ -30,13 +32,13 @@ class RecordingSettingsPage extends StatefulWidget {
 }
 
 class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
+  final _languageAnchorKey = GlobalKey();
+  final _themeAnchorKey = GlobalKey();
+  final _formatAnchorKey = GlobalKey();
   RecordingFormat? _format;
   List<RecordingFormat> _available = [];
   bool _loading = true;
   String? _error;
-  bool _languageExpanded = false;
-  bool _themeExpanded = false;
-  bool _formatExpanded = false;
   bool _savingFormat = false;
   String? _formatError;
 
@@ -67,20 +69,21 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     }
   }
 
-  void _toggleLanguage() {
+  Future<void> _chooseLanguage() async {
     if (_savingLanguage || _savingTheme || _language == null) return;
-    setState(() {
-      _languageExpanded = !_languageExpanded;
-      _themeExpanded = false;
-      _formatExpanded = false;
-    });
+    final selected = await _showChoiceMenu<AppLanguage>(
+      anchorKey: _languageAnchorKey,
+      selected: _language!,
+      choices: [
+        for (final language in AppLanguage.values)
+          _PopupChoice(language, language.nativeName),
+      ],
+    );
+    if (selected != null && mounted) await _selectLanguage(selected);
   }
 
   Future<void> _selectLanguage(AppLanguage selected) async {
-    if (_savingLanguage || _savingTheme || selected == _language) {
-      setState(() => _languageExpanded = false);
-      return;
-    }
+    if (_savingLanguage || _savingTheme || selected == _language) return;
     final previous = _language!;
     setState(() {
       _savingLanguage = true;
@@ -94,7 +97,6 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       if (!mounted) return;
       setState(() => _language = selected);
       widget.onLanguageChanged?.call(selected);
-      setState(() => _languageExpanded = false);
     } catch (_) {
       try {
         await widget.service.setAppLanguage(previous.code);
@@ -125,20 +127,21 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     }
   }
 
-  void _toggleTheme() {
+  Future<void> _chooseTheme() async {
     if (_savingTheme || _savingLanguage || _themeMode == null) return;
-    setState(() {
-      _themeExpanded = !_themeExpanded;
-      _languageExpanded = false;
-      _formatExpanded = false;
-    });
+    final selected = await _showChoiceMenu<ThemeMode>(
+      anchorKey: _themeAnchorKey,
+      selected: _themeMode!,
+      choices: [
+        for (final mode in ThemeMode.values)
+          _PopupChoice(mode, _themeLabel(mode)),
+      ],
+    );
+    if (selected != null && mounted) await _selectTheme(selected);
   }
 
   Future<void> _selectTheme(ThemeMode selected) async {
-    if (_savingTheme || _savingLanguage || selected == _themeMode) {
-      setState(() => _themeExpanded = false);
-      return;
-    }
+    if (_savingTheme || _savingLanguage || selected == _themeMode) return;
     setState(() {
       _savingTheme = true;
       _themeError = null;
@@ -148,7 +151,6 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       if (!mounted) return;
       setState(() => _themeMode = selected);
       widget.onThemeChanged?.call(selected);
-      setState(() => _themeExpanded = false);
     } catch (_) {
       if (mounted) setState(() => _themeError = 'themeSaveFailed');
     } finally {
@@ -184,22 +186,32 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     }
   }
 
-  void _toggleFormat() {
+  Future<void> _chooseFormat() async {
     if (_format == null || _savingFormat) return;
-    setState(() {
-      _formatExpanded = !_formatExpanded;
-      _languageExpanded = false;
-      _themeExpanded = false;
-      _formatError = null;
-    });
+    setState(() => _formatError = null);
+    final selected = await _showChoiceMenu<RecordingFormat>(
+      anchorKey: _formatAnchorKey,
+      selected: _format!,
+      choices: [
+        for (final format in [RecordingFormat.aac, RecordingFormat.mp3])
+          _PopupChoice(
+            format,
+            format.label,
+            subtitle: _available.contains(format)
+                ? format == RecordingFormat.aac
+                      ? l10n(context).aacFormatDescription
+                      : null
+                : l10n(context).formatUnavailable(format.label),
+            enabled: _available.contains(format),
+          ),
+      ],
+    );
+    if (selected != null && mounted) await _selectFormat(selected);
   }
 
   Future<void> _selectFormat(RecordingFormat format) async {
     if (_savingFormat || !_available.contains(format)) return;
-    if (format == _format) {
-      setState(() => _formatExpanded = false);
-      return;
-    }
+    if (format == _format) return;
     setState(() {
       _savingFormat = true;
       _formatError = null;
@@ -209,7 +221,6 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       if (!mounted) return;
       setState(() {
         _format = format;
-        _formatExpanded = false;
       });
     } catch (_) {
       if (mounted) setState(() => _formatError = 'formatSaveFailed');
@@ -218,29 +229,125 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     }
   }
 
+  Future<T?> _showChoiceMenu<T>({
+    required GlobalKey anchorKey,
+    required T selected,
+    required List<_PopupChoice<T>> choices,
+  }) async {
+    final anchorContext = anchorKey.currentContext;
+    final anchorObject = anchorContext?.findRenderObject();
+    final overlayObject = Navigator.of(
+      context,
+    ).overlay?.context.findRenderObject();
+    if (anchorObject is! RenderBox ||
+        overlayObject is! RenderBox ||
+        !anchorObject.hasSize ||
+        !overlayObject.hasSize) {
+      return null;
+    }
+    final anchorTopLeft = anchorObject.localToGlobal(
+      Offset.zero,
+      ancestor: overlayObject,
+    );
+    final anchorRect = anchorTopLeft & anchorObject.size;
+    final selectedIndex = choices.indexWhere(
+      (choice) => choice.value == selected,
+    );
+    final barrierLabel = MaterialLocalizations.of(
+      context,
+    ).modalBarrierDismissLabel;
+
+    return showGeneralDialog<T>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: barrierLabel,
+      barrierColor: Colors.black.withValues(alpha: 0.32),
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (dialogContext, _, _) => LayoutBuilder(
+        builder: (context, constraints) {
+          final media = MediaQuery.of(context);
+          final safeTop = media.padding.top + 12;
+          final safeBottom = constraints.maxHeight - media.padding.bottom - 12;
+          final width = math.min(340.0, constraints.maxWidth - 32);
+          final rowHeights = [
+            for (final choice in choices) choice.subtitle == null ? 60.0 : 76.0,
+          ];
+          final menuHeight = math.min(
+            rowHeights.fold<double>(0, (sum, height) => sum + height),
+            safeBottom - safeTop,
+          );
+          final beforeSelected = selectedIndex < 0
+              ? 0.0
+              : rowHeights
+                    .take(selectedIndex)
+                    .fold<double>(0, (sum, height) => sum + height);
+          final selectedHeight = selectedIndex < 0
+              ? 60.0
+              : rowHeights[selectedIndex];
+          final desiredTop =
+              anchorRect.center.dy - beforeSelected - selectedHeight / 2;
+          final top = desiredTop
+              .clamp(safeTop, safeBottom - menuHeight)
+              .toDouble();
+          final left = (anchorRect.right - width)
+              .clamp(16.0, constraints.maxWidth - width - 16)
+              .toDouble();
+
+          return Stack(
+            children: [
+              Positioned(
+                left: left,
+                top: top,
+                width: width,
+                child: Material(
+                  color: Theme.of(context).colorScheme.surface,
+                  elevation: 12,
+                  shadowColor: Colors.black.withValues(alpha: 0.24),
+                  clipBehavior: Clip.antiAlias,
+                  borderRadius: BorderRadius.circular(22),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: menuHeight),
+                    child: ListView(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      shrinkWrap: true,
+                      children: [
+                        for (final choice in choices)
+                          _PopupChoiceTile<T>(
+                            choice: choice,
+                            selected: choice.value == selected,
+                            onTap: choice.enabled
+                                ? () => Navigator.of(
+                                    dialogContext,
+                                  ).pop(choice.value)
+                                : null,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(
+            opacity: animation,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.96, end: 1).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+              alignment: Alignment.center,
+              child: child,
+            ),
+          ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop:
-          !_savingTheme &&
-          !_savingLanguage &&
-          !_savingFormat &&
-          !_languageExpanded &&
-          !_themeExpanded &&
-          !_formatExpanded,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop &&
-            !_savingTheme &&
-            !_savingLanguage &&
-            !_savingFormat &&
-            (_languageExpanded || _themeExpanded || _formatExpanded)) {
-          setState(() {
-            _languageExpanded = false;
-            _themeExpanded = false;
-            _formatExpanded = false;
-          });
-        }
-      },
+      canPop: !_savingTheme && !_savingLanguage && !_savingFormat,
       child: Scaffold(
         appBar: AppBar(title: Text(l10n(context).settings)),
         body: SafeArea(
@@ -267,6 +374,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                         ),
                       ),
                     Semantics(
+                      key: _languageAnchorKey,
                       value: _language?.nativeName,
                       child: ListTile(
                         key: const Key('appLanguage'),
@@ -280,42 +388,12 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                                 height: 24,
                                 child: CircularProgressIndicator(),
                               )
-                            : Icon(
-                                _languageExpanded
-                                    ? Icons.expand_less_rounded
-                                    : Icons.expand_more_rounded,
-                              ),
+                            : Icon(Icons.unfold_more_rounded),
                         onTap:
                             _language == null || _savingLanguage || _savingTheme
                             ? null
-                            : _toggleLanguage,
+                            : _chooseLanguage,
                       ),
-                    ),
-                    _InlineChoiceCard(
-                      expanded: _languageExpanded,
-                      children: [
-                        for (final language in AppLanguage.values)
-                          Semantics(
-                            checked: language == _language,
-                            inMutuallyExclusiveGroup: true,
-                            child: ListTile(
-                              key: Key('chooseLanguage-${language.code}'),
-                              title: Text(language.nativeName),
-                              selected: language == _language,
-                              trailing: language == _language
-                                  ? Icon(
-                                      Icons.check_circle_rounded,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                    )
-                                  : null,
-                              onTap: _savingLanguage
-                                  ? null
-                                  : () => _selectLanguage(language),
-                            ),
-                          ),
-                      ],
                     ),
                     if (_languageError != null) ...[
                       Padding(
@@ -329,6 +407,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                         ),
                     ],
                     Semantics(
+                      key: _themeAnchorKey,
                       value: _themeMode == null
                           ? null
                           : _themeLabel(_themeMode!),
@@ -346,44 +425,14 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                                 height: 24,
                                 child: CircularProgressIndicator(),
                               )
-                            : Icon(
-                                _themeExpanded
-                                    ? Icons.expand_less_rounded
-                                    : Icons.expand_more_rounded,
-                              ),
+                            : Icon(Icons.unfold_more_rounded),
                         onTap:
                             _themeMode == null ||
                                 _savingTheme ||
                                 _savingLanguage
                             ? null
-                            : _toggleTheme,
+                            : _chooseTheme,
                       ),
-                    ),
-                    _InlineChoiceCard(
-                      expanded: _themeExpanded,
-                      children: [
-                        for (final mode in ThemeMode.values)
-                          Semantics(
-                            checked: mode == _themeMode,
-                            inMutuallyExclusiveGroup: true,
-                            child: ListTile(
-                              key: Key('chooseTheme-${mode.name}'),
-                              title: Text(_themeLabel(mode)),
-                              selected: mode == _themeMode,
-                              trailing: mode == _themeMode
-                                  ? Icon(
-                                      Icons.check_circle_rounded,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                    )
-                                  : null,
-                              onTap: _savingTheme
-                                  ? null
-                                  : () => _selectTheme(mode),
-                            ),
-                          ),
-                      ],
                     ),
                     if (_themeError != null) ...[
                       Padding(
@@ -407,6 +456,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                       ),
                     ] else ...[
                       Semantics(
+                        key: _formatAnchorKey,
                         value: _format!.label,
                         child: ListTile(
                           key: const Key('defaultRecordingFormat'),
@@ -418,91 +468,15 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                                   height: 24,
                                   child: CircularProgressIndicator(),
                                 )
-                              : Icon(
-                                  _formatExpanded
-                                      ? Icons.expand_less_rounded
-                                      : Icons.expand_more_rounded,
-                                ),
-                          onTap: _toggleFormat,
+                              : Icon(Icons.unfold_more_rounded),
+                          onTap: _chooseFormat,
                         ),
                       ),
-                      _InlineChoiceCard(
-                        expanded: _formatExpanded,
-                        children: [
-                          for (final format in [
-                            RecordingFormat.aac,
-                            RecordingFormat.mp3,
-                          ])
-                            Semantics(
-                              checked: _format == format,
-                              inMutuallyExclusiveGroup: true,
-                              child: ListTile(
-                                key: Key('chooseFormat-${format.wireName}'),
-                                leading: Icon(
-                                  _format == format
-                                      ? Icons.radio_button_checked_rounded
-                                      : Icons.radio_button_unchecked_rounded,
-                                  color: _format == format
-                                      ? Theme.of(context).colorScheme.primary
-                                      : null,
-                                ),
-                                title: Text(format.label),
-                                subtitle: _available.contains(format)
-                                    ? format == RecordingFormat.aac
-                                          ? Text(
-                                              l10n(
-                                                context,
-                                              ).aacFormatDescription,
-                                            )
-                                          : null
-                                    : Text(
-                                        l10n(
-                                          context,
-                                        ).formatUnavailable(format.label),
-                                      ),
-                                enabled:
-                                    !_savingFormat &&
-                                    _available.contains(format),
-                                onTap: () => _selectFormat(format),
-                              ),
-                            ),
-                          if (_formatError != null)
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                localizedMessage(context, _formatError!),
-                              ),
-                            ),
-                          if (_savingFormat)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(l10n(context).saving),
-                                ],
-                              ),
-                            ),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: _savingFormat
-                                  ? null
-                                  : () =>
-                                        setState(() => _formatExpanded = false),
-                              child: Text(l10n(context).cancel),
-                            ),
-                          ),
-                        ],
-                      ),
+                      if (_formatError != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(localizedMessage(context, _formatError!)),
+                        ),
                       Padding(
                         padding: EdgeInsets.symmetric(horizontal: 16),
                         child: Text(l10n(context).formatDescription),
@@ -516,34 +490,84 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   }
 }
 
-class _InlineChoiceCard extends StatelessWidget {
-  const _InlineChoiceCard({required this.expanded, required this.children});
+class _PopupChoice<T> {
+  const _PopupChoice(
+    this.value,
+    this.label, {
+    this.subtitle,
+    this.enabled = true,
+  });
 
-  final bool expanded;
-  final List<Widget> children;
+  final T value;
+  final String label;
+  final String? subtitle;
+  final bool enabled;
+}
+
+class _PopupChoiceTile<T> extends StatelessWidget {
+  const _PopupChoiceTile({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final _PopupChoice<T> choice;
+  final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeInOutCubic,
-      alignment: Alignment.topCenter,
-      child: expanded
-          ? Card(
-              key: const Key('inlineChoiceCard'),
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              clipBehavior: Clip.antiAlias,
-              color: Theme.of(context).colorScheme.surfaceContainerLow,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(
-                  color: Theme.of(context).colorScheme.outlineVariant,
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      checked: selected,
+      enabled: choice.enabled,
+      inMutuallyExclusiveGroup: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: BoxConstraints(
+            minHeight: choice.subtitle == null ? 60 : 76,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
+          color: selected
+              ? colors.primaryContainer.withValues(alpha: 0.72)
+              : null,
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      choice.label,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: choice.enabled
+                            ? (selected ? colors.primary : colors.onSurface)
+                            : colors.onSurface.withValues(alpha: 0.38),
+                        fontWeight: selected ? FontWeight.w600 : null,
+                      ),
+                    ),
+                    if (choice.subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        choice.subtitle!,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              child: Column(mainAxisSize: MainAxisSize.min, children: children),
-            )
-          : const SizedBox(width: double.infinity),
+              if (selected) ...[
+                const SizedBox(width: 12),
+                Icon(Icons.check_rounded, color: colors.primary),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
