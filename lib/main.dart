@@ -27,6 +27,24 @@ import 'storage/models/recording_folder.dart';
 import 'storage/recently_deleted_page.dart';
 import 'storage/recording_store.dart';
 
+Recording _copyRecording(
+  Recording source, {
+  String? title,
+  String? folderId,
+  bool updateFolderId = false,
+}) => Recording(
+  id: source.id,
+  title: title ?? source.title,
+  filePath: source.filePath,
+  createdAt: source.createdAt,
+  duration: source.duration,
+  fileSizeBytes: source.fileSizeBytes,
+  format: source.format,
+  folderId: updateFolderId ? folderId : source.folderId,
+  deletedAt: source.deletedAt,
+  wasInterrupted: source.wasInterrupted,
+);
+
 void main() {
   runApp(const MyApp());
 }
@@ -509,6 +527,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           builder: (_) => RecordingDetailPage(
             recording: recording,
             playbackService: _playbackService,
+            onRename: (value, onUpdated) => _renameRecording(value, onUpdated),
+            onMove: (value, onUpdated) => _moveRecording(value, onUpdated),
+            onShare: _shareRecording,
+            canModify: !_libraryProtected,
           ),
         ),
       );
@@ -538,7 +560,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
-  Future<void> _renameRecording(Recording recording) async {
+  Future<void> _renameRecording(
+    Recording recording, [
+    ValueChanged<Recording>? onUpdated,
+  ]) async {
     final title = await showDialog<String>(
       context: context,
       builder: (context) =>
@@ -560,6 +585,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         recordingId: recording.id,
         title: normalizedTitle,
       );
+      onUpdated?.call(_copyRecording(recording, title: normalizedTitle));
       await _loadRecordings();
     } catch (_) {
       _setServiceError('renameRecordingFailed');
@@ -572,7 +598,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
-  Future<void> _moveRecording(Recording recording) async {
+  Future<void> _moveRecording(
+    Recording recording, [
+    ValueChanged<Recording>? onUpdated,
+  ]) async {
     try {
       final folders = await (await _getRecordingStore()).listFolders();
       if (!mounted) {
@@ -623,6 +652,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       await store.moveRecording(
         recordingId: recording.id,
         folderId: selectedFolderId.isEmpty ? null : selectedFolderId,
+      );
+      onUpdated?.call(
+        _copyRecording(
+          recording,
+          folderId: selectedFolderId.isEmpty ? null : selectedFolderId,
+          updateFolderId: true,
+        ),
       );
       await _loadRecordings();
     } catch (_) {
@@ -1117,6 +1153,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     setState(() {
       _serviceError = message;
     });
+    if (_isDetailOpen) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(localizedMessage(context, message))),
+      );
+    }
   }
 
   Future<bool> _persistSavedRecording(

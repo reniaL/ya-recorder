@@ -12,10 +12,18 @@ class RecordingDetailPage extends StatefulWidget {
     super.key,
     required this.recording,
     required this.playbackService,
+    required this.onRename,
+    required this.onMove,
+    required this.onShare,
+    required this.canModify,
   });
 
   final Recording recording;
   final AudioPlaybackService playbackService;
+  final Future<void> Function(Recording, ValueChanged<Recording>) onRename;
+  final Future<void> Function(Recording, ValueChanged<Recording>) onMove;
+  final Future<void> Function(Recording) onShare;
+  final bool canModify;
 
   @override
   State<RecordingDetailPage> createState() => _RecordingDetailPageState();
@@ -24,15 +32,51 @@ class RecordingDetailPage extends StatefulWidget {
 class _RecordingDetailPageState extends State<RecordingDetailPage> {
   bool _stopped = false;
   bool _changingSpeed = false;
+  late Recording _recording = widget.recording;
+  bool _actionInProgress = false;
+
+  Future<void> _runRecordingAction(
+    Future<void> Function() action, {
+    required String errorKey,
+  }) async {
+    if (_actionInProgress) return;
+    setState(() => _actionInProgress = true);
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(localizedMessage(context, errorKey))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _actionInProgress = false);
+    }
+  }
+
+  Future<void> _rename() => _runRecordingAction(() async {
+    await widget.onRename(_recording, (updated) {
+      if (mounted) setState(() => _recording = updated);
+    });
+  }, errorKey: 'renameRecordingFailed');
+
+  Future<void> _move() => _runRecordingAction(() async {
+    await widget.onMove(_recording, (updated) {
+      if (mounted) setState(() => _recording = updated);
+    });
+  }, errorKey: 'moveRecordingFailed');
+
+  Future<void> _share() => _runRecordingAction(
+    () => widget.onShare(_recording),
+    errorKey: 'shareFailed',
+  );
 
   void _showFullTitle() {
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n(context).recordingTitle),
-        content: SingleChildScrollView(
-          child: SelectableText(widget.recording.title),
-        ),
+        content: SingleChildScrollView(child: SelectableText(_recording.title)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -56,7 +100,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
   @override
   void initState() {
     super.initState();
-    unawaited(widget.playbackService.play(widget.recording));
+    unawaited(widget.playbackService.play(_recording));
   }
 
   void _stopPlayback() {
@@ -89,7 +133,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    widget.recording.title,
+                    _recording.title,
                     key: const Key('recordingDetailTitle'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -98,6 +142,31 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
               ),
             ),
           ),
+          actions: [
+            PopupMenuButton<String>(
+              key: const Key('recordingDetailActions'),
+              tooltip: l10n(context).recordingActions,
+              enabled: !_actionInProgress,
+              onSelected: (action) {
+                if (action == 'rename') unawaited(_rename());
+                if (action == 'move') unawaited(_move());
+                if (action == 'share') unawaited(_share());
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'rename',
+                  enabled: widget.canModify,
+                  child: Text(l10n(context).rename),
+                ),
+                PopupMenuItem(
+                  value: 'move',
+                  enabled: widget.canModify,
+                  child: Text(l10n(context).moveToFolder),
+                ),
+                PopupMenuItem(value: 'share', child: Text(l10n(context).share)),
+              ],
+            ),
+          ],
         ),
         body: SafeArea(
           child: StreamBuilder<PlaybackStatus>(
@@ -105,13 +174,13 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
             initialData: widget.playbackService.status,
             builder: (context, snapshot) {
               final status = snapshot.data ?? const PlaybackStatus.idle();
-              final active = status.recordingId == widget.recording.id;
+              final active = status.recordingId == _recording.id;
               final loading = active && status.state == PlaybackState.loading;
               final failed = active && status.state == PlaybackState.failed;
               final playing = active && status.state == PlaybackState.playing;
-              final total = widget.recording.duration;
+              final total = _recording.duration;
               final scrubbing = widget.playbackService.isScrubbing;
-              final createdAt = widget.recording.createdAt.toLocal();
+              final createdAt = _recording.createdAt.toLocal();
               return SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -150,7 +219,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                         alignment: Alignment.centerLeft,
                         child: OutlinedButton.icon(
                           onPressed: () =>
-                              widget.playbackService.play(widget.recording),
+                              widget.playbackService.play(_recording),
                           icon: const Icon(Icons.refresh),
                           label: Text(l10n(context).retryPlayback),
                         ),
@@ -162,7 +231,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                     ],
                     const SizedBox(height: 16),
                     PlaybackProgress(
-                      recording: widget.recording,
+                      recording: _recording,
                       service: widget.playbackService,
                       sliderKey: const Key('recordingDetailProgress'),
                     ),
@@ -203,7 +272,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                               onPressed: loading || failed || scrubbing
                                   ? null
                                   : () => widget.playbackService.toggle(
-                                      widget.recording,
+                                      _recording,
                                     ),
                               icon: Icon(
                                 playing
