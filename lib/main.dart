@@ -189,6 +189,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   String _searchQuery = '';
   String? _selectedFolderId;
   String? _selectedFolderName;
+  bool _folderScopeExpanded = false;
+  RecordingStore? _folderPickerStore;
   Future<RecordingStore>? _openedRecordingStore;
   LibraryCoordinator? _libraryCoordinator;
   bool _libraryProtected = false;
@@ -222,6 +224,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       _isSearching = false;
       _searchQuery = '';
       _selectedRecordingIds.clear();
+      _folderScopeExpanded = false;
     });
   }
 
@@ -463,25 +466,32 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
-  Future<void> _chooseFolderScope() async {
+  Future<void> _toggleFolderScope() async {
+    if (_isSubmitting || _isSearching || _isSelecting) return;
+    if (_folderScopeExpanded) {
+      setState(() => _folderScopeExpanded = false);
+      return;
+    }
     try {
       final store = await _getRecordingStore();
-      if (!mounted) {
-        return;
-      }
-      final selectedFolderId = await showModalBottomSheet<String?>(
-        context: context,
-        builder: (_) =>
-            FolderScopePicker(store: store, selectedId: _selectedFolderId),
-      );
-      if (!mounted || selectedFolderId == null) {
-        return;
-      }
-      final folderId = selectedFolderId.isEmpty ? null : selectedFolderId;
-      if (folderId == _selectedFolderId) {
-        return;
-      }
+      if (!mounted) return;
+      setState(() {
+        _folderPickerStore = store;
+        _folderScopeExpanded = true;
+      });
+    } catch (_) {
+      _setLibraryError('foldersReadFailed');
+    }
+  }
 
+  Future<void> _selectFolderScope(String? folderId) async {
+    final store = _folderPickerStore;
+    if (store == null || _isSubmitting) return;
+    if (folderId == _selectedFolderId) {
+      setState(() => _folderScopeExpanded = false);
+      return;
+    }
+    try {
       final folders = await store.listFolders();
       if (!mounted) return;
       final selectedFolder = folders.where((folder) => folder.id == folderId);
@@ -491,6 +501,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         _selectedFolderName = selectedFolder.isEmpty
             ? null
             : selectedFolder.single.name;
+        _folderScopeExpanded = false;
         _isLoadingRecordings = true;
         _libraryError = null;
       });
@@ -731,6 +742,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (_isSubmitting) return;
     setState(() {
       _isSelecting = true;
+      _folderScopeExpanded = false;
       if (!_selectedRecordingIds.add(id)) {
         _selectedRecordingIds.remove(id);
       }
@@ -1269,6 +1281,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       _libraryProtected = protected;
       if (protected) {
         _isSelecting = false;
+        _folderScopeExpanded = false;
         _selectedRecordingIds.clear();
       }
     });
@@ -1355,9 +1368,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   Widget _buildRecordingLibrary(BuildContext context) {
     return PopScope(
-      canPop: !_isSelecting && !_isSubmitting,
+      canPop: !_isSelecting && !_isSubmitting && !_folderScopeExpanded,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _isSelecting) _exitSelection();
+        if (!didPop && _folderScopeExpanded) {
+          setState(() => _folderScopeExpanded = false);
+        } else if (!didPop && _isSelecting) {
+          _exitSelection();
+        }
       },
       child: Scaffold(
         appBar: AppBar(
@@ -1383,11 +1400,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   ),
                   button: true,
                   enabled: !_isSubmitting,
-                  onTap: _isSubmitting ? null : _chooseFolderScope,
+                  onTap: _isSubmitting ? null : _toggleFolderScope,
                   child: ExcludeSemantics(
                     child: TextButton(
                       key: const Key('folderScopeSelector'),
-                      onPressed: _isSubmitting ? null : _chooseFolderScope,
+                      onPressed: _isSubmitting ? null : _toggleFolderScope,
                       style: TextButton.styleFrom(
                         foregroundColor: Theme.of(
                           context,
@@ -1412,7 +1429,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.arrow_drop_down_rounded),
+                          Icon(
+                            _folderScopeExpanded
+                                ? Icons.arrow_drop_up_rounded
+                                : Icons.arrow_drop_down_rounded,
+                          ),
                         ],
                       ),
                     ),
@@ -1433,7 +1454,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                 tooltip: l10n(context).selectRecordings,
                 onPressed: _isSubmitting || _visibleRecordings.isEmpty
                     ? null
-                    : () => setState(() => _isSelecting = true),
+                    : () => setState(() {
+                        _isSelecting = true;
+                        _folderScopeExpanded = false;
+                      }),
                 icon: const Icon(Icons.checklist),
               ),
             IconButton(
@@ -1449,6 +1473,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       } else {
                         setState(() {
                           _isSearching = true;
+                          _folderScopeExpanded = false;
                         });
                       }
                     },
@@ -1553,6 +1578,14 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       ),
                     ),
                   ),
+                ),
+              if (_folderPickerStore != null)
+                FolderScopePicker(
+                  store: _folderPickerStore!,
+                  selectedId: _selectedFolderId,
+                  expanded: _folderScopeExpanded,
+                  onSelected: (folderId) =>
+                      unawaited(_selectFolderScope(folderId)),
                 ),
               Expanded(child: _buildRecordingList(context)),
               if (_isSelecting)

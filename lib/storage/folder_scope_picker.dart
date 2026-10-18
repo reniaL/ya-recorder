@@ -4,12 +4,21 @@ import '../l10n/localization.dart';
 import 'models/recording_folder.dart';
 import 'recording_store.dart';
 
-/// Browsing remains available during backup. Refresh once on task release,
-/// including while this sheet is open, rather than on every progress tick.
+/// Shows the current library scopes in a compact, scrollable inline card.
 class FolderScopePicker extends StatefulWidget {
-  const FolderScopePicker({super.key, required this.store, this.selectedId});
+  const FolderScopePicker({
+    super.key,
+    required this.store,
+    this.selectedId,
+    this.onSelected,
+    this.expanded = true,
+  });
+
   final RecordingStore store;
   final String? selectedId;
+  final ValueChanged<String?>? onSelected;
+  final bool expanded;
+
   @override
   State<FolderScopePicker> createState() => _FolderScopePickerState();
 }
@@ -17,6 +26,7 @@ class FolderScopePicker extends StatefulWidget {
 class _FolderScopePickerState extends State<FolderScopePicker> {
   late Future<List<RecordingFolder>> _folders = widget.store.listFolders();
   late bool _protected;
+
   @override
   void initState() {
     super.initState();
@@ -24,14 +34,23 @@ class _FolderScopePickerState extends State<FolderScopePicker> {
     widget.store.coordinator.addListener(_changed);
   }
 
+  @override
+  void didUpdateWidget(covariant FolderScopePicker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.store != widget.store) {
+      oldWidget.store.coordinator.removeListener(_changed);
+      _protected = widget.store.coordinator.isProtected;
+      widget.store.coordinator.addListener(_changed);
+      _folders = widget.store.listFolders();
+    }
+  }
+
   void _changed() {
     final next = widget.store.coordinator.isProtected;
     if (next == _protected || !mounted) return;
     _protected = next;
     if (!next) {
-      setState(() {
-        _folders = widget.store.listFolders();
-      });
+      setState(() => _folders = widget.store.listFolders());
     }
   }
 
@@ -42,41 +61,101 @@ class _FolderScopePickerState extends State<FolderScopePicker> {
   }
 
   @override
-  Widget build(BuildContext context) => SafeArea(
-    child: FutureBuilder<List<RecordingFolder>>(
-      future: _folders,
-      builder: (context, snapshot) {
-        final folders = snapshot.data ?? [];
-        return ListView.builder(
-          shrinkWrap: true,
-          itemCount: folders.length + 2,
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return ListTile(
-                title: Text(
-                  snapshot.hasError
-                      ? l10n(context).foldersReadFailed
-                      : l10n(context).selectScope,
-                ),
-              );
-            }
-            final folder = index == 1 ? null : folders[index - 2];
-            return ListTile(
-              key: Key('folderScope-${folder?.id ?? 'all'}'),
-              leading: Icon(
-                folder == null
-                    ? Icons.library_music_outlined
-                    : Icons.folder_outlined,
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeInOutCubic,
+      alignment: Alignment.topCenter,
+      child: widget.expanded
+          ? Card(
+              key: const Key('folderScopeOptionsCard'),
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              clipBehavior: Clip.antiAlias,
+              color: colors.surfaceContainerLow,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: colors.outlineVariant),
               ),
-              title: Text(folder?.name ?? l10n(context).allRecordings),
-              trailing: widget.selectedId == folder?.id
-                  ? const Icon(Icons.check_rounded)
-                  : null,
-              onTap: () => Navigator.pop(context, folder?.id ?? ''),
-            );
-          },
-        );
-      },
-    ),
-  );
+              child: FutureBuilder<List<RecordingFolder>>(
+                future: _folders,
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(l10n(context).foldersReadFailed),
+                          TextButton(
+                            onPressed: () => setState(
+                              () => _folders = widget.store.listFolders(),
+                            ),
+                            child: Text(l10n(context).retry),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  if (!snapshot.hasData) {
+                    return const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final folders = snapshot.data!;
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: ListView(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      children: [
+                        _scopeTile(
+                          context,
+                          id: null,
+                          title: l10n(context).allRecordings,
+                          icon: Icons.library_music_outlined,
+                        ),
+                        for (final folder in folders)
+                          _scopeTile(
+                            context,
+                            id: folder.id,
+                            title: folder.name,
+                            icon: Icons.folder_outlined,
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            )
+          : const SizedBox(width: double.infinity),
+    );
+  }
+
+  Widget _scopeTile(
+    BuildContext context, {
+    required String? id,
+    required String title,
+    required IconData icon,
+  }) {
+    final selected = widget.selectedId == id;
+    final colors = Theme.of(context).colorScheme;
+    return Semantics(
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      child: ListTile(
+        key: Key('folderScope-${id ?? 'all'}'),
+        dense: true,
+        leading: Icon(icon, color: selected ? colors.primary : null),
+        title: Text(title),
+        selected: selected,
+        trailing: selected
+            ? Icon(Icons.check_circle_rounded, color: colors.primary)
+            : null,
+        onTap: widget.onSelected == null ? null : () => widget.onSelected!(id),
+      ),
+    );
+  }
 }
