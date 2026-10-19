@@ -184,6 +184,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   String? _permissionMessage;
   String? _serviceError;
   String? _successMessage;
+  String? _savedRecordingId;
   Timer? _successMessageTimer;
   String? _libraryError;
   String? _playbackError;
@@ -407,10 +408,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   // Called inside setState so replacement and clearing render together with
   // the recording state. Only one success message and timer may exist.
-  void _updateSuccessMessage(String? message) {
+  void _updateSuccessMessage(String? message, {String? recordingId}) {
     _successMessageTimer?.cancel();
     _successMessageTimer = null;
     _successMessage = message;
+    _savedRecordingId = recordingId;
     if (message != null) {
       _successMessageTimer = Timer(
         const Duration(seconds: 4),
@@ -422,6 +424,20 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   void _dismissSuccessMessage() {
     if (!mounted) return;
     setState(() => _updateSuccessMessage(null));
+  }
+
+  Future<void> _renameSavedRecording() async {
+    final id = _savedRecordingId;
+    if (id == null || _isSubmitting || _libraryProtected) return;
+    _dismissSuccessMessage();
+    try {
+      final recordings = await (await _getRecordingStore()).listRecordings();
+      if (!mounted || _libraryProtected) return;
+      final matches = recordings.where((recording) => recording.id == id);
+      if (matches.isNotEmpty) await _renameRecording(matches.first);
+    } catch (_) {
+      _setServiceError('renameRecordingFailed');
+    }
   }
 
   Future<void> _loadCurrentStatus() async {
@@ -1328,7 +1344,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         } else if (result.inserted && savedRecording.wasInterrupted) {
           _serviceError = 'interruptedSaved';
         } else if (result.inserted) {
-          _updateSuccessMessage('recordingSaved');
+          _updateSuccessMessage(
+            'recordingSaved',
+            recordingId: savedRecording.id,
+          );
         }
       });
       await _loadRecordings();
@@ -1701,6 +1720,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                               icon: Icons.check_circle_outline_rounded,
                               message: _successMessage!,
                               onDismiss: _dismissSuccessMessage,
+                              onAction:
+                                  _savedRecordingId != null &&
+                                      !_libraryProtected &&
+                                      !_isSubmitting
+                                  ? _renameSavedRecording
+                                  : null,
                             ),
                           if (_playbackError != null)
                             _MessagePanel(
@@ -1919,14 +1944,32 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(8, 12, 8, 12),
         itemCount: visibleRecordings.length,
-        separatorBuilder: (_, _) => const Divider(height: 1),
+        separatorBuilder: (context, _) => Divider(
+          height: 1,
+          indent: 64,
+          endIndent: 16,
+          color: Theme.of(
+            context,
+          ).colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
         itemBuilder: (context, index) {
           final recording = visibleRecordings[index];
           final isPlaying =
               _playbackStatus.recordingId == recording.id &&
               _playbackStatus.state == PlaybackState.playing;
+          final isCurrent = _playbackStatus.recordingId == recording.id;
+          final colors = Theme.of(context).colorScheme;
           return ListTile(
             key: Key('recordingRow-${recording.id}'),
+            tileColor: isCurrent && !_isSelecting
+                ? colors.primaryContainer.withValues(alpha: 0.35)
+                : null,
+            minLeadingWidth: 48,
+            horizontalTitleGap: 8,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 4,
+            ),
             selected: _selectedRecordingIds.contains(recording.id),
             onTap: _isSubmitting
                 ? null
@@ -1946,73 +1989,102 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                         ? null
                         : (_) => _toggleSelection(recording.id),
                   )
-                : const Icon(Icons.graphic_eq_rounded),
+                : IconButton(
+                    constraints: const BoxConstraints(
+                      minWidth: 48,
+                      minHeight: 48,
+                    ),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () => _togglePlayback(recording),
+                    icon: Icon(
+                      isPlaying
+                          ? Icons.pause_circle_outline_rounded
+                          : Icons.play_circle_outline_rounded,
+                    ),
+                    tooltip: isPlaying
+                        ? l10n(context).pausePlayback
+                        : l10n(context).playRecording,
+                  ),
             title: Text(
               recording.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
-            subtitle: Text(
-              '${_formatDateTime(recording.createdAt)} · '
-              '${_formatDuration(recording.duration)}',
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    Text(
+                      _formatDuration(recording.duration),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: colors.onSurface),
+                    ),
+                    Text(
+                      _formatDateTime(recording.createdAt),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+                if (isCurrent)
+                  Text(
+                    _playbackStateLabel,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.labelMedium?.copyWith(color: colors.primary),
+                  ),
+              ],
             ),
             trailing: _isSelecting
                 ? null
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        onPressed: () => _togglePlayback(recording),
-                        icon: Icon(
-                          isPlaying
-                              ? Icons.pause_circle_outline_rounded
-                              : Icons.play_circle_outline_rounded,
-                        ),
-                        tooltip: isPlaying
-                            ? l10n(context).pausePlayback
-                            : l10n(context).playRecording,
+                : PopupMenuButton<String>(
+                    tooltip: l10n(context).recordingActions,
+                    onSelected: (action) {
+                      if (action == 'rename') {
+                        _renameRecording(recording);
+                      } else if (action == 'move') {
+                        _moveRecording(recording);
+                      } else if (action == 'share') {
+                        _shareRecording(recording);
+                      } else if (action == 'delete') {
+                        _deleteRecording(recording);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'rename',
+                        enabled: !_libraryProtected,
+                        child: Text(l10n(context).rename),
                       ),
-                      PopupMenuButton<String>(
-                        tooltip: l10n(context).recordingActions,
-                        onSelected: (action) {
-                          if (action == 'rename') {
-                            _renameRecording(recording);
-                          } else if (action == 'move') {
-                            _moveRecording(recording);
-                          } else if (action == 'share') {
-                            _shareRecording(recording);
-                          } else if (action == 'delete') {
-                            _deleteRecording(recording);
-                          }
-                        },
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            value: 'rename',
-                            enabled: !_libraryProtected,
-                            child: Text(l10n(context).rename),
+                      PopupMenuItem(
+                        value: 'move',
+                        enabled: !_libraryProtected,
+                        child: Text(l10n(context).moveToFolder),
+                      ),
+                      PopupMenuItem(
+                        value: 'share',
+                        child: Text(l10n(context).share),
+                      ),
+                      PopupMenuItem(
+                        value: 'delete',
+                        enabled: !_libraryProtected,
+                        child: Text(
+                          l10n(context).delete,
+                          style: TextStyle(
+                            color: _libraryProtected
+                                ? null
+                                : Theme.of(context).colorScheme.error,
                           ),
-                          PopupMenuItem(
-                            value: 'move',
-                            enabled: !_libraryProtected,
-                            child: Text(l10n(context).moveToFolder),
-                          ),
-                          PopupMenuItem(
-                            value: 'share',
-                            child: Text(l10n(context).share),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            enabled: !_libraryProtected,
-                            child: Text(
-                              l10n(context).delete,
-                              style: TextStyle(
-                                color: _libraryProtected
-                                    ? null
-                                    : Theme.of(context).colorScheme.error,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
@@ -2251,6 +2323,12 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                           icon: Icons.check_circle_outline_rounded,
                           message: _successMessage!,
                           onDismiss: _dismissSuccessMessage,
+                          onAction:
+                              _savedRecordingId != null &&
+                                  !_libraryProtected &&
+                                  !_isSubmitting
+                              ? _renameSavedRecording
+                              : null,
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -2397,13 +2475,24 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     return '${hours.toString().padLeft(2, '0')}:$paddedMinutes:$paddedSeconds';
   }
 
+  String get _playbackStateLabel => switch (_playbackStatus.state) {
+    PlaybackState.playing => l10n(context).playing,
+    PlaybackState.paused => l10n(context).playbackPaused,
+    PlaybackState.loading => l10n(context).loadingPlayback,
+    PlaybackState.failed => l10n(context).playbackFailed,
+    PlaybackState.idle => l10n(context).notPlaying,
+  };
+
   String _formatDateTime(DateTime dateTime) {
     final localTime = dateTime.toLocal();
     final month = localTime.month.toString().padLeft(2, '0');
     final day = localTime.day.toString().padLeft(2, '0');
     final hour = localTime.hour.toString().padLeft(2, '0');
     final minute = localTime.minute.toString().padLeft(2, '0');
-    return '${localTime.year}-$month-$day $hour:$minute';
+    final year = localTime.year == DateTime.now().year
+        ? ''
+        : '${localTime.year}-';
+    return '$year$month-$day $hour:$minute';
   }
 }
 
@@ -2413,12 +2502,14 @@ class _MessagePanel extends StatelessWidget {
     required this.message,
     this.isError = false,
     this.onDismiss,
+    this.onAction,
   });
 
   final IconData icon;
   final String message;
   final bool isError;
   final VoidCallback? onDismiss;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -2439,9 +2530,20 @@ class _MessagePanel extends StatelessWidget {
             Icon(icon, color: foregroundColor),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                localizedMessage(context, message),
-                style: TextStyle(color: foregroundColor),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    localizedMessage(context, message),
+                    style: TextStyle(color: foregroundColor),
+                  ),
+                  if (onAction != null)
+                    TextButton(
+                      onPressed: onAction,
+                      child: Text(l10n(context).rename),
+                    ),
+                ],
               ),
             ),
             if (onDismiss != null)

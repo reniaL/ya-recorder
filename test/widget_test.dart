@@ -788,6 +788,165 @@ void main() {
     expect(invokedMethods, contains('resume'));
   });
 
+  testWidgets('UIR-06 list controls keep playback separate from navigation', (
+    tester,
+  ) async {
+    final store = _RecordingStoreSpy()
+      ..recordings = [_recording('one'), _recording('two')];
+    final playback = AudioPlaybackService(backend: _FakePlaybackBackend());
+    addTearDown(playback.dispose);
+    await tester.pumpWidget(
+      MyApp(recordingStore: store, playbackService: playback),
+    );
+    await tester.pumpAndSettle();
+    final row = find.byKey(const Key('recordingRow-one'));
+    final strings = l10n(tester.element(row));
+    final play = find.descendant(
+      of: row,
+      matching: find.byTooltip(strings.playRecording),
+    );
+    expect(tester.getSize(play).width, greaterThanOrEqualTo(48));
+    expect(
+      tester.getTopLeft(play).dx,
+      lessThan(
+        tester
+            .getTopLeft(
+              find.descendant(
+                of: row,
+                matching: find.text(store.recordings.first.title),
+              ),
+            )
+            .dx,
+      ),
+    );
+    await tester.tap(play);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('libraryPlaybackControls')), findsOneWidget);
+    expect(
+      find.descendant(of: row, matching: find.text(strings.playing)),
+      findsOneWidget,
+    );
+    expect(tester.widget<ListTile>(row).tileColor, isNotNull);
+    await tester.tap(
+      find.descendant(of: row, matching: find.byTooltip(strings.pausePlayback)),
+    );
+    await tester.pumpAndSettle();
+    expect(playback.status.state, PlaybackState.paused);
+    expect(
+      find.descendant(of: row, matching: find.text(strings.playbackPaused)),
+      findsOneWidget,
+    );
+    await playback.play(store.recordings.last);
+    await tester.pumpAndSettle();
+    expect(tester.widget<ListTile>(row).tileColor, isNull);
+    await tester.longPress(row);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(of: row, matching: find.byType(Checkbox)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.byType(IconButton)),
+      findsNothing,
+    );
+  });
+
+  for (final language in AppLanguage.values) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'UIR-06 list fits 320 wide doubled text $language $brightness',
+        (tester) async {
+          tester.platformDispatcher.platformBrightnessTestValue = brightness;
+          addTearDown(
+            tester.platformDispatcher.clearPlatformBrightnessTestValue,
+          );
+          await tester.binding.setSurfaceSize(const Size(320, 800));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          tester.platformDispatcher.textScaleFactorTestValue = 2;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          final store = _RecordingStoreSpy()
+            ..language = language
+            ..recordings = [
+              Recording(
+                id: 'one',
+                title:
+                    'Long recording title for a detailed interview and project planning meeting',
+                filePath: '/private/one.m4a',
+                createdAt: DateTime(DateTime.now().year - 1, 9, 30),
+                duration: const Duration(minutes: 3),
+                fileSizeBytes: 1024,
+                format: RecordingFormat.m4a,
+              ),
+            ];
+          final playback = AudioPlaybackService(
+            backend: _FakePlaybackBackend(),
+          );
+          addTearDown(playback.dispose);
+          await tester.pumpWidget(
+            MyApp(recordingStore: store, playbackService: playback),
+          );
+          await tester.pumpAndSettle();
+          await playback.play(store.recordings.single);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          final row = find.byKey(const Key('recordingRow-one'));
+          final strings = l10n(tester.element(row));
+          expect(
+            find.descendant(of: row, matching: find.text(strings.playing)),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+              of: row,
+              matching: find.byTooltip(strings.recordingActions),
+            ),
+            findsOneWidget,
+          );
+        },
+      );
+    }
+  }
+
+  testWidgets('UIR-06 saved notice renames the saved recording after timeout', (
+    tester,
+  ) async {
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    final store = _RecordingStoreSpy();
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('one'));
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('two'));
+    await tester.pumpAndSettle();
+    final strings = l10n(tester.element(find.byType(Scaffold).first));
+    await tester.tap(find.widgetWithText(TextButton, strings.rename));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Interview notes');
+    await tester.tap(find.widgetWithText(FilledButton, strings.save));
+    await tester.pumpAndSettle();
+    expect(
+      store.recordings.firstWhere((r) => r.id == 'two').title,
+      'Interview notes',
+    );
+    expect(
+      store.recordings.firstWhere((r) => r.id == 'one').title,
+      isNot('Interview notes'),
+    );
+    expect(find.text('Interview notes'), findsOneWidget);
+    expect(find.text(strings.recordingSaved), findsNothing);
+  });
+
   testWidgets('saved recordings are shown in the all recordings list', (
     WidgetTester tester,
   ) async {
@@ -809,7 +968,13 @@ void main() {
 
     expect(find.text('全部录音'), findsOneWidget);
     expect(find.text('项目讨论'), findsOneWidget);
-    expect(find.text('2026-09-30 16:15 · 01:05'), findsOneWidget);
+    expect(
+      find.text(
+        DateTime.now().year == 2026 ? '09-30 16:15' : '2026-09-30 16:15',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('01:05'), findsOneWidget);
   });
 
   testWidgets(
@@ -1388,7 +1553,13 @@ void main() {
     await tester.tap(find.byKey(const Key('recordingRow-one')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('正在加载'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(Scaffold).last,
+        matching: find.text('正在加载'),
+      ),
+      findsOneWidget,
+    );
     await tester.binding.handlePopRoute();
     await tester.pump();
     expect(playback.status.recordingId, isNull);
