@@ -23,7 +23,7 @@
 
 ```powershell
 python tools/aac-adts/run_device.py --build-only
-python tools/aac-adts/run_device.py --skip-build --adb D:/data/app/android_sdk/platform-tools/adb.exe
+python tools/aac-adts/run_device.py --skip-build --adb adb
 ```
 
 第一条命令显式传入 `-PaacAdtsProbe=true` 并使用 `tools/aac-adts/probe.dart` 作为入口，核对独立包名后生成 `build/aac-adts-probe/aac-adts-probe-debug.apk`。构建成功不代表录音通过。
@@ -33,7 +33,7 @@ python tools/aac-adts/run_device.py --skip-build --adb D:/data/app/android_sdk/p
 脚本将真实样本和报告导出到 `build/aac-adts-probe/`。自动检查失败时退出非零；报告的 `listeningCheck` 初始为 pending，自动通过不表示人工验收完成。听音确认后重新导出（不会重录）：
 
 ```powershell
-python tools/aac-adts/run_device.py --export-only --adb D:/data/app/android_sdk/platform-tools/adb.exe
+python tools/aac-adts/run_device.py --export-only --adb adb
 ```
 
 使用已有 FFmpeg 工具对导出的真实样本做独立检查，不转换文件：

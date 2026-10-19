@@ -2,7 +2,7 @@
   "date": "2026-10-08",
   "stage": "REC-07 MP3 available by default in all build types",
   "userReportedDeviceEvidence": {
-    "deviceFromPriorSession": "M2102K1AC",
+    "deviceFromPriorSession": "Android test device (model redacted)",
     "api": 33,
     "pageSizeBytes": 4096,
     "source": "user report after previous enabled-debug APK installation",

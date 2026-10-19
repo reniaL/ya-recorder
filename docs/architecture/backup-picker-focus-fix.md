@@ -8,7 +8,7 @@
 
 `BackupPlatformBridge` 在启动 `startCopy`、`startExport`、`startImport`、`placeImport` 前检查 `Activity.hasWindowFocus()`。文档选择器返回的结果在元数据查询后直接交给 Dart，并不保证窗口已恢复焦点。旧逻辑在这个间隙抛出 `foreground-required`，再被归入未知错误。导入和导出共享此路径。
 
-设备为 Xiaomi M2102K1AC，Android 13/API 33。初始任务日志为 `direction=read/status=cancelled/processedBytes=0/released=true`，未保存原始启动异常；不能据此认证历史失败的唯一原因。修复后真机实际捕获：
+设备为 Android 测试设备，Android 13/API 33。初始任务日志为 `direction=read/status=cancelled/processedBytes=0/released=true`，未保存原始启动异常；不能据此认证历史失败的唯一原因。修复后真机实际捕获：
 
 ```text
 10-18 11:31:37.710 I BackupPlatform: Waiting for returning window: startImport
