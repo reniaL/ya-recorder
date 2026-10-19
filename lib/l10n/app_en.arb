@@ -21,6 +21,10 @@
   "moveToDeleted": "Move to Recently Deleted",
   "discardTitle": "Discard this recording?",
   "discardDescription": "This unsaved recording will be deleted.",
+  "discardRecordingDuration": "Discard this {duration} recording? The unsaved audio will be deleted and cannot be recovered.",
+  "@discardRecordingDuration": {
+    "placeholders": { "duration": { "type": "String" } }
+  },
   "resumeRecording": "Resume recording",
   "discard": "Discard",
   "endRecordingTitle": "End this recording?",

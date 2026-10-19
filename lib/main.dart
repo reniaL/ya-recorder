@@ -25,6 +25,7 @@ import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
 import 'storage/recently_deleted_page.dart';
 import 'storage/recording_store.dart';
+import 'widgets/destructive_confirmation_dialog.dart';
 
 Recording _copyRecording(
   Recording source, {
@@ -750,19 +751,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   Future<void> _deleteRecording(Recording recording) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n(context).deleteRecordingTitle),
-        content: Text(l10n(context).deleteRecordingDescription),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(l10n(context).cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n(context).moveToDeleted),
-          ),
-        ],
+      builder: (context) => DestructiveConfirmationDialog(
+        title: l10n(context).deleteRecordingTitle,
+        message: l10n(context).deleteRecordingDescription,
+        actionLabel: l10n(context).moveToDeleted,
+        onConfirm: () => Navigator.pop(context, true),
       ),
     );
     if (confirmed != true || !mounted) {
@@ -826,19 +819,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       if (delete) {
         final confirmed = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: Text(l10n(context).deleteSelectedTitle(ids.length)),
-            content: Text(l10n(context).deleteRecordingDescription),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(l10n(context).cancel),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(l10n(context).moveToDeleted),
-              ),
-            ],
+          builder: (context) => DestructiveConfirmationDialog(
+            title: l10n(context).deleteSelectedTitle(ids.length),
+            message: l10n(context).deleteRecordingDescription,
+            actionLabel: l10n(context).moveToDeleted,
+            onConfirm: () => Navigator.pop(context, true),
           ),
         );
         if (confirmed != true || !mounted) return;
@@ -1140,21 +1125,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (_isSubmitting || !_canCancel || _recordingPromptRoute != null) return;
     final sessionId = _status.sessionId;
     final shouldCancel = await _showRecordingPrompt((context, status) {
-      return AlertDialog(
-        scrollable: true,
-        title: Text(l10n(context).discardTitle),
-        content: Text(l10n(context).discardDescription),
-        actions: [
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.pop(context),
-            child: Text(l10n(context).cancel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, 'discard'),
-            child: Text(l10n(context).discard),
-          ),
-        ],
+      return DestructiveConfirmationDialog(
+        title: l10n(context).discardTitle,
+        message: l10n(
+          context,
+        ).discardRecordingDuration(_formatDuration(status.elapsed)),
+        actionLabel: l10n(context).discardRecording,
+        onConfirm: () => Navigator.pop(context, 'discard'),
       );
     });
     if (shouldCancel != 'discard' ||
@@ -1242,12 +1219,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               paused ? strings.keepPaused : strings.continueRecording,
             ),
           ),
-          TextButton(
+          DestructiveActionButton(
             onPressed: () => Navigator.pop(context, 'discard'),
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: Text(strings.discardRecording),
+            filled: false,
+            label: strings.discardRecording,
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, 'save'),
@@ -1800,6 +1775,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                             const SizedBox(width: 8),
                             Expanded(
                               child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.error,
+                                ),
                                 onPressed:
                                     _isSubmitting ||
                                         _selectedRecordingIds.isEmpty
@@ -2023,7 +2003,14 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                           PopupMenuItem(
                             value: 'delete',
                             enabled: !_libraryProtected,
-                            child: Text(l10n(context).delete),
+                            child: Text(
+                              l10n(context).delete,
+                              style: TextStyle(
+                                color: _libraryProtected
+                                    ? null
+                                    : Theme.of(context).colorScheme.error,
+                              ),
+                            ),
                           ),
                         ],
                       ),
@@ -2107,6 +2094,22 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
   Widget _buildRecordingControls(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final paused = _status.state == RecordingLifecycleState.paused;
+    final recording =
+        _status.state == RecordingLifecycleState.recording &&
+        !_isCancellingRecording;
+    final busy =
+        _isCancellingRecording ||
+        _status.state == RecordingLifecycleState.preparing ||
+        _status.state == RecordingLifecycleState.stopping ||
+        _status.state == RecordingLifecycleState.discarding;
+    final stateIcon = busy
+        ? Icons.hourglass_top_rounded
+        : paused
+        ? Icons.pause_rounded
+        : recording
+        ? Icons.mic_rounded
+        : Icons.mic_none_rounded;
 
     return Scaffold(
       appBar: AppBar(
@@ -2155,12 +2158,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        _statusLabel,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
                       if (_status.format != null)
                         Text(
                           l10n(context).recordingFormat(_status.format!.label),
@@ -2172,23 +2169,54 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       Center(
                         child: Column(
                           children: [
-                            Text(
-                              _formatDuration(_status.elapsed),
-                              style: Theme.of(context).textTheme.displayLarge
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: colorScheme.primary,
-                                  ),
+                            ExcludeSemantics(
+                              child: Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: recording
+                                      ? colorScheme.primaryContainer
+                                      : colorScheme.surfaceContainerHighest,
+                                ),
+                                child: Icon(
+                                  stateIcon,
+                                  key: const Key('recordingStateIcon'),
+                                  size: 32,
+                                  color: recording
+                                      ? colorScheme.onPrimaryContainer
+                                      : colorScheme.onSurfaceVariant,
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 12),
-                            Icon(
-                              _hasActiveSession
-                                  ? Icons.mic_rounded
-                                  : Icons.mic_none_rounded,
-                              size: 52,
-                              color: _hasActiveSession
-                                  ? const Color(0xffd5543f)
-                                  : colorScheme.primary,
+                            Text(
+                              _statusLabel,
+                              key: const Key('recordingStateLabel'),
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: recording
+                                        ? colorScheme.primary
+                                        : colorScheme.onSurfaceVariant,
+                                  ),
+                            ),
+                            const SizedBox(height: 16),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                _formatDuration(_status.elapsed),
+                                key: const Key('recordingElapsed'),
+                                style: Theme.of(context).textTheme.displayLarge
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                      color: colorScheme.onSurface,
+                                    ),
+                              ),
                             ),
                           ],
                         ),
@@ -2241,59 +2269,95 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                             ),
                           ),
                         )
-                      else if (_canPause ||
-                          _canResume ||
-                          _canStop ||
-                          _canCancel)
+                      else if (_hasActiveSession || _isCancellingRecording)
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            if (_canPause || _canResume || _canStop)
-                              Row(
+                            IntrinsicHeight(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  if (_canPause || _canResume)
-                                    Expanded(
-                                      child: FilledButton.icon(
-                                        onPressed: _isSubmitting
-                                            ? null
-                                            : _pauseOrResume,
-                                        icon: Icon(
-                                          _canPause
-                                              ? Icons.pause_rounded
-                                              : Icons.play_arrow_rounded,
-                                        ),
-                                        label: Text(
-                                          _canPause
-                                              ? l10n(context).pause
-                                              : l10n(context).resumeRecording,
-                                        ),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      key: const Key('recordingPauseResume'),
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize: const Size(48, 56),
+                                      ),
+                                      onPressed:
+                                          !_isSubmitting &&
+                                              (_canPause || _canResume)
+                                          ? _pauseOrResume
+                                          : null,
+                                      icon: Icon(
+                                        paused
+                                            ? Icons.play_arrow_rounded
+                                            : Icons.pause_rounded,
+                                      ),
+                                      label: Stack(
+                                        alignment: Alignment.center,
+                                        children: [
+                                          // Reserve both labels so pausing never moves the controls.
+                                          ExcludeSemantics(
+                                            child: Opacity(
+                                              opacity: 0,
+                                              child: RichText(
+                                                textScaler:
+                                                    MediaQuery.textScalerOf(
+                                                      context,
+                                                    ),
+                                                textAlign: TextAlign.center,
+                                                text: TextSpan(
+                                                  text: l10n(
+                                                    context,
+                                                  ).resumeRecording,
+                                                  style: DefaultTextStyle.of(
+                                                    context,
+                                                  ).style,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          Text(
+                                            paused
+                                                ? l10n(context).resumeRecording
+                                                : l10n(context).pause,
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  if ((_canPause || _canResume) && _canStop)
-                                    const SizedBox(width: 12),
-                                  if (_canStop)
-                                    Expanded(
-                                      child: FilledButton.icon(
-                                        onPressed: _isSubmitting
-                                            ? null
-                                            : _stopAndSave,
-                                        icon: const Icon(Icons.stop_rounded),
-                                        label: Text(l10n(context).stopAndSave),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: FilledButton.icon(
+                                      key: const Key('recordingStopSave'),
+                                      style: FilledButton.styleFrom(
+                                        minimumSize: const Size(48, 56),
+                                      ),
+                                      onPressed: !_isSubmitting && _canStop
+                                          ? _stopAndSave
+                                          : null,
+                                      icon: const Icon(Icons.stop_rounded),
+                                      label: Text(
+                                        l10n(context).stopAndSave,
+                                        textAlign: TextAlign.center,
                                       ),
                                     ),
+                                  ),
                                 ],
                               ),
-                            if ((_canPause || _canResume || _canStop) &&
-                                _canCancel)
-                              const SizedBox(height: 12),
-                            if (_canCancel)
-                              OutlinedButton.icon(
-                                onPressed: _isSubmitting
-                                    ? null
-                                    : _confirmCancellation,
-                                icon: const Icon(Icons.delete_outline_rounded),
-                                label: Text(l10n(context).discardRecording),
+                            ),
+                            const SizedBox(height: 12),
+                            Center(
+                              child: DestructiveActionButton(
+                                key: const Key('recordingDiscard'),
+                                filled: false,
+                                onPressed: !_isSubmitting && _canCancel
+                                    ? _confirmCancellation
+                                    : null,
+                                label: l10n(context).discardRecording,
                               ),
+                            ),
                           ],
                         ),
                     ],
@@ -2717,7 +2781,12 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                 ),
                 PopupMenuItem(
                   value: 'delete',
-                  child: Text(l10n(context).deleteFolder),
+                  child: Text(
+                    l10n(context).deleteFolder,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -2954,20 +3023,12 @@ class _DeleteEmptyFolderDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(l10n(context).deleteFolderTitle),
-      content: Text(l10n(context).emptyFolderDelete(folder.name)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n(context).cancel),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
-          child: Text(l10n(context).deleteFolder),
-        ),
-      ],
+    return DestructiveConfirmationDialog(
+      title: l10n(context).deleteFolderTitle,
+      message: l10n(context).emptyFolderDelete(folder.name),
+      actionLabel: l10n(context).deleteFolder,
+      onConfirm: () =>
+          Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
     );
   }
 }
@@ -2979,27 +3040,22 @@ class _DeleteNonEmptyFolderDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(l10n(context).handleFolderRecordings),
-      content: Text(l10n(context).nonemptyFolderDelete(folder.name)),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n(context).cancel),
+    return DestructiveConfirmationDialog(
+      title: l10n(context).handleFolderRecordings,
+      message: l10n(context).nonemptyFolderDelete(folder.name),
+      actionLabel: l10n(context).moveToDeleted,
+      onConfirm: () => Navigator.pop(
+        context,
+        FolderDeletionAction.moveRecordingsToRecentlyDeleted,
+      ),
+      alternativeAction: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Theme.of(context).colorScheme.error,
         ),
-        OutlinedButton(
-          onPressed: () =>
-              Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
-          child: Text(l10n(context).moveToAll),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            FolderDeletionAction.moveRecordingsToRecentlyDeleted,
-          ),
-          child: Text(l10n(context).moveToDeleted),
-        ),
-      ],
+        onPressed: () =>
+            Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
+        child: Text(l10n(context).moveToAll),
+      ),
     );
   }
 }

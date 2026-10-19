@@ -1,5 +1,6 @@
 import '../l10n/localization.dart';
 import 'package:flutter/material.dart';
+import '../widgets/destructive_confirmation_dialog.dart';
 import '../backup/backup_page.dart';
 
 import 'models/recording.dart';
@@ -86,22 +87,11 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
       if (permanently) {
         final confirmed = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: Text(l10n(context).permanentDeleteTitle),
-            content: Text(
-              l10n(context).permanentDeleteDescription(recording.title),
-            ),
-            actions: [
-              TextButton(
-                autofocus: true,
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(l10n(context).cancel),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(l10n(context).permanentDelete),
-              ),
-            ],
+          builder: (context) => DestructiveConfirmationDialog(
+            title: l10n(context).permanentDeleteTitle,
+            message: l10n(context).permanentDeleteDescription(recording.title),
+            actionLabel: l10n(context).permanentDelete,
+            onConfirm: () => Navigator.pop(context, true),
           ),
         );
         if (confirmed != true || !mounted) return;
@@ -236,7 +226,12 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
                           ),
                           PopupMenuItem(
                             value: 'delete',
-                            child: Text(l10n(context).permanentDelete),
+                            child: Text(
+                              l10n(context).permanentDelete,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
                           ),
                         ],
                       ),

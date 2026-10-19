@@ -224,6 +224,12 @@ abstract class AppLocalizations {
   /// **'This unsaved recording will be deleted.'**
   String get discardDescription;
 
+  /// No description provided for @discardRecordingDuration.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard this {duration} recording? The unsaved audio will be deleted and cannot be recovered.'**
+  String discardRecordingDuration(String duration);
+
   /// No description provided for @resumeRecording.
   ///
   /// In en, this message translates to:

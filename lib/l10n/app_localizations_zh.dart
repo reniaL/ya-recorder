@@ -72,6 +72,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get discardDescription => '当前未保存的内容将被删除。';
 
   @override
+  String discardRecordingDuration(String duration) {
+    return '放弃这段 $duration 的录音？未保存的内容将被删除，无法恢复。';
+  }
+
+  @override
   String get resumeRecording => '继续录音';
 
   @override

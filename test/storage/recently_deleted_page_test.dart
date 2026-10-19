@@ -113,7 +113,7 @@ void main() {
     expect(find.text('会议录音'), findsOneWidget);
     expect(store.deleteCalls, 0);
     await action(tester, '永久删除');
-    await tester.tap(find.widgetWithText(TextButton, '永久删除'));
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除'));
     await tester.pumpAndSettle();
     expect(store.deleteCalls, 1);
     expect(find.text('最近删除为空'), findsOneWidget);
@@ -125,13 +125,13 @@ void main() {
     final store = _TrashStore()..fail = true;
     await open(tester, store);
     await action(tester, '永久删除');
-    await tester.tap(find.widgetWithText(TextButton, '永久删除'));
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除'));
     await tester.pumpAndSettle();
     expect(find.textContaining('永久删除失败'), findsOneWidget);
     expect(find.text('会议录音'), findsOneWidget);
     store.fail = false;
     await action(tester, '永久删除');
-    await tester.tap(find.widgetWithText(TextButton, '永久删除'));
+    await tester.tap(find.widgetWithText(FilledButton, '永久删除'));
     await tester.pumpAndSettle();
     expect(store.deleteCalls, 2);
     expect(find.text('最近删除为空'), findsOneWidget);

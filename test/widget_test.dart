@@ -16,6 +16,7 @@ import 'package:ya_recorder/settings/app_language.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/models/recording_folder.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
+import 'package:ya_recorder/widgets/destructive_confirmation_dialog.dart';
 
 Map<String, Object?> _nativeReadyMap(SavedNativeRecording ready) => {
   'id': ready.id,
@@ -2953,7 +2954,7 @@ void main() {
         await tester.tap(find.text('放弃本次录音').hitTestable());
         await tester.pumpAndSettle();
         expect(find.text('放弃这次录音？'), findsOneWidget);
-        await tester.tap(find.text(confirm ? '放弃' : '取消').hitTestable());
+        await tester.tap(find.text(confirm ? '放弃本次录音' : '取消').hitTestable());
         await tester.pumpAndSettle();
         expect(find.text(confirm ? '正在放弃录音' : '录音已暂停'), findsOneWidget);
         expect(invokedMethods, isNot(contains('resume')));
@@ -3170,6 +3171,121 @@ void main() {
     }
   }
 
+  for (final english in [false, true]) {
+    for (final dark in [false, true]) {
+      testWidgets(
+        'recording design keeps controls stable and discard clear english=$english dark=$dark',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(320, 640));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          tester.platformDispatcher.textScaleFactorTestValue = 2;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          initialState = 'recording';
+          final events = StreamController<RecordingEvent>.broadcast();
+          addTearDown(events.close);
+          final store = _ThemeStore()
+            ..mode = dark ? ThemeMode.dark : ThemeMode.light
+            ..language = english
+                ? AppLanguage.english
+                : AppLanguage.simplifiedChinese;
+          await tester.pumpWidget(
+            MyApp(
+              recordingStore: store,
+              recordingService: RecordingService(
+                commands: commandChannel,
+                eventStream: events.stream,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final pause = find.byKey(const Key('recordingPauseResume'));
+          final stop = find.byKey(const Key('recordingStopSave'));
+          final discard = find.byKey(const Key('recordingDiscard'));
+          await tester.ensureVisible(discard);
+          final pauseRect = tester.getRect(pause);
+          final stopRect = tester.getRect(stop);
+          expect(pauseRect.height, greaterThanOrEqualTo(56));
+          expect(stopRect.height, greaterThanOrEqualTo(56));
+          expect(tester.widget(pause), isA<OutlinedButton>());
+          expect(tester.widget(stop), isA<FilledButton>());
+          expect(
+            tester
+                .widget<Icon>(find.byKey(const Key('recordingStateIcon')))
+                .icon,
+            Icons.mic_rounded,
+          );
+          events.add(
+            const RecordingStateChanged(
+              RecordingSessionStatus(
+                state: RecordingLifecycleState.paused,
+                elapsed: Duration(seconds: 13),
+                canResume: true,
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(tester.getRect(pause), pauseRect);
+          expect(tester.getRect(stop), stopRect);
+          expect(
+            tester
+                .widget<Icon>(find.byKey(const Key('recordingStateIcon')))
+                .icon,
+            Icons.pause_rounded,
+          );
+          expect(
+            find.text(english ? 'Recording paused' : '录音已暂停'),
+            findsOneWidget,
+          );
+          expect(find.text('00:13'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.tap(discard);
+          await tester.pumpAndSettle();
+          expect(find.textContaining('00:13'), findsNWidgets(2));
+          expect(
+            find.textContaining(english ? 'cannot be recovered' : '无法恢复'),
+            findsOneWidget,
+          );
+          final dialog = find.byType(DestructiveConfirmationDialog);
+          final danger = tester.widget<FilledButton>(
+            find.descendant(of: dialog, matching: find.byType(FilledButton)),
+          );
+          final colors = Theme.of(tester.element(dialog)).colorScheme;
+          expect(danger.style!.backgroundColor!.resolve({}), colors.error);
+          expect(danger.style!.foregroundColor!.resolve({}), colors.onError);
+          expect(
+            find.text(english ? 'Discard recording' : '放弃本次录音').hitTestable(),
+            findsOneWidget,
+          );
+          await tester.tap(find.text(english ? 'Cancel' : '取消').hitTestable());
+          await tester.pumpAndSettle();
+          expect(invokedMethods, isNot(contains('resume')));
+          expect(invokedMethods, isNot(contains('cancel')));
+          expect(
+            find.text(english ? 'Recording paused' : '录音已暂停'),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('discard confirmation defaults keyboard focus to cancel', (
+    tester,
+  ) async {
+    initialState = 'paused';
+    initialCanResume = true;
+    await tester.pumpWidget(MyApp(recordingStore: _RecordingStoreSpy()));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingDiscard')));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+    expect(find.byType(DestructiveConfirmationDialog), findsNothing);
+    expect(invokedMethods, isNot(contains('cancel')));
+    expect(invokedMethods, isNot(contains('resume')));
+  });
+
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,
   ) async {
@@ -3246,7 +3362,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('放弃这次录音？'), findsOneWidget);
 
-      await tester.tap(find.text('放弃'));
+      await tester.tap(find.text('放弃本次录音').hitTestable());
       await tester.pump();
       expect(invokedMethods, contains('cancel'));
 

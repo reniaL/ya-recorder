@@ -21,6 +21,10 @@
   "moveToDeleted": "移入最近删除",
   "discardTitle": "放弃这次录音？",
   "discardDescription": "当前未保存的内容将被删除。",
+  "discardRecordingDuration": "放弃这段 {duration} 的录音？未保存的内容将被删除，无法恢复。",
+  "@discardRecordingDuration": {
+    "placeholders": { "duration": { "type": "String" } }
+  },
   "resumeRecording": "继续录音",
   "discard": "放弃",
   "endRecordingTitle": "要结束这次录音吗？",

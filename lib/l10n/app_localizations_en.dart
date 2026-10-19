@@ -74,6 +74,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get discardDescription => 'This unsaved recording will be deleted.';
 
   @override
+  String discardRecordingDuration(String duration) {
+    return 'Discard this $duration recording? The unsaved audio will be deleted and cannot be recovered.';
+  }
+
+  @override
   String get resumeRecording => 'Resume recording';
 
   @override
