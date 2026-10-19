@@ -44,3 +44,6 @@ app.*.map.json
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Local AI chat files
+/ai-chat/
