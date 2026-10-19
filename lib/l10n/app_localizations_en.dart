@@ -80,6 +80,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get discard => 'Discard';
 
   @override
+  String get endRecordingTitle => 'End this recording?';
+
+  @override
+  String get endRecordingActive =>
+      'Recording continues while you choose. Save or discard it to return to your recordings.';
+
+  @override
+  String get endRecordingPaused =>
+      'This recording stays paused while you choose. Save or discard it to return to your recordings.';
+
+  @override
+  String get continueRecording => 'Continue recording';
+
+  @override
+  String get keepPaused => 'Keep paused';
+
+  @override
+  String get saveAndEndRecording => 'Save and finish';
+
+  @override
   String get searchAll => 'Search all recordings';
 
   @override

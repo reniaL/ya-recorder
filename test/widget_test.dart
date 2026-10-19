@@ -46,6 +46,7 @@ void main() {
   late RecordingFormat expectedStartFormat;
   late bool mp3Available;
   late bool aacAvailable;
+  Completer<void>? stopReply;
 
   setUpAll(sqfliteFfiInit);
 
@@ -61,6 +62,7 @@ void main() {
     expectedStartFormat = RecordingFormat.m4a;
     mp3Available = false;
     aacAvailable = true;
+    stopReply = null;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(commandChannel, (call) async {
@@ -101,6 +103,9 @@ void main() {
         case 'resume':
         case 'cancel':
         case 'openAppSettings':
+          return null;
+        case 'stop':
+          await stopReply?.future;
           return null;
         default:
           throw PlatformException(code: 'unexpected-method');
@@ -2845,6 +2850,325 @@ void main() {
     expect(store.savedRecording!.filePath, '/private/mp3-result.mp3');
     await tester.pump(const Duration(seconds: 4));
   });
+
+  for (final paused in [false, true]) {
+    testWidgets('recording back keeps original state paused=$paused', (
+      tester,
+    ) async {
+      initialState = paused ? 'paused' : 'recording';
+      initialCanResume = paused;
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: _RecordingStoreSpy(),
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recordingExitDialog')), findsOneWidget);
+      expect(find.text(paused ? '保持暂停' : '继续录音').hitTestable(), findsOneWidget);
+      await tester.tap(find.byKey(const Key('keepRecording')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+      expect(find.text(paused ? '录音已暂停' : '正在录音'), findsOneWidget);
+      for (final method in ['pause', 'resume', 'stop', 'cancel']) {
+        expect(invokedMethods, isNot(contains(method)));
+      }
+      await tester.tap(find.byKey(const Key('recordingBack')));
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+      expect(find.byKey(const Key('recordingBack')), findsOneWidget);
+    });
+  }
+
+  testWidgets('back save blocks repeated returns until file and index commit', (
+    tester,
+  ) async {
+    initialState = 'recording';
+    stopReply = Completer<void>();
+    final commitGate = Completer<void>();
+    final store = _RecordingStoreSpy()..recordingCommitGate = commitGate.future;
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingBack')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存并结束'));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+    expect(find.text('正在完成录音'), findsOneWidget);
+    stopReply!.complete();
+    events.add(_savedRecordingEvent('back-save'));
+    await tester.pumpAndSettle();
+    expect(find.text('全部录音'), findsNothing);
+    expect(find.text('录音已保存'), findsNothing);
+    commitGate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('全部录音'), findsOneWidget);
+    expect(store.savedRecording?.id, 'back-save');
+    expect(invokedMethods.where((m) => m == 'stop'), hasLength(1));
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets(
+    'back discard confirms, cancellation keeps paused, then discards once',
+    (tester) async {
+      initialState = 'paused';
+      initialCanResume = true;
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      final store = _RecordingStoreSpy();
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: store,
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final confirm in [false, true]) {
+        await tester.tap(find.byKey(const Key('recordingBack')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('放弃本次录音').hitTestable());
+        await tester.pumpAndSettle();
+        expect(find.text('放弃这次录音？'), findsOneWidget);
+        await tester.tap(find.text(confirm ? '放弃' : '取消').hitTestable());
+        await tester.pumpAndSettle();
+        expect(find.text(confirm ? '正在放弃录音' : '录音已暂停'), findsOneWidget);
+        expect(invokedMethods, isNot(contains('resume')));
+        if (!confirm) expect(invokedMethods, isNot(contains('cancel')));
+      }
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+      events.add(
+        const RecordingStateChanged(
+          RecordingSessionStatus(
+            state: RecordingLifecycleState.discarding,
+            elapsed: Duration.zero,
+            canResume: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+      events.add(
+        const RecordingStateChanged(
+          RecordingSessionStatus(
+            state: RecordingLifecycleState.idle,
+            elapsed: Duration.zero,
+            canResume: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('全部录音'), findsOneWidget);
+      expect(store.savedRecording, isNull);
+      expect(invokedMethods.where((m) => m == 'cancel'), hasLength(1));
+      await tester.pump(const Duration(seconds: 4));
+    },
+  );
+
+  testWidgets('interruption dismisses exit prompt without stale actions', (
+    tester,
+  ) async {
+    initialState = 'recording';
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: _RecordingStoreSpy(),
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingBack')));
+    await tester.pumpAndSettle();
+    events.add(
+      const RecordingStateChanged(
+        RecordingSessionStatus(
+          state: RecordingLifecycleState.paused,
+          elapsed: Duration(seconds: 5),
+          canResume: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('保持暂停'), findsOneWidget);
+    events.add(
+      const RecordingStateChanged(
+        RecordingSessionStatus(
+          state: RecordingLifecycleState.stopping,
+          elapsed: Duration(seconds: 5),
+          canResume: false,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+    expect(find.text('正在完成录音'), findsOneWidget);
+    expect(invokedMethods, isNot(contains('stop')));
+    expect(invokedMethods, isNot(contains('cancel')));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('background lifecycle does not ask to finish recording', (
+    tester,
+  ) async {
+    initialState = 'recording';
+    await tester.pumpWidget(MyApp(recordingStore: _RecordingStoreSpy()));
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('正在录音'), findsOneWidget);
+    expect(invokedMethods, isNot(contains('stop')));
+    expect(invokedMethods, isNot(contains('cancel')));
+  });
+
+  testWidgets('back save failure keeps retained-file error outside library', (
+    tester,
+  ) async {
+    initialState = 'recording';
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    final store = _RecordingStoreSpy()..failRecordingCommit = true;
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存并结束'));
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('back-failed'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('文件已保留'), findsOneWidget);
+    expect(find.text('全部录音'), findsNothing);
+    expect(find.text('录音已保存'), findsNothing);
+    expect(store.recordings, isEmpty);
+    expect(invokedMethods, contains('deferRecording'));
+  });
+
+  testWidgets('file-ready closes exit prompt without a preceding state event', (
+    tester,
+  ) async {
+    initialState = 'recording';
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    final store = _RecordingStoreSpy();
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recordingBack')));
+    await tester.pumpAndSettle();
+    events.add(_savedRecordingEvent('interrupted-prompt'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+    expect(find.text('全部录音'), findsOneWidget);
+    expect(store.savedRecording?.id, 'interrupted-prompt');
+    expect(invokedMethods, isNot(contains('cancel')));
+    expect(invokedMethods, isNot(contains('stop')));
+    await tester.pump(const Duration(seconds: 4));
+  });
+
+  testWidgets('preparing blocks return without offering an invalid save', (
+    tester,
+  ) async {
+    initialState = 'preparing';
+    await tester.pumpWidget(MyApp(recordingStore: _RecordingStoreSpy()));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('正在准备录音'), findsOneWidget);
+    expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+    expect(invokedMethods, isNot(contains('stop')));
+    expect(invokedMethods, isNot(contains('cancel')));
+  });
+
+  for (final english in [false, true]) {
+    for (final dark in [false, true]) {
+      testWidgets(
+        'exit dialog fits narrow large text english=$english dark=$dark',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(320, 640));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          tester.platformDispatcher.textScaleFactorTestValue = 2;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          initialState = 'paused';
+          initialCanResume = true;
+          final store = _ThemeStore()
+            ..mode = dark ? ThemeMode.dark : ThemeMode.light
+            ..language = english
+                ? AppLanguage.english
+                : AppLanguage.simplifiedChinese;
+          await tester.pumpWidget(MyApp(recordingStore: store));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('recordingBack')));
+          await tester.pumpAndSettle();
+          expect(
+            find.text(english ? 'End this recording?' : '要结束这次录音吗？'),
+            findsOneWidget,
+          );
+          expect(
+            find.text(english ? 'Save and finish' : '保存并结束').hitTestable(),
+            findsOneWidget,
+          );
+          expect(
+            find.text(english ? 'Discard recording' : '放弃本次录音').hitTestable(),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.tap(find.byKey(const Key('keepRecording')));
+          await tester.pumpAndSettle();
+          expect(invokedMethods, isNot(contains('resume')));
+          expect(find.byKey(const Key('recordingExitDialog')), findsNothing);
+        },
+      );
+    }
+  }
 
   testWidgets('stopped recording is written to the local index', (
     WidgetTester tester,

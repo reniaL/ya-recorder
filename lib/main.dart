@@ -173,6 +173,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   bool _isRecoveringRecordings = false;
   late final RecordingSaveCoordinator _recordingSaveCoordinator;
   bool _isCancellingRecording = false;
+  final _recordingPromptStatus = ValueNotifier(_idleStatus);
+  DialogRoute<String>? _recordingPromptRoute;
   bool _isLoadingRecordings = true;
   bool _isSearching = false;
   bool _isSelecting = false;
@@ -264,6 +266,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     _backupController?.dispose();
     _successMessageTimer?.cancel();
     _eventSubscription.cancel();
+    _recordingPromptStatus.dispose();
     _playbackSubscription.cancel();
     if (_ownsPlaybackService) {
       unawaited(_playbackService.dispose());
@@ -1134,26 +1137,31 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   }
 
   Future<void> _confirmCancellation() async {
-    final shouldCancel = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(l10n(context).discardTitle),
-          content: Text(l10n(context).discardDescription),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(l10n(context).resumeRecording),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(l10n(context).discard),
-            ),
-          ],
-        );
-      },
-    );
-    if (shouldCancel != true || !mounted) {
+    if (_isSubmitting || !_canCancel || _recordingPromptRoute != null) return;
+    final sessionId = _status.sessionId;
+    final shouldCancel = await _showRecordingPrompt((context, status) {
+      return AlertDialog(
+        scrollable: true,
+        title: Text(l10n(context).discardTitle),
+        content: Text(l10n(context).discardDescription),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.pop(context),
+            child: Text(l10n(context).cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'discard'),
+            child: Text(l10n(context).discard),
+          ),
+        ],
+      );
+    });
+    if (shouldCancel != 'discard' ||
+        !mounted ||
+        _isSubmitting ||
+        !_canCancel ||
+        _status.sessionId != sessionId) {
       return;
     }
 
@@ -1184,6 +1192,80 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
+  Future<String?> _showRecordingPrompt(
+    Widget Function(BuildContext, RecordingSessionStatus) builder,
+  ) async {
+    _recordingPromptStatus.value = _status;
+    final route = DialogRoute<String>(
+      context: context,
+      builder: (context) => ValueListenableBuilder<RecordingSessionStatus>(
+        valueListenable: _recordingPromptStatus,
+        builder: (context, status, _) => builder(context, status),
+      ),
+    );
+    _recordingPromptRoute = route;
+    try {
+      return await Navigator.of(context).push(route);
+    } finally {
+      if (identical(_recordingPromptRoute, route)) {
+        _recordingPromptRoute = null;
+      }
+    }
+  }
+
+  void _closeRecordingPrompt() {
+    final route = _recordingPromptRoute;
+    if (route != null && route.isActive) {
+      route.navigator?.removeRoute(route);
+    }
+  }
+
+  Future<void> _confirmRecordingExit() async {
+    if (_isSubmitting || !_canStop || _recordingPromptRoute != null) return;
+    final sessionId = _status.sessionId;
+    final action = await _showRecordingPrompt((context, status) {
+      final strings = l10n(context);
+      final paused = status.state == RecordingLifecycleState.paused;
+      return AlertDialog(
+        key: const Key('recordingExitDialog'),
+        scrollable: true,
+        title: Text(strings.endRecordingTitle),
+        content: Text(
+          paused ? strings.endRecordingPaused : strings.endRecordingActive,
+        ),
+        actions: [
+          TextButton(
+            key: const Key('keepRecording'),
+            autofocus: true,
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              paused ? strings.keepPaused : strings.continueRecording,
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'discard'),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: Text(strings.discardRecording),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'save'),
+            child: Text(strings.saveAndEndRecording),
+          ),
+        ],
+      );
+    });
+    if (!mounted ||
+        _isSubmitting ||
+        !_canStop ||
+        _status.sessionId != sessionId) {
+      return;
+    }
+    if (action == 'save') await _stopAndSave();
+    if (action == 'discard') await _confirmCancellation();
+  }
+
   void _handleRecordingEvent(RecordingEvent event) {
     if (!mounted) {
       return;
@@ -1191,11 +1273,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
     switch (event) {
       case RecordingStateChanged(:final status):
+        final previousSessionId = _status.sessionId;
         setState(() {
           final cancellationCompleted =
               _isCancellingRecording &&
               status.state == RecordingLifecycleState.idle;
           _status = status;
+          if (status.state == RecordingLifecycleState.failed ||
+              previousSessionId != status.sessionId) {
+            _isCancellingRecording = false;
+          }
           if (status.state == RecordingLifecycleState.preparing) {
             _serviceError = null;
           }
@@ -1204,9 +1291,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             _updateSuccessMessage('recordingDiscarded');
           }
         });
+        _recordingPromptStatus.value = status;
+        // An interruption or a different session invalidates both confirmations.
+        if (!_canCancel || previousSessionId != status.sessionId) {
+          _closeRecordingPrompt();
+        }
       case RecordingFileReady(:final recording):
+        _closeRecordingPrompt();
         unawaited(_persistSavedRecording(recording));
       case RecordingFailed(:final code):
+        _closeRecordingPrompt();
         setState(() {
           _isCancellingRecording = false;
           _serviceError = nativeMessageCode(code);
@@ -1397,24 +1491,31 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     RecordingLifecycleState.idle || RecordingLifecycleState.failed => false,
   };
 
-  bool get _canPause => _status.state == RecordingLifecycleState.recording;
+  bool get _canPause =>
+      !_isCancellingRecording &&
+      _status.state == RecordingLifecycleState.recording;
 
   bool get _canResume =>
-      _status.state == RecordingLifecycleState.paused && _status.canResume;
+      !_isCancellingRecording &&
+      _status.state == RecordingLifecycleState.paused &&
+      _status.canResume;
 
   bool get _canStop =>
-      _status.state == RecordingLifecycleState.recording ||
-      _status.state == RecordingLifecycleState.paused;
+      !_isCancellingRecording &&
+      (_status.state == RecordingLifecycleState.recording ||
+          _status.state == RecordingLifecycleState.paused);
 
-  bool get _canCancel => switch (_status.state) {
-    RecordingLifecycleState.preparing ||
-    RecordingLifecycleState.recording ||
-    RecordingLifecycleState.paused => true,
-    RecordingLifecycleState.idle ||
-    RecordingLifecycleState.stopping ||
-    RecordingLifecycleState.discarding ||
-    RecordingLifecycleState.failed => false,
-  };
+  bool get _canCancel =>
+      !_isCancellingRecording &&
+      switch (_status.state) {
+        RecordingLifecycleState.preparing ||
+        RecordingLifecycleState.recording ||
+        RecordingLifecycleState.paused => true,
+        RecordingLifecycleState.idle ||
+        RecordingLifecycleState.stopping ||
+        RecordingLifecycleState.discarding ||
+        RecordingLifecycleState.failed => false,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -1422,7 +1523,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       return _buildRecordingLibrary(context);
     }
 
-    return _buildRecordingControls(context);
+    return PopScope(
+      canPop: !_hasActiveSession && !_isSubmitting && !_isPersistingRecording,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) unawaited(_confirmRecordingExit());
+      },
+      child: _buildRecordingControls(context),
+    );
   }
 
   Widget _buildRecordingLibrary(BuildContext context) {
@@ -2003,6 +2110,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
     return Scaffold(
       appBar: AppBar(
+        leading: _hasActiveSession
+            ? IconButton(
+                key: const Key('recordingBack'),
+                tooltip: MaterialLocalizations.of(context).backButtonTooltip,
+                onPressed: !_isSubmitting && _canStop
+                    ? _confirmRecordingExit
+                    : null,
+                icon: const Icon(Icons.arrow_back),
+              )
+            : null,
         title: Text(l10n(context).appTitle),
         centerTitle: false,
         backgroundColor: Colors.transparent,
@@ -2190,15 +2307,19 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     );
   }
 
-  String get _statusLabel => switch (_status.state) {
-    RecordingLifecycleState.idle => l10n(context).recordingIdle,
-    RecordingLifecycleState.preparing => l10n(context).recordingPreparing,
-    RecordingLifecycleState.recording => l10n(context).recordingActive,
-    RecordingLifecycleState.paused => l10n(context).recordingPaused,
-    RecordingLifecycleState.stopping => l10n(context).recordingStopping,
-    RecordingLifecycleState.discarding => l10n(context).recordingDiscarding,
-    RecordingLifecycleState.failed => l10n(context).recordingFailed,
-  };
+  String get _statusLabel => _isCancellingRecording
+      ? l10n(context).recordingDiscarding
+      : switch (_status.state) {
+          RecordingLifecycleState.idle => l10n(context).recordingIdle,
+          RecordingLifecycleState.preparing => l10n(context).recordingPreparing,
+          RecordingLifecycleState.recording => l10n(context).recordingActive,
+          RecordingLifecycleState.paused => l10n(context).recordingPaused,
+          RecordingLifecycleState.stopping => l10n(context).recordingStopping,
+          RecordingLifecycleState.discarding => l10n(
+            context,
+          ).recordingDiscarding,
+          RecordingLifecycleState.failed => l10n(context).recordingFailed,
+        };
 
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;

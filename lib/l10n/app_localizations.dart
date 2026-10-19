@@ -236,6 +236,42 @@ abstract class AppLocalizations {
   /// **'Discard'**
   String get discard;
 
+  /// No description provided for @endRecordingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'End this recording?'**
+  String get endRecordingTitle;
+
+  /// No description provided for @endRecordingActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording continues while you choose. Save or discard it to return to your recordings.'**
+  String get endRecordingActive;
+
+  /// No description provided for @endRecordingPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'This recording stays paused while you choose. Save or discard it to return to your recordings.'**
+  String get endRecordingPaused;
+
+  /// No description provided for @continueRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue recording'**
+  String get continueRecording;
+
+  /// No description provided for @keepPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep paused'**
+  String get keepPaused;
+
+  /// No description provided for @saveAndEndRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Save and finish'**
+  String get saveAndEndRecording;
+
   /// No description provided for @searchAll.
   ///
   /// In en, this message translates to:

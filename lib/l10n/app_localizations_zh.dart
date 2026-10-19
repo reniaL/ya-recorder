@@ -78,6 +78,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get discard => '放弃';
 
   @override
+  String get endRecordingTitle => '要结束这次录音吗？';
+
+  @override
+  String get endRecordingActive => '选择期间录音继续。保存或放弃后可返回录音列表。';
+
+  @override
+  String get endRecordingPaused => '当前录音保持暂停。保存或放弃后可返回录音列表。';
+
+  @override
+  String get continueRecording => '继续录音';
+
+  @override
+  String get keepPaused => '保持暂停';
+
+  @override
+  String get saveAndEndRecording => '保存并结束';
+
+  @override
   String get searchAll => '搜索全部录音';
 
   @override
