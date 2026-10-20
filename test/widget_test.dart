@@ -2896,6 +2896,84 @@ void main() {
     },
   );
 
+  for (final language in AppLanguage.values) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'UIR-10 selection header explains resets $language $brightness',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(320, 640));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          tester.platformDispatcher.textScaleFactorTestValue = 2;
+          tester.platformDispatcher.platformBrightnessTestValue = brightness;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          addTearDown(
+            tester.platformDispatcher.clearPlatformBrightnessTestValue,
+          );
+          final store = _RecordingStoreSpy()
+            ..language = language
+            ..recordings = [_recording('one'), _recording('two')];
+          await tester.pumpWidget(MyApp(recordingStore: store));
+          await tester.pumpAndSettle();
+          final strings = l10n(tester.element(find.byType(Scaffold).first));
+          await tester.tap(find.byTooltip(strings.selectRecordings));
+          await tester.pumpAndSettle();
+          final header = find.byKey(const Key('selectionHeader'));
+          expect(
+            find.descendant(
+              of: header,
+              matching: find.byTooltip(strings.exitSelection),
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+              of: header,
+              matching: find.text(strings.selectedCount(0)),
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: header, matching: find.text(strings.selectAll)),
+            findsOneWidget,
+          );
+          expect(find.text(strings.selectionResetHint), findsOneWidget);
+          expect(
+            tester.getRect(header).bottom,
+            lessThan(tester.getTopLeft(find.text(strings.move)).dy),
+          );
+          await tester.tap(find.text(strings.selectAll));
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: header,
+              matching: find.text(strings.selectedCount(2)),
+            ),
+            findsOneWidget,
+          );
+          await tester.tap(find.byKey(const Key('recordingSearchButton')));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const Key('recordingSearchField')),
+            'missing',
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.descendant(
+              of: header,
+              matching: find.text(strings.selectedCount(0)),
+            ),
+            findsOneWidget,
+          );
+          await tester.tap(find.byTooltip(strings.exitSelection));
+          await tester.pumpAndSettle();
+          expect(header, findsNothing);
+          expect(find.text(strings.selectionResetHint), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   testWidgets('batch failure keeps selection for retry', (tester) async {
     final store = _RecordingStoreSpy()
       ..recordings = [_recording('one')]

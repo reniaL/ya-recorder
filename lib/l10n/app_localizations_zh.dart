@@ -63,6 +63,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get allRecordings => '全部录音';
 
   @override
+  String get selectionResetHint => '修改搜索、关闭搜索或切换文件夹会清空已选录音。';
+
+  @override
+  String get deletedRetentionHint => '删除的录音将在这里保留 30 天。';
+
+  @override
+  String get deletedRecoveryRules => '查看恢复规则';
+
+  @override
   String get unclassified => '未分类';
 
   @override

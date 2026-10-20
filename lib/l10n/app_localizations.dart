@@ -206,6 +206,24 @@ abstract class AppLocalizations {
   /// **'All recordings'**
   String get allRecordings;
 
+  /// No description provided for @selectionResetHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Changing or closing search, or switching folders, clears your selection.'**
+  String get selectionResetHint;
+
+  /// No description provided for @deletedRetentionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted recordings stay here for 30 days.'**
+  String get deletedRetentionHint;
+
+  /// No description provided for @deletedRecoveryRules.
+  ///
+  /// In en, this message translates to:
+  /// **'View recovery rules'**
+  String get deletedRecoveryRules;
+
   /// No description provided for @unclassified.
   ///
   /// In en, this message translates to:

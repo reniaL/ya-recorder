@@ -1,3 +1,5 @@
+import 'package:ya_recorder/l10n/localization.dart';
+import 'package:ya_recorder/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -73,6 +75,54 @@ void main() {
     await tester.tap(find.text(name));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+  }
+
+  for (final locale in [const Locale('zh'), const Locale('en')]) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'UIR-10 empty trash presents retention and optional rules $locale $brightness',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(320, 640));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final store = _TrashStore()..deleted = [];
+          final strings = lookupAppLocalizations(locale);
+          await tester.pumpWidget(
+            MaterialApp(
+              locale: locale,
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              theme: buildAppTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(2)),
+                child: child!,
+              ),
+              home: RecentlyDeletedPage(store: store, now: () => _now),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('deletedEmptyState')), findsOneWidget);
+          expect(find.text(strings.deletedEmpty), findsOneWidget);
+          expect(find.text(strings.deletedRetentionHint), findsOneWidget);
+          expect(find.text(strings.deletedDescription), findsNothing);
+          await tester.scrollUntilVisible(
+            find.text(strings.deletedRecoveryRules),
+            100,
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(strings.deletedRecoveryRules));
+          await tester.pumpAndSettle();
+          expect(find.text(strings.deletedDescription), findsOneWidget);
+          await tester.tap(find.text(strings.close));
+          await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsNothing);
+          expect(store.restoreCalls, 0);
+          expect(store.deleteCalls, 0);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   }
 
   testWidgets('shows retention, restores and prevents duplicate submission', (

@@ -1611,12 +1611,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           centerTitle: false,
           backgroundColor: Colors.transparent,
           actions: [
-            if (_isSelecting)
-              IconButton(
-                tooltip: l10n(context).exitSelection,
-                onPressed: _isSubmitting ? null : _exitSelection,
-                icon: const Icon(Icons.close),
-              ),
             if (!_isSelecting)
               IconButton(
                 tooltip: l10n(context).selectRecordings,
@@ -1683,6 +1677,73 @@ class _RecordingHomePageState extends State<RecordingHomePage>
           top: false,
           child: Column(
             children: [
+              if (_isSelecting)
+                Padding(
+                  key: const Key('selectionHeader'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          IconButton(
+                            tooltip: l10n(context).exitSelection,
+                            onPressed: _isSubmitting ? null : _exitSelection,
+                            icon: const Icon(Icons.close),
+                          ),
+                          Expanded(
+                            child: Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                l10n(
+                                  context,
+                                ).selectedCount(_selectedRecordingIds.length),
+                              ),
+                            ),
+                          ),
+                          Flexible(
+                            child: TextButton(
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () => setState(() {
+                                      final visibleIds = _visibleRecordings
+                                          .map((r) => r.id)
+                                          .toSet();
+                                      if (visibleIds.isNotEmpty &&
+                                          _selectedRecordingIds.containsAll(
+                                            visibleIds,
+                                          )) {
+                                        _selectedRecordingIds.clear();
+                                      } else {
+                                        _selectedRecordingIds.addAll(
+                                          visibleIds,
+                                        );
+                                      }
+                                    }),
+                              child: Text(
+                                _visibleRecordings.isNotEmpty &&
+                                        _selectedRecordingIds.length ==
+                                            _visibleRecordings.length
+                                    ? l10n(context).deselectAll
+                                    : l10n(context).selectAll,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text(
+                          l10n(context).selectionResetHint,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               if (_permissionMessage != null ||
                   _libraryProtected ||
                   _backupStartupFailed ||
@@ -1761,43 +1822,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                l10n(
-                                  context,
-                                ).selectedCount(_selectedRecordingIds.length),
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _isSubmitting
-                                  ? null
-                                  : () => setState(() {
-                                      final visibleIds = _visibleRecordings
-                                          .map((r) => r.id)
-                                          .toSet();
-                                      if (visibleIds.isNotEmpty &&
-                                          _selectedRecordingIds.containsAll(
-                                            visibleIds,
-                                          )) {
-                                        _selectedRecordingIds.clear();
-                                      } else {
-                                        _selectedRecordingIds.addAll(
-                                          visibleIds,
-                                        );
-                                      }
-                                    }),
-                              child: Text(
-                                _visibleRecordings.isNotEmpty &&
-                                        _selectedRecordingIds.length ==
-                                            _visibleRecordings.length
-                                    ? l10n(context).deselectAll
-                                    : l10n(context).selectAll,
-                              ),
-                            ),
-                          ],
-                        ),
                         Row(
                           children: [
                             Expanded(

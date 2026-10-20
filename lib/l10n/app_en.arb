@@ -18,6 +18,9 @@
   "retry": "Retry",
   "selectScope": "Choose a recording folder",
   "allRecordings": "All recordings",
+  "selectionResetHint": "Changing or closing search, or switching folders, clears your selection.",
+  "deletedRetentionHint": "Deleted recordings stay here for 30 days.",
+  "deletedRecoveryRules": "View recovery rules",
   "unclassified": "Unfiled",
   "recordingCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
   "@recordingCount": {

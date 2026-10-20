@@ -166,12 +166,13 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
             slivers: [
               if (widget.store.coordinator.isProtected)
                 const SliverToBoxAdapter(child: BackupProtectionNotice()),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(l10n(context).deletedDescription),
+              if (_recordings.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(l10n(context).deletedDescription),
+                  ),
                 ),
-              ),
               if (_error != null)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -193,11 +194,62 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
-                    child: Text(
-                      _busy
-                          ? l10n(context).loadingDeleted
-                          : l10n(context).deletedEmpty,
-                    ),
+                    child: _busy
+                        ? Text(l10n(context).loadingDeleted)
+                        : _error != null
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              key: const Key('deletedEmptyState'),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 48,
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  l10n(context).deletedEmpty,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  l10n(context).deletedRetentionHint,
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  onPressed: () => showDialog<void>(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      scrollable: true,
+                                      title: Text(
+                                        l10n(context).deletedRecoveryRules,
+                                      ),
+                                      content: Text(
+                                        l10n(context).deletedDescription,
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(context),
+                                          child: Text(l10n(context).close),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  child: Text(
+                                    l10n(context).deletedRecoveryRules,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                   ),
                 )
               else

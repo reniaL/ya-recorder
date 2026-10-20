@@ -64,6 +64,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get allRecordings => 'All recordings';
 
   @override
+  String get selectionResetHint =>
+      'Changing or closing search, or switching folders, clears your selection.';
+
+  @override
+  String get deletedRetentionHint =>
+      'Deleted recordings stay here for 30 days.';
+
+  @override
+  String get deletedRecoveryRules => 'View recovery rules';
+
+  @override
   String get unclassified => 'Unfiled';
 
   @override

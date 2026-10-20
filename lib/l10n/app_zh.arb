@@ -18,6 +18,9 @@
   "retry": "重试",
   "selectScope": "选择录音范围",
   "allRecordings": "全部录音",
+  "selectionResetHint": "修改搜索、关闭搜索或切换文件夹会清空已选录音。",
+  "deletedRetentionHint": "删除的录音将在这里保留 30 天。",
+  "deletedRecoveryRules": "查看恢复规则",
   "unclassified": "未分类",
   "recordingCount": "{count} 条录音",
   "@recordingCount": {
