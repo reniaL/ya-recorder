@@ -55,6 +55,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get allRecordings => 'All recordings';
 
   @override
+  String get unclassified => 'Unfiled';
+
+  @override
+  String recordingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings',
+      one: '1 recording',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get moveRecordingTo => 'Move recording to';
 
   @override
@@ -278,7 +292,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get handleFolderRecordings => 'Choose where to move the recordings';
 
   @override
-  String get moveToAll => 'Move to All recordings';
+  String get moveToUnclassified => 'Move to Unfiled';
 
   @override
   String get close => 'Close';
@@ -324,7 +338,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deletedDescription =>
-      'Deleted recordings are kept for 30 days, then automatically removed. Restored recordings return to their original folder, or to All recordings if that folder no longer exists.';
+      'Deleted recordings are kept for 30 days, then automatically removed. Restored recordings return to their original folder, or become unfiled if that folder no longer exists. Find unfiled recordings in All recordings.';
 
   @override
   String get loadingDeleted => 'Loading Recently Deleted…';

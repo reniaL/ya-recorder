@@ -15,6 +15,13 @@
   "retry": "Retry",
   "selectScope": "Choose a recording folder",
   "allRecordings": "All recordings",
+  "unclassified": "Unfiled",
+  "recordingCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
+  "@recordingCount": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "moveRecordingTo": "Move recording to",
   "deleteRecordingTitle": "Move to Recently Deleted?",
   "deleteRecordingDescription": "Deleted recordings stay in Recently Deleted and can be restored before they expire.",
@@ -90,7 +97,7 @@
   "renameFolder": "Rename folder",
   "deleteFolderTitle": "Delete this folder?",
   "handleFolderRecordings": "Choose where to move the recordings",
-  "moveToAll": "Move to All recordings",
+  "moveToUnclassified": "Move to Unfiled",
   "close": "Close",
   "viewFullTitle": "View full recording title",
   "loadingPlayback": "Loading…",
@@ -105,7 +112,7 @@
   "playbackProgress": "Playback progress",
   "permanentDeleteTitle": "Permanently delete this recording?",
   "permanentDelete": "Delete permanently",
-  "deletedDescription": "Deleted recordings are kept for 30 days, then automatically removed. Restored recordings return to their original folder, or to All recordings if that folder no longer exists.",
+  "deletedDescription": "Deleted recordings are kept for 30 days, then automatically removed. Restored recordings return to their original folder, or become unfiled if that folder no longer exists. Find unfiled recordings in All recordings.",
   "loadingDeleted": "Loading Recently Deleted…",
   "deletedEmpty": "No recently deleted recordings",
   "restore": "Restore",

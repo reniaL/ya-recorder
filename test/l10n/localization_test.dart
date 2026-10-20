@@ -39,6 +39,9 @@ void main() {
 
   test('English quantities use natural singular and plural wording', () {
     final strings = AppLocalizationsEn();
+    expect(strings.recordingCount(0), '0 recordings');
+    expect(strings.recordingCount(1), '1 recording');
+    expect(strings.recordingCount(2), '2 recordings');
     expect(strings.backupRecordingsCount(1), '1 recording');
     expect(strings.backupRecordingsCount(2), '2 recordings');
     expect(strings.backupFoldersCount(1), '1 folder');

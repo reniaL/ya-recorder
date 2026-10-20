@@ -2205,7 +2205,11 @@ void main() {
         tester.getRect(selector).right,
         lessThanOrEqualTo(tester.getRect(find.byTooltip('多选录音')).left),
       );
-      final style = tester.widget<TextButton>(selector).style!;
+      final style = tester
+          .widget<TextButton>(
+            find.descendant(of: selector, matching: find.byType(TextButton)),
+          )
+          .style!;
       expect(style.textStyle!.resolve({})!.fontSize, 20);
       expect(style.textStyle!.resolve({})!.fontWeight, FontWeight.w600);
       expect(style.foregroundColor!.resolve({}), theme.colorScheme.onSurface);
@@ -2263,6 +2267,136 @@ void main() {
     )
     ..recordings = [_recording('one')];
 
+  for (final language in AppLanguage.values) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'UIR-07 folder counts and browse entry fit $language $brightness',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(320, 800));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          tester.platformDispatcher.textScaleFactorTestValue = 2;
+          tester.platformDispatcher.platformBrightnessTestValue = brightness;
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          addTearDown(
+            tester.platformDispatcher.clearPlatformBrightnessTestValue,
+          );
+          final store = folderStore(2)..language = language;
+          store.folders[1] = RecordingFolder(
+            id: 'folder-1',
+            name: 'A long folder name for interviews and project meeting notes',
+            createdAt: DateTime(2026),
+          );
+          store.recordings = [
+            _recording('one'),
+            _recording('two'),
+            _recording('deleted'),
+            _recording('unfiled'),
+          ];
+          for (final id in ['one', 'two', 'deleted']) {
+            await store.moveRecording(recordingId: id, folderId: 'folder-1');
+          }
+          await store.softDeleteRecording(
+            recordingId: 'deleted',
+            deletedAt: DateTime.now(),
+          );
+          await tester.pumpWidget(MyApp(recordingStore: store));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('folderScopeSelector')));
+          await tester.pumpAndSettle();
+          final management = find.byKey(const Key('folderScope-manage'));
+          await tester.ensureVisible(management);
+          await tester.tap(management);
+          await tester.pumpAndSettle();
+          final strings = l10n(tester.element(find.byType(Scaffold).last));
+          expect(find.text(strings.recordingCount(0)), findsOneWidget);
+          expect(find.text(strings.recordingCount(2)), findsOneWidget);
+          final row = find.byKey(const ValueKey('folder-1'));
+          final semantics = tester.ensureSemantics();
+          expect(
+            tester.getSemantics(row).label,
+            contains(store.folders[1].name),
+          );
+          semantics.dispose();
+          expect(
+            tester
+                .getSize(find.byKey(const Key('folderActions-folder-1')))
+                .height,
+            greaterThanOrEqualTo(48),
+          );
+          await tester.tap(find.byKey(const Key('folderActions-folder-1')));
+          await tester.pumpAndSettle();
+          expect(find.text(strings.rename), findsOneWidget);
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.text(strings.recordingCount(2)), findsOneWidget);
+          await tester.tap(row);
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('recordingRow-one')), findsOneWidget);
+          expect(find.byKey(const Key('recordingRow-unfiled')), findsNothing);
+          expect(find.byKey(const Key('startFolderSort')), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets('UIR-07 failed counts offer retry without reporting zero', (
+    tester,
+  ) async {
+    final store = folderStore(1);
+    await tester.pumpWidget(MyApp(recordingStore: store));
+    await tester.pumpAndSettle();
+    store.failRecordingRead = true;
+    await tester.tap(find.byKey(const Key('folderScopeSelector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('folderScope-manage')));
+    await tester.pumpAndSettle();
+    final strings = l10n(tester.element(find.byType(Scaffold).last));
+    expect(find.text(strings.foldersReadFailed), findsOneWidget);
+    expect(find.text(strings.recordingCount(0)), findsNothing);
+    store.failRecordingRead = false;
+    await tester.tap(find.text(strings.retry));
+    await tester.pumpAndSettle();
+    expect(find.text(strings.recordingCount(0)), findsOneWidget);
+  });
+
+  testWidgets('UIR-07 folder counts refresh after import protection ends', (
+    tester,
+  ) async {
+    final store = folderStore(2);
+    await openFolderManagement(tester, store);
+    final release = Completer<void>();
+    final task = store.coordinator.runBackup<void>(
+      taskId: 'counts',
+      operation: BackupOperation.import,
+      recordingIsIdle: () async => true,
+      action: (_) => release.future,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(
+      tester
+          .widget<PopupMenuButton<String>>(
+            find.byKey(const Key('folderActions-folder-0')),
+          )
+          .enabled,
+      isFalse,
+    );
+    await store.moveRecording(recordingId: 'one', folderId: 'folder-0');
+    release.complete();
+    await task;
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('folder-0'));
+    final strings = l10n(tester.element(row));
+    expect(
+      find.descendant(of: row, matching: find.text(strings.recordingCount(1))),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('startFolderSort')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<ListTile>(row).onTap, isNull);
+  });
+
   for (final count in [0, 1]) {
     testWidgets('folder sorting is unavailable for $count folders', (
       tester,
@@ -2288,9 +2422,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('createFolderButton')), findsNothing);
       expect(find.byKey(const Key('folderActions-folder-0')), findsNothing);
-      await tester.drag(
+      await tester.timedDrag(
         find.byKey(const Key('folderDrag-folder-0')),
-        const Offset(0, 85),
+        Offset(
+          0,
+          tester.getRect(find.byKey(const Key('folderDrag-folder-2'))).bottom -
+              tester
+                  .getCenter(find.byKey(const Key('folderDrag-folder-0')))
+                  .dy +
+              12,
+        ),
+        const Duration(milliseconds: 600),
       );
       await tester.pumpAndSettle();
       expect(
@@ -2312,9 +2454,17 @@ void main() {
       expect(store.folderReorderCalls, 0);
       await tester.tap(start);
       await tester.pumpAndSettle();
-      await tester.drag(
+      await tester.timedDrag(
         find.byKey(const Key('folderDrag-folder-0')),
-        const Offset(0, 85),
+        Offset(
+          0,
+          tester.getRect(find.byKey(const Key('folderDrag-folder-2'))).bottom -
+              tester
+                  .getCenter(find.byKey(const Key('folderDrag-folder-0')))
+                  .dy +
+              12,
+        ),
+        const Duration(milliseconds: 600),
       );
       await tester.pumpAndSettle();
       await tester.tap(save);
@@ -2474,7 +2624,7 @@ void main() {
     },
   );
 
-  testWidgets('moves a recording between a folder and all recordings', (
+  testWidgets('moves a recording between a folder and unfiled', (
     WidgetTester tester,
   ) async {
     final recordingStore = _RecordingStoreSpy()
@@ -2519,6 +2669,24 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('移动到文件夹'));
     await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text(
+          l10n(tester.element(find.byType(BottomSheet))).unclassified,
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text(
+          l10n(tester.element(find.byType(BottomSheet))).allRecordings,
+        ),
+      ),
+      findsNothing,
+    );
     await tester.tap(find.byKey(const Key('moveRecording-recording-1-all')));
     await tester.pumpAndSettle();
     expect(recordingStore.recordings.single.folderId, isNull);
@@ -2572,7 +2740,7 @@ void main() {
       await tester.tap(find.text('删除文件夹'));
       await tester.pumpAndSettle();
       expect(find.text('处理文件夹中的录音'), findsOneWidget);
-      await tester.tap(find.text('移至全部录音'));
+      await tester.tap(find.text('移至未分类'));
       await tester.pumpAndSettle();
 
       expect(recordingStore.folders, isEmpty);
@@ -2697,6 +2865,15 @@ void main() {
       await tester.tap(find.text('移动'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('batchMove-work')), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text(
+            l10n(tester.element(find.byType(BottomSheet))).unclassified,
+          ),
+        ),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const Key('batchMove-all')));
       await tester.pumpAndSettle();
       expect(store.recordings.every((r) => r.folderId == null), isTrue);
@@ -3590,6 +3767,7 @@ class _RecordingStoreSpy extends RecordingStore {
   Future<void>? batchDeleteGate;
   int batchDeleteCalls = 0;
   bool failFolderReorder = false;
+  bool failRecordingRead = false;
   Future<void>? folderReorderGate;
   int folderReorderCalls = 0;
   RecordingFormat defaultFormat = RecordingFormat.m4a;
@@ -3689,6 +3867,7 @@ class _RecordingStoreSpy extends RecordingStore {
 
   @override
   Future<List<Recording>> listRecordings({String? folderId}) async {
+    if (failRecordingRead) throw StateError('Cannot read recordings');
     return recordings
         .where(
           (recording) =>

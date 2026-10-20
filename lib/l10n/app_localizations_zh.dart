@@ -54,6 +54,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get allRecordings => '全部录音';
 
   @override
+  String get unclassified => '未分类';
+
+  @override
+  String recordingCount(int count) {
+    return '$count 条录音';
+  }
+
+  @override
   String get moveRecordingTo => '移动录音到';
 
   @override
@@ -272,7 +280,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get handleFolderRecordings => '处理文件夹中的录音';
 
   @override
-  String get moveToAll => '移至全部录音';
+  String get moveToUnclassified => '移至未分类';
 
   @override
   String get close => '关闭';
@@ -318,7 +326,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deletedDescription =>
-      '删除的录音保留 30 天，过期后自动清理。恢复时放回原文件夹；文件夹已删除时放回全部录音。';
+      '删除的录音保留 30 天，过期后自动清理。恢复时放回原文件夹；文件夹已删除时恢复为未分类。未分类录音可在全部录音中找到。';
 
   @override
   String get loadingDeleted => '正在读取最近删除…';

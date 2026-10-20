@@ -188,6 +188,18 @@ abstract class AppLocalizations {
   /// **'All recordings'**
   String get allRecordings;
 
+  /// No description provided for @unclassified.
+  ///
+  /// In en, this message translates to:
+  /// **'Unfiled'**
+  String get unclassified;
+
+  /// No description provided for @recordingCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
+  String recordingCount(int count);
+
   /// No description provided for @moveRecordingTo.
   ///
   /// In en, this message translates to:
@@ -620,11 +632,11 @@ abstract class AppLocalizations {
   /// **'Choose where to move the recordings'**
   String get handleFolderRecordings;
 
-  /// No description provided for @moveToAll.
+  /// No description provided for @moveToUnclassified.
   ///
   /// In en, this message translates to:
-  /// **'Move to All recordings'**
-  String get moveToAll;
+  /// **'Move to Unfiled'**
+  String get moveToUnclassified;
 
   /// No description provided for @close.
   ///
@@ -713,7 +725,7 @@ abstract class AppLocalizations {
   /// No description provided for @deletedDescription.
   ///
   /// In en, this message translates to:
-  /// **'Deleted recordings are kept for 30 days, then automatically removed. Restored recordings return to their original folder, or to All recordings if that folder no longer exists.'**
+  /// **'Deleted recordings are kept for 30 days, then automatically removed. Restored recordings return to their original folder, or become unfiled if that folder no longer exists. Find unfiled recordings in All recordings.'**
   String get deletedDescription;
 
   /// No description provided for @loadingDeleted.

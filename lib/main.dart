@@ -27,6 +27,12 @@ import 'storage/recently_deleted_page.dart';
 import 'storage/recording_store.dart';
 import 'widgets/destructive_confirmation_dialog.dart';
 
+typedef _FolderScopeChoice = ({String? folderId, bool manage});
+typedef _FolderListing = ({
+  List<RecordingFolder> folders,
+  Map<String, int> counts,
+});
+
 Recording _copyRecording(
   Recording source, {
   String? title,
@@ -484,7 +490,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   }
 
   Future<void> _openFolderScopeMenu() async {
-    if (_isSubmitting || _isSearching || _isSelecting) return;
+    if (_isSubmitting || _isSearching) return;
     try {
       final store = await _getRecordingStore();
       final folders = await store.listFolders();
@@ -506,10 +512,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         ),
         Offset.zero & overlay.size,
       );
-      final selected = await showMenu<String>(
+      final selected = await showMenu<_FolderScopeChoice>(
         context: context,
         position: position,
-        initialValue: _selectedFolderId ?? '',
+        initialValue: (folderId: _selectedFolderId, manage: false),
         semanticLabel: l10n(context).selectScope,
         elevation: 8,
         color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -530,24 +536,41 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               title: folder.name,
               icon: Icons.folder_outlined,
             ),
+          const PopupMenuDivider(),
+          PopupMenuItem<_FolderScopeChoice>(
+            key: const Key('folderScope-manage'),
+            value: (folderId: null, manage: true),
+            child: Row(
+              children: [
+                const Icon(Icons.folder_open_outlined),
+                const SizedBox(width: 12),
+                Expanded(child: Text(l10n(context).manageFolders)),
+              ],
+            ),
+          ),
         ],
       );
       if (!mounted || selected == null) return;
-      await _selectFolderScope(store, selected.isEmpty ? null : selected);
+      if (selected.manage) {
+        await _openFolderManagement();
+      } else {
+        await _selectFolderScope(store, selected.folderId);
+      }
     } catch (_) {
       _setLibraryError('foldersReadFailed');
     }
   }
 
-  PopupMenuItem<String> _folderScopeMenuItem({
+  PopupMenuItem<_FolderScopeChoice> _folderScopeMenuItem({
     required String id,
     required String title,
     required IconData icon,
   }) {
     final selected = (_selectedFolderId ?? '') == id;
     final colors = Theme.of(context).colorScheme;
-    return PopupMenuItem<String>(
-      value: id,
+    return PopupMenuItem<_FolderScopeChoice>(
+      key: Key('folderScope-${id.isEmpty ? 'all' : id}'),
+      value: (folderId: id.isEmpty ? null : id, manage: false),
       height: 52,
       child: Row(
         children: [
@@ -717,8 +740,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               if (recording.folderId != null)
                 ListTile(
                   key: Key('moveRecording-${recording.id}-all'),
-                  leading: const Icon(Icons.library_music_outlined),
-                  title: Text(l10n(context).allRecordings),
+                  leading: const Icon(Icons.folder_off_outlined),
+                  title: Text(l10n(context).unclassified),
                   onTap: () => Navigator.pop(context, ''),
                 ),
               for (final folder in destinations)
@@ -858,8 +881,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         final destinations = folders
             .where((f) => selected.any((r) => r.folderId != f.id))
             .toList();
-        final canMoveToAll = selected.any((r) => r.folderId != null);
-        if (!canMoveToAll && destinations.isEmpty) {
+        final canMoveToUnclassified = selected.any((r) => r.folderId != null);
+        if (!canMoveToUnclassified && destinations.isEmpty) {
           _setServiceError('createFolderFirst');
           return;
         }
@@ -873,10 +896,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   ListTile(
                     title: Text(l10n(context).moveSelectedTitle(ids.length)),
                   ),
-                  if (canMoveToAll)
+                  if (canMoveToUnclassified)
                     ListTile(
                       key: const Key('batchMove-all'),
-                      title: Text(l10n(context).allRecordings),
+                      leading: const Icon(Icons.folder_off_outlined),
+                      title: Text(l10n(context).unclassified),
                       onTap: () => Navigator.pop(context, ''),
                     ),
                   for (final folder in destinations)
@@ -918,7 +942,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   Future<void> _openFolderManagement() async {
     final store = await _getRecordingStore();
     if (!mounted) return;
-    await Navigator.of(context).push<void>(
+    final selected = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (context) => _FolderManagementPage(
           coordinator: store.coordinator,
@@ -954,14 +978,20 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       if (!mounted) {
         return;
       }
-      if (_selectedFolderId != null &&
-          !folders.any((folder) => folder.id == _selectedFolderId)) {
-        setState(() {
+      final current = folders.where((folder) => folder.id == _selectedFolderId);
+      setState(() {
+        if (current.isEmpty) {
           _selectedFolderId = null;
           _selectedFolderName = null;
-        });
+        } else {
+          _selectedFolderName = current.single.name;
+        }
+      });
+      if (selected != null && selected != _selectedFolderId) {
+        await _selectFolderScope(store, selected);
+      } else {
+        await _loadRecordings();
       }
-      await _loadRecordings();
     } catch (_) {
       _setLibraryError('foldersRefreshFailed');
     }
@@ -2619,7 +2649,7 @@ class _FolderManagementPage extends StatefulWidget {
   final Future<List<RecordingFolder>> Function() listFolders;
   final LibraryCoordinator coordinator;
   final Future<void> Function(List<String> ids) reorderFolders;
-  final Future<List<Recording>> Function(String folderId) listRecordings;
+  final Future<List<Recording>> Function(String? folderId) listRecordings;
   final Future<RecordingFolder> Function(String name) createFolder;
   final Future<void> Function(String folderId, String name) renameFolder;
   final Future<void> Function(String folderId, FolderDeletionAction? action)
@@ -2630,12 +2660,30 @@ class _FolderManagementPage extends StatefulWidget {
 }
 
 class _FolderManagementPageState extends State<_FolderManagementPage> {
-  late Future<List<RecordingFolder>> _folders = widget.listFolders();
+  late Future<_FolderListing> _folders = _loadFolders();
   String? _errorMessage;
   List<RecordingFolder>? _draft;
   List<String> _originalIds = [];
   bool _savingOrder = false;
   bool get _protected => widget.coordinator.isProtected;
+
+  Future<_FolderListing> _loadFolders() async {
+    final (folders, recordings) = await (
+      widget.listFolders(),
+      widget.listRecordings(null),
+    ).wait;
+    final counts = <String, int>{};
+    for (final recording in recordings) {
+      if (recording.folderId != null) {
+        counts.update(
+          recording.folderId!,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+    return (folders: folders, counts: counts);
+  }
 
   @override
   void initState() {
@@ -2650,7 +2698,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
     _wasProtected = _protected;
     setState(() {
       if (!_savingOrder) _draft = null;
-      if (!_protected) _folders = widget.listFolders();
+      if (!_protected) _folders = _loadFolders();
     });
   }
 
@@ -2694,7 +2742,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
       await widget.reorderFolders(ids);
       if (!mounted) return;
       setState(() {
-        _folders = Future.value(List<RecordingFolder>.of(_draft!));
+        _folders = _loadFolders();
         _draft = null;
       });
     } catch (_) {
@@ -2723,7 +2771,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
       }
       setState(() {
         _errorMessage = null;
-        _folders = widget.listFolders();
+        _folders = _loadFolders();
       });
     } catch (_) {
       if (!mounted) {
@@ -2752,7 +2800,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
       }
       setState(() {
         _errorMessage = null;
-        _folders = widget.listFolders();
+        _folders = _loadFolders();
       });
     } catch (_) {
       if (!mounted) {
@@ -2798,7 +2846,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
       }
       setState(() {
         _errorMessage = null;
-        _folders = widget.listFolders();
+        _folders = _loadFolders();
       });
     } catch (_) {
       if (!mounted) {
@@ -2810,7 +2858,12 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
     }
   }
 
-  Widget _folderRow(RecordingFolder folder, int index, int count) {
+  Widget _folderRow(
+    RecordingFolder folder,
+    int index,
+    int count,
+    int recordingCount,
+  ) {
     final sorting = _draft != null;
     final up = index > 0 && !_savingOrder && !_protected;
     final down = index < count - 1 && !_savingOrder && !_protected;
@@ -2818,6 +2871,8 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
       key: ValueKey(folder.id),
       leading: const Icon(Icons.folder_outlined),
       title: Text(folder.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+      subtitle: Text(l10n(context).recordingCount(recordingCount)),
+      onTap: sorting ? null : () => Navigator.pop(context, folder.id),
       trailing: sorting
           ? Row(
               mainAxisSize: MainAxisSize.min,
@@ -2897,10 +2952,11 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<RecordingFolder>>(
+    return FutureBuilder<_FolderListing>(
       future: _folders,
       builder: (context, snapshot) {
-        final folders = _draft ?? snapshot.data ?? const <RecordingFolder>[];
+        final folders =
+            _draft ?? snapshot.data?.folders ?? const <RecordingFolder>[];
         final sorting = _draft != null;
         return PopScope(
           canPop: !sorting && !_savingOrder,
@@ -2953,7 +3009,20 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
             body: snapshot.connectionState != ConnectionState.done && !sorting
                 ? Center(child: CircularProgressIndicator())
                 : snapshot.hasError && !sorting
-                ? Center(child: Text(l10n(context).foldersReadFailed))
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(l10n(context).foldersReadFailed),
+                        TextButton(
+                          onPressed: () => setState(() {
+                            _folders = _loadFolders();
+                          }),
+                          child: Text(l10n(context).retry),
+                        ),
+                      ],
+                    ),
+                  )
                 : Column(
                     children: [
                       if (_protected)
@@ -2999,6 +3068,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                                   folders[index],
                                   index,
                                   folders.length,
+                                  snapshot.data!.counts[folders[index].id] ?? 0,
                                 ),
                               )
                             : ListView.builder(
@@ -3008,6 +3078,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
                                   folders[index],
                                   index,
                                   folders.length,
+                                  snapshot.data!.counts[folders[index].id] ?? 0,
                                 ),
                               ),
                       ),
@@ -3156,7 +3227,7 @@ class _DeleteNonEmptyFolderDialog extends StatelessWidget {
         ),
         onPressed: () =>
             Navigator.pop(context, FolderDeletionAction.moveRecordingsToAll),
-        child: Text(l10n(context).moveToAll),
+        child: Text(l10n(context).moveToUnclassified),
       ),
     );
   }
