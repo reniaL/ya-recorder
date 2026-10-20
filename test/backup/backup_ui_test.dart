@@ -305,6 +305,61 @@ void main() {
     },
   );
 
+  for (final locale in [const Locale('zh'), const Locale('en')]) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'UIR-09 truthful interruption and next action $locale $brightness',
+        (tester) async {
+          await tester.binding.setSurfaceSize(const Size(320, 720));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          controller.outcome = BackupOutcome.interrupted;
+          await open(
+            tester,
+            locale: locale,
+            brightness: brightness,
+            scaled: true,
+            route: true,
+          );
+          final strings = lookupAppLocalizations(locale);
+          expect(find.text(strings.backupStatusInterrupted), findsOneWidget);
+          expect(find.text(strings.backupInterrupted), findsOneWidget);
+          expect(find.text(strings.backupRecoveredImport), findsNothing);
+          final back = find.byKey(const Key('backupReturnLibrary'));
+          await tester.ensureVisible(back);
+          await tester.pumpAndSettle();
+          await tester.tap(back);
+          await tester.pumpAndSettle();
+          expect(find.byKey(const Key('openBackup')), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'UIR-09 export leads and import retains limits as a secondary action',
+    (tester) async {
+      await open(tester);
+      final export = find.byKey(const Key('exportBackup'));
+      final import = find.byKey(const Key('importBackup'));
+      expect(tester.widget(export), isA<FilledButton>());
+      expect(tester.widget(import), isA<OutlinedButton>());
+      final strings = lookupAppLocalizations(const Locale('en'));
+      expect(
+        tester.getTopLeft(export).dy,
+        lessThan(tester.getTopLeft(find.text(strings.backupZip64)).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text(strings.backupZip64)).dy,
+        lessThan(tester.getTopLeft(import).dy),
+      );
+      controller.outcome = BackupOutcome.recoveredImport;
+      await open(tester);
+      expect(find.text(strings.backupStatusRecovered), findsOneWidget);
+      expect(find.text(strings.backupRecoveredImport), findsOneWidget);
+    },
+  );
+
   testWidgets(
     'export review explains scope, encryption and separate temporary space',
     (tester) async {
@@ -642,7 +697,7 @@ void main() {
         );
         expect(
           tester
-              .widget<FilledButton>(find.byKey(const Key('importBackup')))
+              .widget<OutlinedButton>(find.byKey(const Key('importBackup')))
               .onPressed,
           isNull,
         );
@@ -656,7 +711,7 @@ void main() {
         );
         expect(
           tester
-              .widget<FilledButton>(find.byKey(const Key('importBackup')))
+              .widget<OutlinedButton>(find.byKey(const Key('importBackup')))
               .onPressed,
           isNotNull,
         );

@@ -80,18 +80,99 @@ class BackupPage extends StatelessWidget {
           : null,
     ),
   );
-  Widget _button(String text, VoidCallback? action, String key) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: FilledButton(
-      key: Key(key),
-      onPressed: action,
-      style: FilledButton.styleFrom(
-        minimumSize: const Size(48, 48),
-        padding: const EdgeInsets.all(12),
+  Widget _button(
+    String text,
+    VoidCallback? action,
+    String key, {
+    bool secondary = false,
+  }) {
+    final style = FilledButton.styleFrom(
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.all(12),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: secondary
+          ? OutlinedButton(
+              key: Key(key),
+              onPressed: action,
+              style: style,
+              child: Text(text, textAlign: TextAlign.center),
+            )
+          : FilledButton(
+              key: Key(key),
+              onPressed: action,
+              style: style,
+              child: Text(text, textAlign: TextAlign.center),
+            ),
+    );
+  }
+
+  Widget _resultPanel(BuildContext context) {
+    final s = l10n(context);
+    final outcome = controller.outcome!;
+    final failed =
+        outcome == BackupOutcome.failed || outcome == BackupOutcome.interrupted;
+    final colors = Theme.of(context).colorScheme;
+    final title = switch (outcome) {
+      BackupOutcome.exported => s.backupStatusExported,
+      BackupOutcome.imported => s.backupStatusImported,
+      BackupOutcome.cancelled => s.backupStatusCancelled,
+      BackupOutcome.failed => s.backupStatusFailed,
+      BackupOutcome.recoveredImport => s.backupStatusRecovered,
+      BackupOutcome.interrupted => s.backupStatusInterrupted,
+    };
+    final description = switch (outcome) {
+      BackupOutcome.exported => s.backupExported,
+      BackupOutcome.imported => s.backupImported,
+      BackupOutcome.cancelled => s.backupCancelled,
+      BackupOutcome.failed => backupFailureLabel(s, controller.failure),
+      BackupOutcome.recoveredImport => s.backupRecoveredImport,
+      BackupOutcome.interrupted => s.backupInterrupted,
+    };
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                failed
+                    ? Icons.info_outline_rounded
+                    : Icons.check_circle_outline_rounded,
+                color: failed ? colors.error : colors.primary,
+              ),
+              const SizedBox(height: 8),
+              Semantics(
+                liveRegion: true,
+                header: true,
+                child: Text(
+                  title,
+                  key: const Key('backupResult'),
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (description != title) Text(description),
+              const SizedBox(height: 8),
+              TextButton(
+                key: const Key('backupReturnLibrary'),
+                onPressed: () =>
+                    Navigator.of(context).popUntil((route) => route.isFirst),
+                child: Text(s.returnToLibrary),
+              ),
+            ],
+          ),
+        ),
       ),
-      child: Text(text, textAlign: TextAlign.center),
-    ),
-  );
+    );
+  }
 
   List<Widget> _plan(
     BuildContext context,
@@ -265,25 +346,7 @@ class BackupPage extends StatelessWidget {
                   'dismissBackupReview',
                 ),
               ] else ...[
-                if (controller.outcome != null)
-                  Semantics(
-                    liveRegion: true,
-                    child: _text(
-                      switch (controller.outcome!) {
-                        BackupOutcome.exported => s.backupExported,
-                        BackupOutcome.imported => s.backupImported,
-                        BackupOutcome.cancelled => s.backupCancelled,
-                        BackupOutcome.failed => s.backupFailed,
-                        BackupOutcome.recoveredImport =>
-                          s.backupRecoveredImport,
-                        BackupOutcome.interrupted => s.backupInterrupted,
-                      },
-                      heading: true,
-                      key: const Key('backupResult'),
-                    ),
-                  ),
-                if (controller.outcome == BackupOutcome.failed)
-                  _text(backupFailureLabel(s, controller.failure)),
+                if (controller.outcome != null) _resultPanel(context),
                 if (exported != null) ...[
                   _text(exported.document.displayName),
                   SelectableText(exported.document.uri),
@@ -327,7 +390,6 @@ class BackupPage extends StatelessWidget {
                   const SizedBox(height: 12),
                 ],
                 _text(s.backupDescription),
-                _text(s.backupZip64),
                 _button(
                   s.backupExport,
                   controller.sharing || controller.startupFailure
@@ -335,12 +397,14 @@ class BackupPage extends StatelessWidget {
                       : controller.reviewExport,
                   'exportBackup',
                 ),
+                _text(s.backupZip64),
                 _button(
                   s.backupImport,
                   controller.sharing || controller.startupFailure
                       ? null
                       : controller.startImport,
                   'importBackup',
+                  secondary: true,
                 ),
               ],
             ],

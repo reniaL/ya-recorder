@@ -1505,8 +1505,50 @@ abstract class AppLocalizations {
   /// No description provided for @backupInterrupted.
   ///
   /// In en, this message translates to:
-  /// **'The previous task stopped unexpectedly. Startup recovery has run. Check your recording library before trying again.'**
+  /// **'We can\'t confirm that the previous task finished completely. Return to your library and check your recordings and folders before exporting or importing again.'**
   String get backupInterrupted;
+
+  /// No description provided for @backupStatusExported.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup exported'**
+  String get backupStatusExported;
+
+  /// No description provided for @backupStatusImported.
+  ///
+  /// In en, this message translates to:
+  /// **'Import complete'**
+  String get backupStatusImported;
+
+  /// No description provided for @backupStatusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Task cancelled'**
+  String get backupStatusCancelled;
+
+  /// No description provided for @backupStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Task incomplete'**
+  String get backupStatusFailed;
+
+  /// No description provided for @backupStatusRecovered.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous import committed'**
+  String get backupStatusRecovered;
+
+  /// No description provided for @backupStatusInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous task interrupted'**
+  String get backupStatusInterrupted;
+
+  /// No description provided for @returnToLibrary.
+  ///
+  /// In en, this message translates to:
+  /// **'Return to library'**
+  String get returnToLibrary;
 
   /// No description provided for @backupErrorBusy.
   ///

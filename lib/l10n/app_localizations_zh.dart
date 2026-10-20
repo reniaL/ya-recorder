@@ -752,7 +752,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupRecoveredImport => '上次导入已提交，已导入的录音已保留。';
 
   @override
-  String get backupInterrupted => '上次任务意外中断，启动恢复已执行，请检查录音库后再试。';
+  String get backupInterrupted => '无法确认上次任务是否完整完成。请先返回录音库检查录音与文件夹，再重新备份或导入。';
+
+  @override
+  String get backupStatusExported => '备份已导出';
+
+  @override
+  String get backupStatusImported => '导入已完成';
+
+  @override
+  String get backupStatusCancelled => '任务已取消';
+
+  @override
+  String get backupStatusFailed => '任务未完成';
+
+  @override
+  String get backupStatusRecovered => '上次导入已提交';
+
+  @override
+  String get backupStatusInterrupted => '上次任务已中断';
+
+  @override
+  String get returnToLibrary => '返回录音库';
 
   @override
   String get backupErrorBusy => '请先结束录音，等待保存或其他数据修改完成后再试。';

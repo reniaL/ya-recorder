@@ -842,7 +842,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupInterrupted =>
-      'The previous task stopped unexpectedly. Startup recovery has run. Check your recording library before trying again.';
+      'We can\'t confirm that the previous task finished completely. Return to your library and check your recordings and folders before exporting or importing again.';
+
+  @override
+  String get backupStatusExported => 'Backup exported';
+
+  @override
+  String get backupStatusImported => 'Import complete';
+
+  @override
+  String get backupStatusCancelled => 'Task cancelled';
+
+  @override
+  String get backupStatusFailed => 'Task incomplete';
+
+  @override
+  String get backupStatusRecovered => 'Previous import committed';
+
+  @override
+  String get backupStatusInterrupted => 'Previous task interrupted';
+
+  @override
+  String get returnToLibrary => 'Return to library';
 
   @override
   String get backupErrorBusy =>
