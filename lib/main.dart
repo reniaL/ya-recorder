@@ -1,3 +1,4 @@
+import 'theme/app_theme.dart';
 import 'l10n/localization.dart';
 import 'dart:async';
 
@@ -87,33 +88,6 @@ class _MyAppState extends State<MyApp> {
     if (mounted) setState(() => _language = language);
   }
 
-  ThemeData _theme(Brightness brightness) {
-    final dark = brightness == Brightness.dark;
-    return ThemeData(
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xff0b6657),
-        brightness: brightness,
-      ),
-      scaffoldBackgroundColor: dark
-          ? const Color(0xff101815)
-          : const Color(0xfff2f7f4),
-      appBarTheme: AppBarTheme(
-        systemOverlayStyle: SystemUiOverlayStyle(
-          statusBarColor: Colors.transparent,
-          statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
-          statusBarBrightness: brightness,
-          systemNavigationBarColor: dark
-              ? const Color(0xff101815)
-              : const Color(0xfff2f7f4),
-          systemNavigationBarIconBrightness: dark
-              ? Brightness.light
-              : Brightness.dark,
-        ),
-      ),
-      useMaterial3: true,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -121,8 +95,8 @@ class _MyAppState extends State<MyApp> {
       locale: _language.locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
-      theme: _theme(Brightness.light),
-      darkTheme: _theme(Brightness.dark),
+      theme: buildAppTheme(Brightness.light),
+      darkTheme: buildAppTheme(Brightness.dark),
       themeMode: _themeMode,
       home: RecordingHomePage(
         recordingService: _recordingService,
@@ -517,12 +491,14 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         position: position,
         initialValue: (folderId: _selectedFolderId, manage: false),
         semanticLabel: l10n(context).selectScope,
-        elevation: 8,
+        elevation: AppMenuStyle.elevation,
         color: Theme.of(context).colorScheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        surfaceTintColor: Colors.transparent,
+        shadowColor: AppMenuStyle.shadowColor,
+        shape: AppMenuStyle.shape,
         constraints: BoxConstraints(
           maxHeight: MediaQuery.sizeOf(context).height * 0.65,
-          maxWidth: MediaQuery.sizeOf(context).width - 24,
+          maxWidth: AppMenuStyle.constraints(context).maxWidth,
         ),
         items: [
           _folderScopeMenuItem(
@@ -572,18 +548,25 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       key: Key('folderScope-${id.isEmpty ? 'all' : id}'),
       value: (folderId: id.isEmpty ? null : id, manage: false),
       height: 52,
-      child: Row(
-        children: [
-          Icon(icon, color: selected ? colors.primary : null),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
-          ),
-          if (selected) ...[
-            const SizedBox(width: 8),
-            Icon(Icons.check_rounded, color: colors.primary, size: 20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? AppMenuStyle.selectedColor(colors) : null,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: selected ? colors.primary : null),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+            if (selected) ...[
+              const SizedBox(width: 8),
+              Icon(Icons.check_rounded, color: colors.primary, size: 20),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -1665,6 +1648,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
               ),
             ),
             PopupMenuButton<String>(
+              constraints: AppMenuStyle.constraints(context),
               enabled: !_isSelecting && !_isSubmitting,
               key: const Key('manageFoldersMenu'),
               tooltip: l10n(context).more,
@@ -2077,6 +2061,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             trailing: _isSelecting
                 ? null
                 : PopupMenuButton<String>(
+                    constraints: AppMenuStyle.constraints(context),
                     tooltip: l10n(context).recordingActions,
                     onSelected: (action) {
                       if (action == 'rename') {
@@ -2230,6 +2215,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         backgroundColor: Colors.transparent,
         actions: [
           PopupMenuButton<String>(
+            constraints: AppMenuStyle.constraints(context),
             key: const Key('recordingSettingsMenu'),
             tooltip: l10n(context).more,
             enabled: !_isSubmitting,
@@ -2878,6 +2864,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 PopupMenuButton<String>(
+                  constraints: AppMenuStyle.constraints(context),
                   key: Key('folderSortActions-${folder.id}'),
                   tooltip: l10n(context).moveFolderPosition(folder.name),
                   enabled: !_savingOrder,
@@ -2924,6 +2911,7 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
               ],
             )
           : PopupMenuButton<String>(
+              constraints: AppMenuStyle.constraints(context),
               enabled: !_protected,
               key: Key('folderActions-${folder.id}'),
               tooltip: l10n(context).folderActions,

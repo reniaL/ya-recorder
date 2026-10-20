@@ -1,3 +1,4 @@
+import '../theme/app_theme.dart';
 import '../l10n/localization.dart';
 import 'dart:async';
 
@@ -144,6 +145,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
           ),
           actions: [
             PopupMenuButton<String>(
+              constraints: AppMenuStyle.constraints(context),
               key: const Key('recordingDetailActions'),
               tooltip: l10n(context).recordingActions,
               enabled: !_actionInProgress,
@@ -302,6 +304,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                         ),
                         const SizedBox(height: 16),
                         PopupMenuButton<double>(
+                          constraints: AppMenuStyle.constraints(context),
                           key: const Key('recordingDetailSpeed'),
                           tooltip: l10n(context).playbackSpeed,
                           initialValue: active ? status.speed : 1,

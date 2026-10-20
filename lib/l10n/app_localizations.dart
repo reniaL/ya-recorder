@@ -110,6 +110,24 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get settings;
 
+  /// No description provided for @recordingSettingsGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get recordingSettingsGroup;
+
+  /// No description provided for @appearanceSettingsGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance and language'**
+  String get appearanceSettingsGroup;
+
+  /// No description provided for @dataSettingsGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Data management'**
+  String get dataSettingsGroup;
+
   /// No description provided for @theme.
   ///
   /// In en, this message translates to:

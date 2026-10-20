@@ -1,3 +1,4 @@
+import '../theme/app_theme.dart';
 import '../l10n/localization.dart';
 import 'package:flutter/material.dart';
 import '../widgets/destructive_confirmation_dialog.dart';
@@ -214,6 +215,7 @@ class _RecentlyDeletedPageState extends State<RecentlyDeletedPage>
                       subtitle: Text(_deletionInfo(recording)),
                       isThreeLine: true,
                       trailing: PopupMenuButton<String>(
+                        constraints: AppMenuStyle.constraints(context),
                         enabled:
                             !_busy && !widget.store.coordinator.isProtected,
                         tooltip: l10n(context).titleActions(recording.title),

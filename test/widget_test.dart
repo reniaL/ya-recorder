@@ -165,6 +165,21 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('设置'));
       await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.byKey(const Key('recordingSettingsGroup'))).dy,
+        lessThan(
+          tester
+              .getTopLeft(find.byKey(const Key('appearanceSettingsGroup')))
+              .dy,
+        ),
+      );
+      expect(
+        tester.getTopLeft(find.byKey(const Key('appearanceSettingsGroup'))).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('dataSettingsGroup'))).dy,
+        ),
+      );
+      await tester.ensureVisible(find.byKey(const Key('backupSettings')));
       await tester.tap(find.byKey(const Key('backupSettings')));
       await tester.pumpAndSettle();
       expect(find.text('备份与恢复'), findsOneWidget);

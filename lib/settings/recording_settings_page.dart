@@ -1,3 +1,4 @@
+import '../theme/app_theme.dart';
 import 'dart:math' as math;
 
 import '../l10n/localization.dart';
@@ -270,18 +271,21 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
       context: context,
       barrierDismissible: true,
       barrierLabel: barrierLabel,
-      barrierColor: Colors.black.withValues(alpha: 0.32),
+      barrierColor: Colors.black.withValues(alpha: AppMenuStyle.scrimOpacity),
       transitionDuration: const Duration(milliseconds: 160),
       pageBuilder: (dialogContext, _, _) => LayoutBuilder(
         builder: (context, constraints) {
           final media = MediaQuery.of(context);
           final safeTop = media.padding.top + 12;
           final safeBottom = constraints.maxHeight - media.padding.bottom - 12;
-          final width = math.min(340.0, constraints.maxWidth - 32);
+          final width = math.min(
+            AppMenuStyle.maxWidth,
+            constraints.maxWidth - 32,
+          );
           const verticalPadding = 6.0;
           // Reserve the checkmark column in every row and use the tallest
           // choice for all rows, including wrapped descriptions and large text.
-          final textWidth = width - 44 - 36;
+          final textWidth = width - AppMenuStyle.horizontalPadding * 2 - 36;
           final theme = Theme.of(context);
           double textHeight(String text, TextStyle style) {
             final painter = TextPainter(
@@ -298,9 +302,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
           final rowHeight = choices.fold<double>(60, (height, choice) {
             final titleHeight = textHeight(
               choice.label,
-              theme.textTheme.titleMedium!.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+              theme.textTheme.bodyLarge!.copyWith(fontWeight: FontWeight.w600),
             );
             final subtitleHeight = choice.subtitle == null
                 ? 0.0
@@ -336,11 +338,12 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                 top: top,
                 width: width,
                 child: Material(
-                  color: Theme.of(context).colorScheme.surface,
-                  elevation: 12,
-                  shadowColor: Colors.black.withValues(alpha: 0.24),
+                  color: Theme.of(context).colorScheme.surfaceContainerLow,
+                  elevation: AppMenuStyle.elevation,
+                  shadowColor: AppMenuStyle.shadowColor,
+                  surfaceTintColor: Colors.transparent,
                   clipBehavior: Clip.antiAlias,
-                  borderRadius: BorderRadius.circular(22),
+                  borderRadius: BorderRadius.circular(AppMenuStyle.radius),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxHeight: menuHeight),
                     child: ListView(
@@ -385,6 +388,60 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     );
   }
 
+  Widget _sectionHeading(String label, String id) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+    child: Semantics(
+      header: true,
+      child: Text(
+        label,
+        key: Key(id),
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    ),
+  );
+
+  Widget _preferenceTile({
+    required Key tileKey,
+    required String label,
+    required String value,
+    required Widget trailing,
+    required VoidCallback? onTap,
+  }) => ListTile(
+    key: tileKey,
+    minVerticalPadding: 12,
+    title: LayoutBuilder(
+      builder: (context, constraints) {
+        final theme = Theme.of(context);
+        final labelWidget = Text(label, style: theme.textTheme.bodyLarge);
+        final valueWidget = Text(
+          value,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        );
+        if (constraints.maxWidth >= 260 &&
+            MediaQuery.textScalerOf(context).scale(1) <= 1.3) {
+          return Row(
+            children: [
+              Expanded(child: labelWidget),
+              const SizedBox(width: 16),
+              Flexible(child: valueWidget),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [labelWidget, const SizedBox(height: 4), valueWidget],
+        );
+      },
+    ),
+    trailing: trailing,
+    onTap: onTap,
+  );
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -397,76 +454,69 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
               : ListView(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   children: [
-                    if (widget.backupController != null)
-                      AnimatedBuilder(
-                        animation: widget.backupController!,
-                        builder: (context, _) => ListTile(
-                          key: const Key('backupSettings'),
-                          title: Text(l10n(context).backupTitle),
-                          subtitle: Text(
-                            widget.backupController!.busy
-                                ? l10n(context).backupCurrentTask
-                                : widget.backupController!.outcome == null
-                                ? l10n(context).backupDescription
-                                : l10n(context).backupLastResult,
-                          ),
-                          trailing: const Icon(Icons.chevron_right_rounded),
-                          onTap: widget.onOpenBackup,
-                        ),
-                      ),
-                    Semantics(
-                      key: _languageAnchorKey,
-                      value: _language?.nativeName,
-                      child: ListTile(
-                        key: const Key('appLanguage'),
-                        title: Text(l10n(context).language),
-                        subtitle: Text(
-                          _language?.nativeName ?? l10n(context).reading,
-                        ),
-                        trailing: _savingLanguage
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(),
-                              )
-                            : Icon(Icons.unfold_more_rounded),
-                        onTap:
-                            _language == null || _savingLanguage || _savingTheme
-                            ? null
-                            : _chooseLanguage,
-                      ),
+                    _sectionHeading(
+                      l10n(context).recordingSettingsGroup,
+                      'recordingSettingsGroup',
                     ),
-                    if (_languageError != null) ...[
+                    if (_error != null) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(localizedMessage(context, _languageError!)),
+                        child: Text(localizedMessage(context, _error!)),
                       ),
-                      if (_language == null)
-                        TextButton(
-                          onPressed: _loadLanguage,
-                          child: Text(l10n(context).retryLanguage),
+                      TextButton(
+                        onPressed: _load,
+                        child: Text(l10n(context).retry),
+                      ),
+                    ] else ...[
+                      Semantics(
+                        key: _formatAnchorKey,
+                        value: _format!.label,
+                        child: _preferenceTile(
+                          tileKey: const Key('defaultRecordingFormat'),
+                          label: l10n(context).defaultFormat,
+                          value: _format!.label,
+                          trailing: _savingFormat
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(),
+                                )
+                              : Icon(Icons.arrow_drop_down_rounded),
+                          onTap: _savingFormat ? null : _chooseFormat,
                         ),
+                      ),
+                      if (_formatError != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text(localizedMessage(context, _formatError!)),
+                        ),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(l10n(context).formatDescription),
+                      ),
                     ],
+                    _sectionHeading(
+                      l10n(context).appearanceSettingsGroup,
+                      'appearanceSettingsGroup',
+                    ),
                     Semantics(
                       key: _themeAnchorKey,
                       value: _themeMode == null
                           ? null
                           : _themeLabel(_themeMode!),
-                      child: ListTile(
-                        key: const Key('themeMode'),
-                        title: Text(l10n(context).theme),
-                        subtitle: Text(
-                          _themeMode == null
-                              ? l10n(context).reading
-                              : _themeLabel(_themeMode!),
-                        ),
+                      child: _preferenceTile(
+                        tileKey: const Key('themeMode'),
+                        label: l10n(context).theme,
+                        value: _themeMode == null
+                            ? l10n(context).reading
+                            : _themeLabel(_themeMode!),
                         trailing: _savingTheme
                             ? const SizedBox(
                                 width: 24,
                                 height: 24,
                                 child: CircularProgressIndicator(),
                               )
-                            : Icon(Icons.unfold_more_rounded),
+                            : Icon(Icons.arrow_drop_down_rounded),
                         onTap:
                             _themeMode == null ||
                                 _savingTheme ||
@@ -486,43 +536,59 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                           child: Text(l10n(context).retryTheme),
                         ),
                     ],
-                    if (_error != null) ...[
+                    Semantics(
+                      key: _languageAnchorKey,
+                      value: _language?.nativeName,
+                      child: _preferenceTile(
+                        tileKey: const Key('appLanguage'),
+                        label: l10n(context).language,
+                        value: _language?.nativeName ?? l10n(context).reading,
+                        trailing: _savingLanguage
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(),
+                              )
+                            : Icon(Icons.arrow_drop_down_rounded),
+                        onTap:
+                            _language == null || _savingLanguage || _savingTheme
+                            ? null
+                            : _chooseLanguage,
+                      ),
+                    ),
+                    if (_languageError != null) ...[
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(localizedMessage(context, _error!)),
+                        child: Text(localizedMessage(context, _languageError!)),
                       ),
-                      TextButton(
-                        onPressed: _load,
-                        child: Text(l10n(context).retry),
-                      ),
-                    ] else ...[
-                      Semantics(
-                        key: _formatAnchorKey,
-                        value: _format!.label,
-                        child: ListTile(
-                          key: const Key('defaultRecordingFormat'),
-                          title: Text(l10n(context).defaultFormat),
-                          subtitle: Text(_format!.label),
-                          trailing: _savingFormat
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(),
-                                )
-                              : Icon(Icons.unfold_more_rounded),
-                          onTap: _savingFormat ? null : _chooseFormat,
+                      if (_language == null)
+                        TextButton(
+                          onPressed: _loadLanguage,
+                          child: Text(l10n(context).retryLanguage),
                         ),
-                      ),
-                      if (_formatError != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(localizedMessage(context, _formatError!)),
-                        ),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(l10n(context).formatDescription),
-                      ),
                     ],
+                    if (widget.backupController != null)
+                      _sectionHeading(
+                        l10n(context).dataSettingsGroup,
+                        'dataSettingsGroup',
+                      ),
+                    if (widget.backupController != null)
+                      AnimatedBuilder(
+                        animation: widget.backupController!,
+                        builder: (context, _) => ListTile(
+                          key: const Key('backupSettings'),
+                          title: Text(l10n(context).backupTitle),
+                          subtitle: Text(
+                            widget.backupController!.busy
+                                ? l10n(context).backupCurrentTask
+                                : widget.backupController!.outcome == null
+                                ? l10n(context).backupDescription
+                                : l10n(context).backupLastResult,
+                          ),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: widget.onOpenBackup,
+                        ),
+                      ),
                   ],
                 ),
         ),
@@ -574,10 +640,11 @@ class _PopupChoiceTile<T> extends StatelessWidget {
         onTap: onTap,
         child: Container(
           height: height,
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
-          color: selected
-              ? colors.primaryContainer.withValues(alpha: 0.72)
-              : null,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppMenuStyle.horizontalPadding,
+            vertical: 10,
+          ),
+          color: selected ? AppMenuStyle.selectedColor(colors) : null,
           child: Row(
             children: [
               Expanded(
@@ -587,7 +654,7 @@ class _PopupChoiceTile<T> extends StatelessWidget {
                   children: [
                     Text(
                       choice.label,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: choice.enabled
                             ? (selected ? colors.primary : colors.onSurface)
                             : colors.onSurface.withValues(alpha: 0.38),

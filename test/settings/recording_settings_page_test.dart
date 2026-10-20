@@ -1,3 +1,5 @@
+import 'package:ya_recorder/l10n/localization.dart';
+import 'package:ya_recorder/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -55,6 +57,144 @@ void main() {
     );
     expect(scrollable.position.maxScrollExtent, 0);
   }
+
+  for (final language in AppLanguage.values) {
+    for (final brightness in Brightness.values) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          'UIR-08 grouped adaptive preferences $language $brightness $scale',
+          (tester) async {
+            final size = Size(scale == 1 ? 390 : 320, 720);
+            await tester.binding.setSurfaceSize(size);
+            addTearDown(() => tester.binding.setSurfaceSize(null));
+            await tester.pumpWidget(
+              MaterialApp(
+                locale: language.locale,
+                supportedLocales: AppLocalizations.supportedLocales,
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                theme: buildAppTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: RecordingSettingsPage(store: store, service: service),
+              ),
+            );
+            await tester.pumpAndSettle();
+            final format = find.byKey(const Key('defaultRecordingFormat'));
+            final context = tester.element(format);
+            final strings = l10n(context);
+            expect(
+              tester
+                  .getTopLeft(find.byKey(const Key('recordingSettingsGroup')))
+                  .dy,
+              lessThan(tester.getTopLeft(format).dy),
+            );
+            expect(
+              tester.getTopLeft(format).dy,
+              lessThan(
+                tester
+                    .getTopLeft(
+                      find.byKey(const Key('appearanceSettingsGroup')),
+                    )
+                    .dy,
+              ),
+            );
+            final label = find.descendant(
+              of: format,
+              matching: find.text(strings.defaultFormat),
+            );
+            final value = find.descendant(
+              of: format,
+              matching: find.text('AAC'),
+            );
+            if (scale == 1) {
+              expect(
+                tester.getCenter(label).dx,
+                lessThan(tester.getCenter(value).dx),
+              );
+              expect(
+                tester.getCenter(label).dy,
+                closeTo(tester.getCenter(value).dy, 0.1),
+              );
+            } else {
+              expect(
+                tester.getRect(label).bottom,
+                lessThanOrEqualTo(tester.getRect(value).top),
+              );
+            }
+            expect(find.byIcon(Icons.unfold_more_rounded), findsNothing);
+            final themeRow = find.byKey(const Key('themeMode'));
+            await tester.scrollUntilVisible(themeRow, 150);
+            await tester.pumpAndSettle();
+            await tester.tap(themeRow);
+            await tester.pumpAndSettle();
+            final selected = find.byKey(const Key('chooseTheme-system'));
+            final material = tester.widget<Material>(
+              find
+                  .ancestor(of: selected, matching: find.byType(Material))
+                  .first,
+            );
+            expect(material.elevation, AppMenuStyle.elevation);
+            expect(
+              material.borderRadius,
+              BorderRadius.circular(AppMenuStyle.radius),
+            );
+            expect(
+              material.color,
+              Theme.of(context).colorScheme.surfaceContainerLow,
+            );
+            expect(tester.getSize(selected).height, greaterThanOrEqualTo(48));
+            expect(tester.takeException(), isNull);
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            expect(store.writes, 0);
+          },
+        );
+      }
+    }
+  }
+
+  test(
+    'UIR-08 themes keep text and state colors readable on neutral surfaces',
+    () {
+      double contrast(Color a, Color b) {
+        final x = a.computeLuminance();
+        final y = b.computeLuminance();
+        return x > y ? (x + 0.05) / (y + 0.05) : (y + 0.05) / (x + 0.05);
+      }
+
+      for (final brightness in Brightness.values) {
+        final theme = buildAppTheme(brightness);
+        final colors = theme.colorScheme;
+        expect(
+          contrast(colors.onSurface, colors.surface),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(
+          contrast(colors.onSurfaceVariant, colors.surfaceContainerLow),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(
+          contrast(colors.error, colors.surface),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(
+          contrast(
+            colors.primary,
+            Color.alphaBlend(
+              AppMenuStyle.selectedColor(colors),
+              colors.surfaceContainerLow,
+            ),
+          ),
+          greaterThanOrEqualTo(4.5),
+        );
+        expect(theme.popupMenuTheme.shape, AppMenuStyle.shape);
+      }
+    },
+  );
 
   testWidgets(
     'all preference menus have equal rows and show the full last row',
