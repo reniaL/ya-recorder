@@ -199,6 +199,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rename => '重命名';
 
   @override
+  String get renamed => '已重命名';
+
+  @override
   String get moveToFolder => '移动到文件夹';
 
   @override

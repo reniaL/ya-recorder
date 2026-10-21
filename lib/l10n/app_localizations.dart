@@ -470,6 +470,12 @@ abstract class AppLocalizations {
   /// **'Rename'**
   String get rename;
 
+  /// No description provided for @renamed.
+  ///
+  /// In en, this message translates to:
+  /// **'Renamed'**
+  String get renamed;
+
   /// No description provided for @moveToFolder.
   ///
   /// In en, this message translates to:

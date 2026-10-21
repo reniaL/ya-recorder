@@ -685,6 +685,11 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       );
       onUpdated?.call(_copyRecording(recording, title: normalizedTitle));
       await _loadRecordings();
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(l10n(context).renamed)));
+      }
     } catch (_) {
       _setServiceError('renameRecordingFailed');
     } finally {
@@ -2812,6 +2817,9 @@ class _FolderManagementPageState extends State<_FolderManagementPage> {
         _errorMessage = null;
         _folders = _loadFolders();
       });
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(l10n(context).renamed)));
     } catch (_) {
       if (!mounted) {
         return;

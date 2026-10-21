@@ -212,6 +212,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rename => 'Rename';
 
   @override
+  String get renamed => 'Renamed';
+
+  @override
   String get moveToFolder => 'Move to folder';
 
   @override

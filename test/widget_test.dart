@@ -2020,6 +2020,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('会议记录'), findsOneWidget);
+    expect(find.widgetWithText(SnackBar, '已重命名'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.byType(SnackBar), findsNothing);
     expect(
       recordingStore.recordings.single.filePath,
       '/private/recording-1.m4a',
@@ -2795,6 +2799,7 @@ void main() {
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
       expect(recordingStore.folders.single.name, 'Work');
+      expect(find.widgetWithText(SnackBar, '已重命名'), findsOneWidget);
 
       await tester.tap(find.byKey(const Key('folderActions-folder-project')));
       await tester.pumpAndSettle();
