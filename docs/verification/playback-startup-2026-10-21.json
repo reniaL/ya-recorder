@@ -1,0 +1,403 @@
+{
+  "date": "2026-10-21",
+  "timezone": "Asia/Shanghai",
+  "purpose": "Pre-fix investigation and playback progress fix verification",
+  "buildMode": "debug",
+  "justAudioVersion": "0.10.6",
+  "flutterVersion": "3.41.7",
+  "method": "Temporary Dart logging of backend play calls, AudioPlayer.playbackEventStream raw anchors/updateTime, and positionStream samples. Observed first 2200 ms of each play request. List buttons operated through ADB.",
+  "dataSet": {
+    "runs": 16,
+    "loadAndPlay": 7,
+    "resume": 7,
+    "replayAfterCompleted": 2,
+    "loadsWithRegression": 7,
+    "resumesWithRegression": 0,
+    "replaysWithRegression": 2
+  },
+  "scopeNotes": [
+    "All samples at 1x on one Android debug device. Diagnostic logging can affect timing; values are observations rather than production latency guarantees.",
+    "Runs 7 and 14 replayed the 4-second M4A after completion and were switched away after about 0.4 seconds. Pause/stop/loading resets are excluded from regression counts.",
+    "No speaker waveform or audio-loopback capture. No conclusion about repeated audio samples.",
+    "Detail-page taps did not yield a complete verified trace; detail-page behavior is not claimed as device-verified.",
+    "The runs below describe pre-fix behavior. Post-fix checks are recorded separately in fixVerification."
+  ],
+  "runs": [
+    {
+      "run": 1,
+      "format": "aac",
+      "action": "load-and-play",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 1.37,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 195.903,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 452.946,
+          "rawPositionMs": 9.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 196.285,
+          "fromMs": 191.958,
+          "toMs": 2.58,
+          "retreatMs": 189.378,
+          "rawPositionMs": 0.0,
+          "playing": true,
+          "processingState": "ready"
+        },
+        {
+          "elapsedMs": 453.369,
+          "fromMs": 255.201,
+          "toMs": 10.671,
+          "retreatMs": 244.53,
+          "rawPositionMs": 9.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 40
+    },
+    {
+      "run": 2,
+      "format": "aac",
+      "action": "resume",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.592,
+          "rawPositionMs": 2003.0
+        }
+      ],
+      "regressions": [],
+      "positionSamples": 58
+    },
+    {
+      "run": 3,
+      "format": "mp3",
+      "action": "load-and-play",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.322,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 206.089,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 215.929,
+          "rawPositionMs": 1.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 216.327,
+          "fromMs": 205.686,
+          "toMs": 2.295,
+          "retreatMs": 203.391,
+          "rawPositionMs": 1.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 69
+    },
+    {
+      "run": 4,
+      "format": "mp3",
+      "action": "resume",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.49,
+          "rawPositionMs": 2457.0
+        }
+      ],
+      "regressions": [],
+      "positionSamples": 80
+    },
+    {
+      "run": 5,
+      "format": "m4a",
+      "action": "load-and-play",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.52,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 232.862,
+          "rawPositionMs": 21.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 233.129,
+          "fromMs": 231.381,
+          "toMs": 22.396,
+          "retreatMs": 208.985,
+          "rawPositionMs": 21.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 93
+    },
+    {
+      "run": 6,
+      "format": "m4a",
+      "action": "resume",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.492,
+          "rawPositionMs": 2436.0
+        }
+      ],
+      "regressions": [],
+      "positionSamples": 76
+    },
+    {
+      "run": 7,
+      "format": "m4a",
+      "action": "replay-after-completed",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 219.331,
+          "rawPositionMs": 7.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 219.669,
+          "fromMs": 216.869,
+          "toMs": 8.857,
+          "retreatMs": 208.012,
+          "rawPositionMs": 7.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 18,
+      "windowTruncatedBySwitch": true
+    },
+    {
+      "run": 8,
+      "format": "aac",
+      "action": "load-and-play",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.335,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 194.038,
+          "rawPositionMs": 26.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 194.431,
+          "fromMs": 169.53,
+          "toMs": 27.573,
+          "retreatMs": 141.957,
+          "rawPositionMs": 26.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 87
+    },
+    {
+      "run": 9,
+      "format": "aac",
+      "action": "resume",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.462,
+          "rawPositionMs": 2540.0
+        }
+      ],
+      "regressions": [],
+      "positionSamples": 89
+    },
+    {
+      "run": 10,
+      "format": "mp3",
+      "action": "load-and-play",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.409,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 190.405,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 215.137,
+          "rawPositionMs": 1.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 215.514,
+          "fromMs": 188.58,
+          "toMs": 2.255,
+          "retreatMs": 186.325,
+          "rawPositionMs": 1.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 84
+    },
+    {
+      "run": 11,
+      "format": "mp3",
+      "action": "resume",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.571,
+          "rawPositionMs": 2491.0
+        }
+      ],
+      "regressions": [],
+      "positionSamples": 77
+    },
+    {
+      "run": 12,
+      "format": "m4a",
+      "action": "load-and-play",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.285,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 259.408,
+          "rawPositionMs": 16.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 259.75,
+          "fromMs": 257.958,
+          "toMs": 16.859,
+          "retreatMs": 241.099,
+          "rawPositionMs": 16.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 102
+    },
+    {
+      "run": 13,
+      "format": "m4a",
+      "action": "resume",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.405,
+          "rawPositionMs": 2470.0
+        }
+      ],
+      "regressions": [],
+      "positionSamples": 72
+    },
+    {
+      "run": 14,
+      "format": "m4a",
+      "action": "replay-after-completed",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 217.317,
+          "rawPositionMs": 15.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 217.575,
+          "fromMs": 217.911,
+          "toMs": 16.602,
+          "retreatMs": 201.309,
+          "rawPositionMs": 15.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 16,
+      "windowTruncatedBySwitch": true
+    },
+    {
+      "run": 15,
+      "format": "aac",
+      "action": "load-and-play",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.39,
+          "rawPositionMs": 0.0
+        },
+        {
+          "elapsedMs": 190.196,
+          "rawPositionMs": 17.0
+        }
+      ],
+      "regressions": [
+        {
+          "elapsedMs": 190.61,
+          "fromMs": 188.194,
+          "toMs": 18.657,
+          "retreatMs": 169.537,
+          "rawPositionMs": 17.0,
+          "playing": true,
+          "processingState": "ready"
+        }
+      ],
+      "positionSamples": 93
+    },
+    {
+      "run": 16,
+      "format": "aac",
+      "action": "resume",
+      "entry": "list",
+      "nativeEvents": [
+        {
+          "elapsedMs": 0.501,
+          "rawPositionMs": 2589.0
+        }
+      ],
+      "regressions": [],
+      "positionSamples": 94
+    }
+  ],
+  "platform": "Android physical device (identifiers omitted)",
+  "fixVerification": {
+    "implementation": "Shared monotonic displayPosition during uninterrupted playback; real status.position retained for relative seeks; explicit seek/skip/scrub and lifecycle resets.",
+    "newTests": 5,
+    "targetedTestsPassed": 157,
+    "fullTestsPassed": 393,
+    "analysis": "passed",
+    "debugApkBuild": "passed",
+    "postFixDevice": "pending: no device detected at installation attempt",
+    "privacy": "No device brand, model, serial, recording titles or file paths retained."
+  }
+}

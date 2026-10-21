@@ -1726,6 +1726,52 @@ void main() {
   );
 
   for (final detail in [false, true]) {
+    testWidgets(
+      '${detail ? 'detail' : 'bottom'} progress holds startup corrections and permits intentional backward seeks',
+      (tester) async {
+        final backend = _FakePlaybackBackend();
+        final playback = AudioPlaybackService(backend: backend);
+        addTearDown(playback.dispose);
+        final store = _RecordingStoreSpy()..recordings = [_recording('one')];
+        await tester.pumpWidget(
+          MyApp(recordingStore: store, playbackService: playback),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          detail
+              ? find.byKey(const Key('recordingRow-one'))
+              : find.byTooltip('播放录音'),
+        );
+        await tester.pumpAndSettle();
+        var slider = find.byKey(
+          Key(detail ? 'recordingDetailProgress' : 'libraryPlaybackProgress'),
+        );
+        final samples = [192, 3, 255, 11];
+        final displayed = [192, 192, 255, 255];
+        for (var i = 0; i < samples.length; i++) {
+          backend.emitPosition(Duration(milliseconds: samples[i]));
+          await tester.pumpAndSettle();
+          expect(tester.widget<Slider>(slider).value, displayed[i].toDouble());
+          expect(playback.status.position.inMilliseconds, samples[i]);
+        }
+        if (!detail) {
+          await tester.tap(find.byKey(const Key('libraryPlaybackTitle')));
+          await tester.pumpAndSettle();
+          slider = find.byKey(const Key('recordingDetailProgress'));
+          expect(tester.widget<Slider>(slider).value, 255);
+        }
+        backend.emitPosition(const Duration(milliseconds: 300));
+        await tester.pumpAndSettle();
+        expect(tester.widget<Slider>(slider).value, 300);
+        await playback.seek(const Duration(milliseconds: 100));
+        await tester.pumpAndSettle();
+        expect(tester.widget<Slider>(slider).value, 100);
+        backend.emit(AudioBackendState.completed);
+        await tester.pumpAndSettle();
+        expect(tester.widget<Slider>(slider).value, 0);
+      },
+    );
+
     for (final initiallyPlaying in [false, true]) {
       testWidgets(
         '${detail ? 'detail' : 'bottom'} drag follows finger while pause is pending and ${initiallyPlaying ? 'resumes' : 'stays paused'} on release',

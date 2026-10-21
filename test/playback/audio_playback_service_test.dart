@@ -19,6 +19,90 @@ void main() {
   });
 
   test(
+    'startup corrections preserve real position and monotonic display at every speed',
+    () async {
+      for (final speed in AudioPlaybackService.supportedSpeeds) {
+        await service.stop();
+        await service.play(_recording('one'));
+        await service.setSpeed(speed);
+        final samples = [192, 3, 255, 11, 200, 260, 500];
+        final displayed = [192, 192, 255, 255, 255, 260, 500];
+        for (var i = 0; i < samples.length; i++) {
+          backend.emitPosition(Duration(milliseconds: samples[i]));
+          // Repeated playing notifications must not reset presentation progress.
+          backend.emit(AudioBackendState.playing);
+          await Future<void>.delayed(Duration.zero);
+          expect(service.status.position.inMilliseconds, samples[i]);
+          expect(service.displayPosition.inMilliseconds, displayed[i]);
+        }
+      }
+    },
+  );
+
+  test(
+    'seeks and skips reset the display and calculate from real position',
+    () async {
+      await service.play(
+        _recording('one', duration: const Duration(seconds: 60)),
+      );
+      backend.emitPosition(const Duration(seconds: 9));
+      backend.emitPosition(const Duration(seconds: 8));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.displayPosition.inSeconds, 9);
+      await service.skipBackward();
+      expect(backend.seekPositions.last.inSeconds, 3);
+      expect(service.displayPosition.inSeconds, 3);
+      await service.skipBackward();
+      expect(service.displayPosition, Duration.zero);
+      await service.skipForward();
+      expect(service.displayPosition.inSeconds, 5);
+      await service.seek(const Duration(seconds: 2));
+      expect(service.displayPosition.inSeconds, 2);
+      backend.emitPosition(const Duration(milliseconds: 1900));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.status.position.inMilliseconds, 1900);
+      expect(service.displayPosition.inSeconds, 2);
+      await service.finishScrub(
+        service.beginScrub()!,
+        const Duration(seconds: 1),
+      );
+      expect(service.status.state, PlaybackState.playing);
+      expect(service.displayPosition.inSeconds, 1);
+    },
+  );
+
+  test(
+    'pause, replacement, completion, replay, failure and stop reset display',
+    () async {
+      await service.play(_recording('one'));
+      backend.emitPosition(const Duration(milliseconds: 500));
+      backend.emitPosition(const Duration(milliseconds: 11));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.displayPosition.inMilliseconds, 500);
+      await service.pause();
+      expect(service.displayPosition.inMilliseconds, 11);
+      await service.play(_recording('one'));
+      expect(service.displayPosition.inMilliseconds, 11);
+      await service.play(_recording('two'));
+      expect(service.displayPosition, Duration.zero);
+      backend.emitPosition(const Duration(milliseconds: 500));
+      backend.emit(AudioBackendState.completed);
+      await Future<void>.delayed(Duration.zero);
+      expect(service.displayPosition, Duration.zero);
+      await service.play(_recording('two'));
+      expect(service.displayPosition, Duration.zero);
+      backend.emitPosition(const Duration(milliseconds: 400));
+      backend.emitPosition(const Duration(milliseconds: 20));
+      backend.emitError(StateError('Playback failed'));
+      await Future<void>.delayed(Duration.zero);
+      expect(service.status.state, PlaybackState.failed);
+      expect(service.displayPosition, service.status.position);
+      await service.stop();
+      expect(service.displayPosition, Duration.zero);
+    },
+  );
+
+  test(
     'scrub waits for pause and seek before resuming at the final position',
     () async {
       await service.play(

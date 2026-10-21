@@ -69,6 +69,7 @@ class AudioPlaybackService {
   late final StreamSubscription<Duration> _positionSubscription;
 
   PlaybackStatus _status = const PlaybackStatus.idle();
+  Duration _displayPosition = Duration.zero;
   Future<void> _operations = Future<void>.value();
   int _generation = 0;
   bool _disposed = false;
@@ -77,6 +78,10 @@ class AudioPlaybackService {
   Duration _duration = Duration.zero;
 
   PlaybackStatus get status => _status;
+
+  /// Shared by both players; backend corrections must not rewind the thumb.
+  /// [PlaybackStatus.position] remains the source for relative seek commands.
+  Duration get displayPosition => _displayPosition;
   Stream<PlaybackStatus> get statuses => _statusController.stream;
   bool get isScrubbing => _scrub != null;
 
@@ -151,6 +156,7 @@ class AudioPlaybackService {
             position: ended ? Duration.zero : target,
             speed: _status.speed,
           ),
+          resetProgress: true,
         );
         if (resume && !ended) {
           unawaited(
@@ -319,6 +325,7 @@ class AudioPlaybackService {
             position: position,
             speed: _status.speed,
           ),
+          resetProgress: true,
         );
       } catch (error) {
         if (_isCurrent(generation)) _setFailed(_status.recordingId, error);
@@ -372,6 +379,7 @@ class AudioPlaybackService {
             position: ended ? Duration.zero : target,
             speed: previous.speed,
           ),
+          resetProgress: true,
         );
       } catch (error) {
         if (!_isCurrent(generation)) return;
@@ -535,7 +543,17 @@ class AudioPlaybackService {
     );
   }
 
-  void _setStatus(PlaybackStatus status) {
+  void _setStatus(PlaybackStatus status, {bool resetProgress = false}) {
+    // Only uninterrupted playback is monotonic. User seeks, pause, loading,
+    // completion and replacement establish a new display position immediately.
+    final continuing =
+        !resetProgress &&
+        status.state == PlaybackState.playing &&
+        _status.state == PlaybackState.playing &&
+        status.recordingId == _status.recordingId;
+    if (!continuing || status.position > _displayPosition) {
+      _displayPosition = status.position;
+    }
     _status = status;
     if (!_statusController.isClosed) {
       _statusController.add(status);

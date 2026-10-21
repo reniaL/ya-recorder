@@ -101,7 +101,7 @@ class _PlaybackProgressState extends State<PlaybackProgress> {
             (previewing
                     ? _preview!
                     : active
-                    ? status.position.inMilliseconds.toDouble()
+                    ? widget.service.displayPosition.inMilliseconds.toDouble()
                     : 0.0)
                 .clamp(0.0, total.inMilliseconds.toDouble());
         final enabled =
