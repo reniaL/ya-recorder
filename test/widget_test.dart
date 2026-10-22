@@ -935,8 +935,7 @@ void main() {
   ) async {
     final events = StreamController<RecordingEvent>.broadcast();
     addTearDown(events.close);
-    final store = _RecordingStoreSpy()
-      ..recordings = [_recording('previous')];
+    final store = _RecordingStoreSpy()..recordings = [_recording('previous')];
     await tester.pumpWidget(
       MyApp(
         recordingStore: store,
@@ -2483,6 +2482,112 @@ void main() {
     )
     ..recordings = [_recording('one')];
 
+  for (final language in AppLanguage.values) {
+    for (final brightness in Brightness.values) {
+      testWidgets('scope counts align and refresh $language $brightness', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(320, 800);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        tester.platformDispatcher.platformBrightnessTestValue = brightness;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+        final semantics = tester.ensureSemantics();
+        final store = folderStore(2)..language = language;
+        store.folders[0] = RecordingFolder(
+          id: 'folder-0',
+          name: '工作访谈与项目会议记录 A long folder name for interviews',
+          createdAt: DateTime.utc(2026),
+        );
+        store.recordings = List.generate(13, (i) => _recording('note-$i'));
+        for (var i = 0; i < 11; i++) {
+          await store.moveRecording(
+            recordingId: 'note-$i',
+            folderId: 'folder-0',
+          );
+        }
+        await store.softDeleteRecording(
+          recordingId: 'note-0',
+          deletedAt: DateTime.utc(2026, 10, 22),
+        );
+        await tester.pumpWidget(MyApp(recordingStore: store));
+        await tester.pumpAndSettle();
+        final selector = find.byKey(const Key('folderScopeSelector'));
+        Future<void> open() async {
+          await tester.tap(selector);
+          await tester.pumpAndSettle();
+        }
+
+        Finder count(String id) => find.byKey(Key('folderScopeCount-$id'));
+        String value(String id) => tester.widget<Text>(count(id)).data!;
+        await open();
+        expect(value('all'), '12');
+        expect(value('folder-0'), '10');
+        expect(value('folder-1'), '0');
+        expect(
+          tester.getRect(count('all')).right,
+          closeTo(tester.getRect(count('folder-0')).right, 0.1),
+        );
+        expect(
+          tester.getRect(count('all')).right,
+          closeTo(tester.getRect(count('folder-1')).right, 0.1),
+        );
+        final strings = l10n(tester.element(selector));
+        expect(
+          find.bySemanticsLabel(
+            RegExp(RegExp.escape(strings.recordingCount(10))),
+          ),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byKey(const Key('folderScope-folder-1')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('folderScopeCount-folder-1')),
+          findsNothing,
+        );
+        await store.moveRecording(recordingId: 'note-1', folderId: 'folder-1');
+        await open();
+        expect(value('all'), '12');
+        expect(value('folder-0'), '9');
+        expect(value('folder-1'), '1');
+        expect(tester.takeException(), isNull);
+        semantics.dispose();
+      });
+    }
+  }
+
+  testWidgets('scope count read failure retries without false zero', (
+    tester,
+  ) async {
+    final store = folderStore(1);
+    await tester.pumpWidget(MyApp(recordingStore: store));
+    await tester.pumpAndSettle();
+    store.failRecordingRead = true;
+    await tester.tap(find.byKey(const Key('folderScopeSelector')));
+    await tester.pumpAndSettle();
+    final strings = l10n(tester.element(find.byType(RecordingHomePage)));
+    expect(find.text(strings.foldersReadFailed), findsOneWidget);
+    expect(find.byKey(const Key('folderScopeCount-all')), findsNothing);
+    store.failRecordingRead = false;
+    await tester.tap(find.text(strings.reload));
+    await tester.pumpAndSettle();
+    expect(find.text(strings.foldersReadFailed), findsNothing);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('folderScopeCount-all'))).data,
+      '1',
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('folderScopeCount-folder-0')))
+          .data,
+      '0',
+    );
+  });
+
   testWidgets(
     'settings folder entry returns or browses directly to the library',
     (tester) async {
@@ -2585,9 +2690,9 @@ void main() {
     final store = folderStore(1);
     await tester.pumpWidget(MyApp(recordingStore: store));
     await tester.pumpAndSettle();
-    store.failRecordingRead = true;
     await tester.tap(find.byKey(const Key('folderScopeSelector')));
     await tester.pumpAndSettle();
+    store.failRecordingRead = true;
     await tester.tap(find.byKey(const Key('folderScope-manage')));
     await tester.pumpAndSettle();
     final strings = l10n(tester.element(find.byType(Scaffold).last));

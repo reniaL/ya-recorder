@@ -516,8 +516,32 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (_isSubmitting || _isSearching) return;
     try {
       final store = await _getRecordingStore();
-      final folders = await store.listFolders();
+      final (folders, recordings) = await (
+        store.listFolders(),
+        store.listRecordings(),
+      ).wait;
       if (!mounted) return;
+      final counts = <String, int>{};
+      for (final recording in recordings) {
+        final id = recording.folderId;
+        if (id != null) counts.update(id, (n) => n + 1, ifAbsent: () => 1);
+      }
+      final countStyle = Theme.of(context).textTheme.labelMedium!.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      );
+      var countWidth = 0.0;
+      for (final count in {0, recordings.length, ...counts.values}) {
+        final painter = TextPainter(
+          text: TextSpan(text: '$count', style: countStyle),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        )..layout();
+        if (painter.width > countWidth) countWidth = painter.width;
+        painter.dispose();
+      }
+      if (_libraryError == 'foldersReadFailed') {
+        setState(() => _libraryError = null);
+      }
       final buttonBox =
           _folderScopeButtonKey.currentContext?.findRenderObject()
               as RenderBox?;
@@ -553,12 +577,18 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             id: '',
             title: l10n(context).allRecordings,
             icon: Icons.library_music_outlined,
+            count: recordings.length,
+            countWidth: countWidth,
+            countStyle: countStyle,
           ),
           for (final folder in folders)
             _folderScopeMenuItem(
               id: folder.id,
               title: folder.name,
               icon: Icons.folder_outlined,
+              count: counts[folder.id] ?? 0,
+              countWidth: countWidth,
+              countStyle: countStyle,
             ),
           const PopupMenuDivider(),
           PopupMenuItem<_FolderScopeChoice>(
@@ -589,6 +619,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     required String id,
     required String title,
     required IconData icon,
+    required int count,
+    required double countWidth,
+    required TextStyle countStyle,
   }) {
     final selected = (_selectedFolderId ?? '') == id;
     final colors = Theme.of(context).colorScheme;
@@ -612,10 +645,28 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                     : null,
               ),
             ),
-            if (selected) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.check_rounded, color: colors.primary, size: 20),
-            ],
+            const SizedBox(width: 12),
+            Semantics(
+              label: l10n(context).recordingCount(count),
+              child: ExcludeSemantics(
+                child: SizedBox(
+                  width: countWidth,
+                  child: Text(
+                    '$count',
+                    key: Key('folderScopeCount-${id.isEmpty ? 'all' : id}'),
+                    textAlign: TextAlign.end,
+                    style: countStyle,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 20,
+              child: selected
+                  ? Icon(Icons.check_rounded, color: colors.primary, size: 20)
+                  : null,
+            ),
           ],
         ),
       ),
@@ -1957,7 +2008,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                 Text(localizedMessage(context, _libraryError!)),
                 const SizedBox(height: 12),
                 OutlinedButton(
-                  onPressed: _loadRecordings,
+                  onPressed: _libraryError == 'foldersReadFailed'
+                      ? _openFolderScopeMenu
+                      : _loadRecordings,
                   child: Text(l10n(context).reload),
                 ),
               ],
