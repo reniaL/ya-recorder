@@ -30,6 +30,45 @@ import 'widgets/destructive_confirmation_dialog.dart';
 import 'widgets/rename_recording_dialog.dart';
 
 typedef _FolderScopeChoice = ({String? folderId, bool manage});
+
+class _FolderScopeMenuItem extends PopupMenuItem<_FolderScopeChoice> {
+  const _FolderScopeMenuItem({
+    super.key,
+    required super.value,
+    required super.child,
+    required this.selected,
+  }) : super(height: 48, padding: const EdgeInsets.symmetric(horizontal: 8));
+
+  final bool selected;
+
+  @override
+  PopupMenuItemState<_FolderScopeChoice, _FolderScopeMenuItem> createState() =>
+      _FolderScopeMenuItemState();
+}
+
+class _FolderScopeMenuItemState
+    extends PopupMenuItemState<_FolderScopeChoice, _FolderScopeMenuItem> {
+  @override
+  Widget build(BuildContext context) {
+    // Keep the selected surface and all ink effects inside the same rounded row.
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Semantics(
+        selected: widget.selected,
+        inMutuallyExclusiveGroup: true,
+        child: Material(
+          color: widget.selected
+              ? AppMenuStyle.selectedColor(Theme.of(context).colorScheme)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          clipBehavior: Clip.antiAlias,
+          child: super.build(context),
+        ),
+      ),
+    );
+  }
+}
+
 typedef _FolderListing = ({
   List<RecordingFolder> folders,
   Map<String, int> counts,
@@ -498,7 +537,6 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       final selected = await showMenu<_FolderScopeChoice>(
         context: context,
         position: position,
-        initialValue: (folderId: _selectedFolderId, manage: false),
         semanticLabel: l10n(context).selectScope,
         elevation: AppMenuStyle.elevation,
         color: Theme.of(context).colorScheme.surfaceContainerLow,
@@ -553,22 +591,25 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   }) {
     final selected = (_selectedFolderId ?? '') == id;
     final colors = Theme.of(context).colorScheme;
-    return PopupMenuItem<_FolderScopeChoice>(
+    return _FolderScopeMenuItem(
       key: Key('folderScope-${id.isEmpty ? 'all' : id}'),
       value: (folderId: id.isEmpty ? null : id, manage: false),
-      height: 52,
-      child: Container(
+      selected: selected,
+      child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppMenuStyle.selectedColor(colors) : null,
-          borderRadius: BorderRadius.circular(8),
-        ),
         child: Row(
           children: [
             Icon(icon, color: selected ? colors.primary : null),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(title, maxLines: 2, overflow: TextOverflow.ellipsis),
+              child: Text(
+                title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: selected
+                    ? const TextStyle(fontWeight: FontWeight.w600)
+                    : null,
+              ),
             ),
             if (selected) ...[
               const SizedBox(width: 8),

@@ -16,6 +16,7 @@ import 'package:ya_recorder/settings/app_language.dart';
 import 'package:ya_recorder/storage/models/recording.dart';
 import 'package:ya_recorder/storage/models/recording_folder.dart';
 import 'package:ya_recorder/storage/recording_store.dart';
+import 'package:ya_recorder/theme/app_theme.dart';
 import 'package:ya_recorder/widgets/destructive_confirmation_dialog.dart';
 
 Map<String, Object?> _nativeReadyMap(SavedNativeRecording ready) => {
@@ -2304,6 +2305,42 @@ void main() {
       expect(style.textStyle!.resolve({})!.fontWeight, FontWeight.w600);
       expect(style.foregroundColor!.resolve({}), theme.colorScheme.onSurface);
       expect(tester.widget<Text>(title).overflow, TextOverflow.ellipsis);
+
+      await tester.tap(selector);
+      await tester.pumpAndSettle();
+      final selectedItem = find.byKey(const Key('folderScope-long-folder'));
+      final surface = find.descendant(
+        of: selectedItem,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is Material &&
+              widget.color == AppMenuStyle.selectedColor(theme.colorScheme),
+        ),
+      );
+      expect(surface, findsOneWidget);
+      expect(tester.widget<Material>(surface).clipBehavior, Clip.antiAlias);
+      expect(
+        find.descendant(of: surface, matching: find.byType(InkWell)),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.descendant(of: selectedItem, matching: find.text(name)),
+            )
+            .style!
+            .fontWeight,
+        FontWeight.w600,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is ColoredBox && widget.color == theme.highlightColor,
+        ),
+        findsNothing,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('recordingSearchButton')));
       await tester.pumpAndSettle();
