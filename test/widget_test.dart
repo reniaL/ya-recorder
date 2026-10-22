@@ -2024,6 +2024,88 @@ void main() {
     },
   );
 
+  for (final language in [AppLanguage.simplifiedChinese, AppLanguage.english]) {
+    for (final detail in [false, true]) {
+      for (final failCopy in [false, true]) {
+        testWidgets(
+          '${language.name} copies full title from ${detail ? 'detail' : 'list'} menu (failure: $failCopy)',
+          (tester) async {
+            final title =
+                '完整标题 Interview 🎤 ${List.filled(12, '很长的录音标题').join()}';
+            final recording = Recording.fromDatabaseMap({
+              ..._recording('target').toDatabaseMap(),
+              'title': title,
+            });
+            final store = _RecordingStoreSpy()
+              ..language = language
+              ..recordings = [_recording('other'), recording];
+            final playback = AudioPlaybackService(
+              backend: _FakePlaybackBackend(),
+            );
+            addTearDown(playback.dispose);
+            final copied = <String>[];
+            final messenger = TestDefaultBinaryMessengerBinding
+                .instance
+                .defaultBinaryMessenger;
+            messenger.setMockMethodCallHandler(SystemChannels.platform, (
+              call,
+            ) async {
+              if (call.method == 'Clipboard.setData') {
+                if (failCopy) {
+                  throw PlatformException(code: 'clipboard-unavailable');
+                }
+                copied.add((call.arguments as Map)['text'] as String);
+              }
+              return null;
+            });
+            addTearDown(
+              () => messenger.setMockMethodCallHandler(
+                SystemChannels.platform,
+                null,
+              ),
+            );
+            await tester.pumpWidget(
+              MyApp(recordingStore: store, playbackService: playback),
+            );
+            await tester.pumpAndSettle();
+            final row = find.byKey(const Key('recordingRow-target'));
+            final strings = l10n(tester.element(row));
+            if (detail) {
+              await tester.tap(row);
+              await tester.pumpAndSettle();
+              await tester.tap(find.byKey(const Key('recordingDetailActions')));
+            } else {
+              await tester.tap(
+                find.descendant(
+                  of: row,
+                  matching: find.byTooltip(strings.recordingActions),
+                ),
+              );
+            }
+            await tester.pumpAndSettle();
+            expect(copied, isEmpty);
+            await tester.tap(find.text(strings.copyTitle));
+            await tester.pumpAndSettle();
+            expect(copied, failCopy ? isEmpty : equals([title]));
+            expect(
+              find.widgetWithText(
+                SnackBar,
+                failCopy ? strings.copyTitleFailed : strings.titleCopied,
+              ),
+              findsOneWidget,
+            );
+            expect(store.recordings.last, same(recording));
+            expect(
+              playback.status.state,
+              detail ? PlaybackState.playing : PlaybackState.idle,
+            );
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
   testWidgets('renames a recording from its action menu', (
     WidgetTester tester,
   ) async {

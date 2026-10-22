@@ -26,6 +26,7 @@ import 'storage/models/recording.dart';
 import 'storage/models/recording_folder.dart';
 import 'storage/recently_deleted_page.dart';
 import 'storage/recording_store.dart';
+import 'widgets/copy_recording_title.dart';
 import 'widgets/destructive_confirmation_dialog.dart';
 import 'widgets/rename_recording_dialog.dart';
 
@@ -2127,7 +2128,9 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                     constraints: AppMenuStyle.constraints(context),
                     tooltip: l10n(context).recordingActions,
                     onSelected: (action) {
-                      if (action == 'rename') {
+                      if (action == 'copyTitle') {
+                        unawaited(copyRecordingTitle(context, recording.title));
+                      } else if (action == 'rename') {
                         _renameRecording(recording);
                       } else if (action == 'move') {
                         _moveRecording(recording);
@@ -2138,6 +2141,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                       }
                     },
                     itemBuilder: (context) => [
+                      PopupMenuItem(
+                        value: 'copyTitle',
+                        child: Text(l10n(context).copyTitle),
+                      ),
                       PopupMenuItem(
                         value: 'rename',
                         enabled: !_libraryProtected,

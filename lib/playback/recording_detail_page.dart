@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../storage/models/recording.dart';
+import '../widgets/copy_recording_title.dart';
 import 'audio_playback_service.dart';
 import 'playback_progress.dart';
 
@@ -150,11 +151,18 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
               tooltip: l10n(context).recordingActions,
               enabled: !_actionInProgress,
               onSelected: (action) {
+                if (action == 'copyTitle') {
+                  unawaited(copyRecordingTitle(context, _recording.title));
+                }
                 if (action == 'rename') unawaited(_rename());
                 if (action == 'move') unawaited(_move());
                 if (action == 'share') unawaited(_share());
               },
               itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'copyTitle',
+                  child: Text(l10n(context).copyTitle),
+                ),
                 PopupMenuItem(
                   value: 'rename',
                   enabled: widget.canModify,

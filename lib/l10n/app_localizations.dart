@@ -464,6 +464,24 @@ abstract class AppLocalizations {
   /// **'Play recording'**
   String get playRecording;
 
+  /// No description provided for @copyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy title'**
+  String get copyTitle;
+
+  /// No description provided for @titleCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Title copied'**
+  String get titleCopied;
+
+  /// No description provided for @copyTitleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t copy the title. Please try again.'**
+  String get copyTitleFailed;
+
   /// No description provided for @recordingActions.
   ///
   /// In en, this message translates to:

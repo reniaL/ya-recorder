@@ -196,6 +196,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get playRecording => '播放录音';
 
   @override
+  String get copyTitle => '复制标题';
+
+  @override
+  String get titleCopied => '标题已复制';
+
+  @override
+  String get copyTitleFailed => '复制标题失败，请重试。';
+
+  @override
   String get recordingActions => '录音操作';
 
   @override

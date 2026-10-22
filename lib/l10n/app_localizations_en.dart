@@ -209,6 +209,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playRecording => 'Play recording';
 
   @override
+  String get copyTitle => 'Copy title';
+
+  @override
+  String get titleCopied => 'Title copied';
+
+  @override
+  String get copyTitleFailed => 'Couldn\'t copy the title. Please try again.';
+
+  @override
   String get recordingActions => 'Recording options';
 
   @override
