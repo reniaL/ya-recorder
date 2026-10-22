@@ -3,6 +3,7 @@
   "appTitle": "Yaya Recorder",
   "settings": "Settings",
   "recordingSettingsGroup": "Recording",
+  "recordingManagementGroup": "Recording management",
   "appearanceSettingsGroup": "Appearance and language",
   "dataSettingsGroup": "Data management",
   "theme": "Theme",

@@ -18,6 +18,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordingSettingsGroup => 'Recording';
 
   @override
+  String get recordingManagementGroup => 'Recording management';
+
+  @override
   String get appearanceSettingsGroup => 'Appearance and language';
 
   @override

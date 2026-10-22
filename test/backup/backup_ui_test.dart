@@ -584,6 +584,11 @@ void main() {
         await store.open();
       });
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('backupSettings')),
+        150,
+      );
+      await tester.pumpAndSettle();
       expect(find.byKey(const Key('backupSettings')), findsOneWidget);
       await tester.runAsync(() async {
         unawaited(controller.startImport());

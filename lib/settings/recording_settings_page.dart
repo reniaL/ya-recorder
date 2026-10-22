@@ -19,6 +19,8 @@ class RecordingSettingsPage extends StatefulWidget {
     this.onLanguageChanged,
     this.backupController,
     this.onOpenBackup,
+    this.onOpenFolders,
+    this.onOpenRecentlyDeleted,
   });
 
   final RecordingStore store;
@@ -27,6 +29,8 @@ class RecordingSettingsPage extends StatefulWidget {
   final ValueChanged<AppLanguage>? onLanguageChanged;
   final BackupController? backupController;
   final VoidCallback? onOpenBackup;
+  final VoidCallback? onOpenFolders;
+  final VoidCallback? onOpenRecentlyDeleted;
 
   @override
   State<RecordingSettingsPage> createState() => _RecordingSettingsPageState();
@@ -567,6 +571,26 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                           child: Text(l10n(context).retryLanguage),
                         ),
                     ],
+                    _sectionHeading(
+                      l10n(context).recordingManagementGroup,
+                      'recordingManagementGroup',
+                    ),
+                    ListTile(
+                      key: const Key('manageFoldersSettings'),
+                      title: Text(l10n(context).manageFolders),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: _savingTheme || _savingLanguage || _savingFormat
+                          ? null
+                          : widget.onOpenFolders,
+                    ),
+                    ListTile(
+                      key: const Key('recentlyDeletedSettings'),
+                      title: Text(l10n(context).recentlyDeleted),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: _savingTheme || _savingLanguage || _savingFormat
+                          ? null
+                          : widget.onOpenRecentlyDeleted,
+                    ),
                     if (widget.backupController != null)
                       _sectionHeading(
                         l10n(context).dataSettingsGroup,

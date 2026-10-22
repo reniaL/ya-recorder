@@ -161,9 +161,7 @@ void main() {
       final store = _RecordingStoreSpy();
       await tester.pumpWidget(MyApp(recordingStore: store));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('更多').first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('设置'));
+      await tester.tap(find.byTooltip('设置'));
       await tester.pumpAndSettle();
       expect(
         tester.getTopLeft(find.byKey(const Key('recordingSettingsGroup'))).dy,
@@ -173,13 +171,18 @@ void main() {
               .dy,
         ),
       );
+      await tester.ensureVisible(find.byKey(const Key('dataSettingsGroup')));
       expect(
         tester.getTopLeft(find.byKey(const Key('appearanceSettingsGroup'))).dy,
         lessThan(
           tester.getTopLeft(find.byKey(const Key('dataSettingsGroup'))).dy,
         ),
       );
-      await tester.ensureVisible(find.byKey(const Key('backupSettings')));
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('backupSettings')),
+        150,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('backupSettings')));
       await tester.pumpAndSettle();
       expect(find.text('备份与恢复'), findsOneWidget);
@@ -258,9 +261,7 @@ void main() {
       tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
       await tester.pumpAndSettle();
       expect(brightness(), Brightness.light);
-      await tester.tap(find.byType(PopupMenuButton<String>).first);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('设置'));
+      await tester.tap(find.byKey(const Key('openSettings')));
       await tester.pumpAndSettle();
       events.add(
         const RecordingStateChanged(
@@ -335,12 +336,18 @@ void main() {
       }
 
       Future<void> language(String code, String settingsLabel) async {
-        await tester.tap(
-          find.byTooltip(settingsLabel == '设置' ? '更多' : 'More').first,
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text(settingsLabel));
-        await tester.pumpAndSettle();
+        if (find
+            .byKey(const Key('recordingSettingsMenu'))
+            .evaluate()
+            .isNotEmpty) {
+          await tester.tap(find.byKey(const Key('recordingSettingsMenu')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(settingsLabel));
+          await tester.pumpAndSettle();
+        } else {
+          await tester.tap(find.byTooltip(settingsLabel));
+          await tester.pumpAndSettle();
+        }
         await tester.tap(find.byKey(const Key('appLanguage')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(Key('chooseLanguage-$code')));
@@ -511,14 +518,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('No recordings yet'), findsOneWidget);
       expect(tester.takeException(), isNull);
-      Future<void> openMore(String label) async {
-        await tester.tap(find.byTooltip('More'));
+      Future<void> openManagement(String label) async {
+        await tester.tap(find.byTooltip('Settings'));
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(find.text(label), 150);
         await tester.pumpAndSettle();
         await tester.tap(find.text(label));
         await tester.pumpAndSettle();
       }
 
-      await openMore('Manage folders');
+      await openManagement('Manage folders');
       await tester.tap(find.text('Create folder'));
       await tester.pumpAndSettle();
       expect(find.text('Folder name'), findsOneWidget);
@@ -527,8 +536,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
-      await openMore('Recently Deleted');
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await openManagement('Recently Deleted');
       expect(tester.takeException(), isNull);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       events.add(
@@ -592,9 +605,7 @@ void main() {
     expectedStartFormat = RecordingFormat.mp3;
     await tester.pumpWidget(MyApp(recordingStore: store));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('设置'));
+    await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
     await tester.pumpAndSettle();
@@ -699,9 +710,7 @@ void main() {
     expect(store.defaultFormat, RecordingFormat.aac);
     expect(find.text('开始录音'), findsOneWidget);
     expect(invokedMethods.where((method) => method == 'start'), hasLength(1));
-    await tester.tap(find.byTooltip('更多'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('设置'));
+    await tester.tap(find.byTooltip('设置'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
     await tester.pumpAndSettle();
@@ -742,9 +751,7 @@ void main() {
       expect(store.defaultFormat, RecordingFormat.mp3);
       expect(find.text('开始录音'), findsOneWidget);
       expect(invokedMethods.where((m) => m == 'start').length, 1);
-      await tester.tap(find.byTooltip('更多'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('设置'));
+      await tester.tap(find.byTooltip('设置'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('defaultRecordingFormat')));
       await tester.pumpAndSettle();
@@ -993,7 +1000,7 @@ void main() {
   });
 
   testWidgets(
-    'recently deleted opens from More and restored recordings refresh on return',
+    'recently deleted returns to settings and restored recordings refresh the library',
     (tester) async {
       final store = _RecordingStoreSpy()..recordings = [_recording('one')];
       await store.softDeleteRecording(
@@ -1007,9 +1014,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('播放进度测试'), findsNothing);
-      await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+      await tester.tap(find.byKey(const Key('openSettings')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('最近删除'));
+      await tester.ensureVisible(
+        find.byKey(const Key('recentlyDeletedSettings')),
+      );
+      await tester.tap(find.byKey(const Key('recentlyDeletedSettings')));
       await tester.pumpAndSettle();
       expect(find.text('播放进度测试'), findsOneWidget);
       expect(find.text('开始录音'), findsNothing);
@@ -1018,6 +1028,9 @@ void main() {
       await tester.tap(find.text('恢复'));
       await tester.pumpAndSettle();
       expect(find.text('最近删除为空'), findsOneWidget);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('设置'), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('全部录音'), findsOneWidget);
@@ -2124,9 +2137,14 @@ void main() {
     await tester.pumpWidget(MyApp(recordingStore: recordingStore));
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+    await tester.tap(find.byKey(const Key('openSettings')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('文件夹管理'));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('manageFoldersSettings')),
+      150,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manageFoldersSettings')));
     await tester.pumpAndSettle();
     expect(find.text('文件夹管理'), findsOneWidget);
 
@@ -2315,9 +2333,14 @@ void main() {
   ) async {
     await tester.pumpWidget(MyApp(recordingStore: store));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+    await tester.tap(find.byKey(const Key('openSettings')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('manageFoldersItem')));
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('manageFoldersSettings')),
+      150,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('manageFoldersSettings')));
     await tester.pumpAndSettle();
   }
 
@@ -2331,6 +2354,29 @@ void main() {
       ),
     )
     ..recordings = [_recording('one')];
+
+  testWidgets(
+    'settings folder entry returns or browses directly to the library',
+    (tester) async {
+      final store = folderStore(1);
+      await store.moveRecording(recordingId: 'one', folderId: 'folder-0');
+      await openFolderManagement(tester, store);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('设置'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('manageFoldersSettings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('folder-0')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('openSettings')), findsOneWidget);
+      expect(find.text('Folder 0'), findsOneWidget);
+      expect(find.byKey(const Key('recordingRow-one')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.text('设置'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   for (final language in AppLanguage.values) {
     for (final brightness in Brightness.values) {
@@ -2539,6 +2585,9 @@ void main() {
         'folder-2',
         'folder-0',
       ]);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('设置'), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('folderScopeSelector')));
@@ -2784,9 +2833,12 @@ void main() {
       await tester.pumpWidget(MyApp(recordingStore: recordingStore));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('manageFoldersMenu')));
+      await tester.tap(find.byKey(const Key('openSettings')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('文件夹管理'));
+      await tester.ensureVisible(
+        find.byKey(const Key('manageFoldersSettings')),
+      );
+      await tester.tap(find.byKey(const Key('manageFoldersSettings')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('folderActions-folder-project')));
       await tester.pumpAndSettle();

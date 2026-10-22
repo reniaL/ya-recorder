@@ -18,6 +18,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingSettingsGroup => '录音';
 
   @override
+  String get recordingManagementGroup => '录音管理';
+
+  @override
   String get appearanceSettingsGroup => '外观与语言';
 
   @override

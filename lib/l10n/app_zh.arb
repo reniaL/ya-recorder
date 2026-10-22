@@ -3,6 +3,7 @@
   "appTitle": "丫丫录音",
   "settings": "设置",
   "recordingSettingsGroup": "录音",
+  "recordingManagementGroup": "录音管理",
   "appearanceSettingsGroup": "外观与语言",
   "dataSettingsGroup": "数据管理",
   "theme": "主题",

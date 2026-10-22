@@ -357,13 +357,21 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       if (!mounted) return;
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (_) => RecordingSettingsPage(
+          builder: (settingsContext) => RecordingSettingsPage(
             store: store,
             service: widget.recordingService,
             onThemeChanged: widget.onThemeChanged,
             onLanguageChanged: _languageChanged,
             backupController: _backupController,
             onOpenBackup: _openBackup,
+            onOpenFolders: () => _openFolderManagement(
+              onBrowse: () {
+                if (settingsContext.mounted) {
+                  Navigator.of(settingsContext).pop();
+                }
+              },
+            ),
+            onOpenRecentlyDeleted: _openRecentlyDeleted,
           ),
         ),
       );
@@ -927,7 +935,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     }
   }
 
-  Future<void> _openFolderManagement() async {
+  Future<void> _openFolderManagement({VoidCallback? onBrowse}) async {
     final store = await _getRecordingStore();
     if (!mounted) return;
     final selected = await Navigator.of(context).push<String>(
@@ -961,6 +969,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     if (!mounted) {
       return;
     }
+    if (selected != null) onBrowse?.call();
     try {
       final folders = await (await _getRecordingStore()).listFolders();
       if (!mounted) {
@@ -1646,35 +1655,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                 _isSearching ? Icons.close_rounded : Icons.search_rounded,
               ),
             ),
-            PopupMenuButton<String>(
-              constraints: AppMenuStyle.constraints(context),
-              enabled: !_isSelecting && !_isSubmitting,
-              key: const Key('manageFoldersMenu'),
-              tooltip: l10n(context).more,
-              onSelected: (action) {
-                if (action == 'folders') {
-                  _openFolderManagement();
-                } else if (action == 'recentlyDeleted') {
-                  _openRecentlyDeleted();
-                } else if (action == 'settings') {
-                  _openRecordingSettings();
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  key: Key('manageFoldersItem'),
-                  value: 'folders',
-                  child: Text(l10n(context).manageFolders),
-                ),
-                PopupMenuItem(
-                  value: 'recentlyDeleted',
-                  child: Text(l10n(context).recentlyDeleted),
-                ),
-                PopupMenuItem(
-                  value: 'settings',
-                  child: Text(l10n(context).settings),
-                ),
-              ],
+            IconButton(
+              key: const Key('openSettings'),
+              tooltip: l10n(context).settings,
+              onPressed: _isSelecting || _isSubmitting
+                  ? null
+                  : _openRecordingSettings,
+              icon: const Icon(Icons.settings_outlined),
             ),
           ],
         ),

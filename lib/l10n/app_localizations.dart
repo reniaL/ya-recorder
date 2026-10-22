@@ -116,6 +116,12 @@ abstract class AppLocalizations {
   /// **'Recording'**
   String get recordingSettingsGroup;
 
+  /// No description provided for @recordingManagementGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording management'**
+  String get recordingManagementGroup;
+
   /// No description provided for @appearanceSettingsGroup.
   ///
   /// In en, this message translates to:

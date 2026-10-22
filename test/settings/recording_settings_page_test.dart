@@ -65,6 +65,8 @@ void main() {
           'UIR-08 grouped adaptive preferences $language $brightness $scale',
           (tester) async {
             final size = Size(scale == 1 ? 390 : 320, 720);
+            var foldersOpened = 0;
+            var deletedOpened = 0;
             await tester.binding.setSurfaceSize(size);
             addTearDown(() => tester.binding.setSurfaceSize(null));
             await tester.pumpWidget(
@@ -79,7 +81,12 @@ void main() {
                   ).copyWith(textScaler: TextScaler.linear(scale)),
                   child: child!,
                 ),
-                home: RecordingSettingsPage(store: store, service: service),
+                home: RecordingSettingsPage(
+                  store: store,
+                  service: service,
+                  onOpenFolders: () => foldersOpened++,
+                  onOpenRecentlyDeleted: () => deletedOpened++,
+                ),
               ),
             );
             await tester.pumpAndSettle();
@@ -144,13 +151,27 @@ void main() {
             );
             expect(
               material.color,
-              Theme.of(context).colorScheme.surfaceContainerLow,
+              Theme.of(
+                tester.element(themeRow),
+              ).colorScheme.surfaceContainerLow,
             );
             expect(tester.getSize(selected).height, greaterThanOrEqualTo(48));
             expect(tester.takeException(), isNull);
             await tester.binding.handlePopRoute();
             await tester.pumpAndSettle();
             expect(store.writes, 0);
+            final folders = find.byKey(const Key('manageFoldersSettings'));
+            final deleted = find.byKey(const Key('recentlyDeletedSettings'));
+            await tester.scrollUntilVisible(folders, 150);
+            expect(find.text(strings.recordingManagementGroup), findsOneWidget);
+            expect(find.text(strings.manageFolders), findsOneWidget);
+            await tester.tap(folders);
+            await tester.scrollUntilVisible(deleted, 150);
+            expect(find.text(strings.recentlyDeleted), findsOneWidget);
+            await tester.tap(deleted);
+            expect(foldersOpened, 1);
+            expect(deletedOpened, 1);
+            expect(tester.takeException(), isNull);
           },
         );
       }
