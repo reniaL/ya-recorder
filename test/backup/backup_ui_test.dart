@@ -1,3 +1,4 @@
+import 'package:ya_recorder/theme/app_palette.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -34,6 +35,8 @@ class _SettingsStore extends RecordingStore {
       );
   @override
   Future<ThemeMode> getThemeMode() async => ThemeMode.system;
+  @override
+  Future<AppPalette> getAppPalette() async => AppPalette.teal;
   @override
   Future<AppLanguage> getAppLanguage() async => AppLanguage.english;
   @override

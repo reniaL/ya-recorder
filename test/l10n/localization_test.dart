@@ -1,3 +1,4 @@
+import 'package:ya_recorder/theme/app_palette.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -106,6 +107,8 @@ void main() {
             tester.getSemantics(find.byKey(const Key('appLanguage'))).value,
             language.nativeName,
           );
+          await tester.ensureVisible(find.byKey(const Key('appLanguage')));
+          await tester.pumpAndSettle();
           await tester.tap(find.byKey(const Key('appLanguage')));
           await tester.pumpAndSettle();
           for (final option in AppLanguage.values) {
@@ -147,6 +150,8 @@ class _Store extends RecordingStore {
   Future<AppLanguage> getAppLanguage() async => language;
   @override
   Future<ThemeMode> getThemeMode() async => ThemeMode.system;
+  @override
+  Future<AppPalette> getAppPalette() async => AppPalette.teal;
   @override
   Future<RecordingFormat> getDefaultRecordingFormat() async =>
       RecordingFormat.m4a;

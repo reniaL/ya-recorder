@@ -33,6 +33,8 @@ String localizedMessage(BuildContext context, String identifier) {
   return switch (identifier) {
     'aacUnavailable' => strings.aacUnavailable,
     'themeReadFailed' => strings.themeReadFailed,
+    'paletteReadFailed' => strings.paletteReadFailed,
+    'paletteSaveFailed' => strings.paletteSaveFailed,
     'themeSaveFailed' => strings.themeSaveFailed,
     'formatReadFailed' => strings.formatReadFailed,
     'formatSaveFailed' => strings.formatSaveFailed,

@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_palette.dart';
+
 /// Shared visual rules for action menus and preference choices.
 abstract final class AppMenuStyle {
   static const radius = 16.0;
@@ -25,13 +27,29 @@ abstract final class AppMenuStyle {
   );
 }
 
-ThemeData buildAppTheme(Brightness brightness) {
+ThemeData buildAppTheme(
+  Brightness brightness, {
+  AppPalette palette = AppPalette.teal,
+}) {
   final dark = brightness == Brightness.dark;
+  final duckYellow = palette == AppPalette.duckYellow;
   final colors =
       ColorScheme.fromSeed(
-        seedColor: const Color(0xff0b6657),
+        seedColor: palette.seedColor,
         brightness: brightness,
       ).copyWith(
+        primary: duckYellow
+            ? (dark ? const Color(0xffe4c451) : const Color(0xff705d00))
+            : null,
+        onPrimary: duckYellow
+            ? (dark ? const Color(0xff282100) : Colors.white)
+            : null,
+        primaryContainer: duckYellow
+            ? (dark ? const Color(0xff514400) : const Color(0xfffff0ac))
+            : null,
+        onPrimaryContainer: duckYellow
+            ? (dark ? const Color(0xfffff0ac) : const Color(0xff282100))
+            : null,
         surface: dark ? const Color(0xff141615) : const Color(0xfff8f9f8),
         surfaceContainerLowest: dark ? const Color(0xff0f1110) : Colors.white,
         surfaceContainerLow: dark
@@ -48,7 +66,25 @@ ThemeData buildAppTheme(Brightness brightness) {
             : const Color(0xffdfe3e0),
       );
   final theme = ThemeData(colorScheme: colors, useMaterial3: true);
+  // Yellow text needs a darker tone on light surfaces. Keep distinct
+  // semantic roles for text; use duck yellow only for solid primary actions.
+  final actionBackground = dark ? const Color(0xffe4c451) : palette.seedColor;
+  const actionForeground = Color(0xff282100);
   return theme.copyWith(
+    filledButtonTheme: duckYellow
+        ? FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              backgroundColor: actionBackground,
+              foregroundColor: actionForeground,
+            ),
+          )
+        : null,
+    floatingActionButtonTheme: duckYellow
+        ? FloatingActionButtonThemeData(
+            backgroundColor: actionBackground,
+            foregroundColor: actionForeground,
+          )
+        : null,
     scaffoldBackgroundColor: colors.surface,
     appBarTheme: AppBarTheme(
       backgroundColor: colors.surface,

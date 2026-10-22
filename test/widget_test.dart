@@ -1,3 +1,4 @@
+import 'package:ya_recorder/theme/app_palette.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -291,6 +292,21 @@ void main() {
           mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
         );
       }
+      await tester.tap(find.byKey(const Key('themePalette')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choosePalette-duckYellow')));
+      await tester.pumpAndSettle();
+      expect(store.palette, AppPalette.duckYellow);
+      final colors = Theme.of(
+        tester.element(find.byKey(const Key('themePalette'))),
+      ).colorScheme;
+      expect(
+        colors.primary,
+        buildAppTheme(
+          Brightness.dark,
+          palette: AppPalette.duckYellow,
+        ).colorScheme.primary,
+      );
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('00:12'), findsOneWidget);
@@ -300,6 +316,34 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await open();
       expect(brightness(), Brightness.dark);
+      expect(
+        Theme.of(
+          tester.element(find.byType(Scaffold).first),
+        ).colorScheme.primary,
+        colors.primary,
+      );
+      await tester.tap(find.byKey(const Key('openSettings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('themeMode')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('chooseTheme-system')));
+      await tester.pumpAndSettle();
+      for (final systemBrightness in [Brightness.light, Brightness.dark]) {
+        tester.platformDispatcher.platformBrightnessTestValue =
+            systemBrightness;
+        await tester.pumpAndSettle();
+        expect(brightness(), systemBrightness);
+        expect(store.palette, AppPalette.duckYellow);
+        expect(
+          Theme.of(
+            tester.element(find.byKey(const Key('themePalette'))),
+          ).colorScheme.primary,
+          buildAppTheme(
+            systemBrightness,
+            palette: AppPalette.duckYellow,
+          ).colorScheme.primary,
+        );
+      }
     },
   );
 
@@ -359,6 +403,21 @@ void main() {
 
       await open();
       await playback.play(recording);
+      backend.emitPosition(const Duration(seconds: 7));
+      await tester.pump();
+      final position = playback.status.position;
+      await tester.tap(find.byKey(const Key('openSettings')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('themePalette')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choosePalette-duckYellow')));
+      await tester.pumpAndSettle();
+      expect(playback.status.position, position);
+      expect(backend.playCalls, 1);
+      expect(backend.pauseCalls, 0);
+      expect(playback.status.recordingId, recording.id);
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
       await language('en', '设置');
       expect(playback.status.state, PlaybackState.playing);
       expect(playback.status.recordingId, recording.id);
@@ -4179,6 +4238,12 @@ void main() {
 class _RecordingStoreSpy extends RecordingStore {
   _RecordingStoreSpy()
     : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
+
+  AppPalette palette = AppPalette.teal;
+  @override
+  Future<AppPalette> getAppPalette() async => palette;
+  @override
+  Future<void> setAppPalette(AppPalette value) async => palette = value;
 
   AppLanguage language = AppLanguage.simplifiedChinese;
   @override

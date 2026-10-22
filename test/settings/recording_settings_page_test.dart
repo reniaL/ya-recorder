@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+import 'package:ya_recorder/theme/app_palette.dart';
 import 'package:ya_recorder/l10n/localization.dart';
 import 'package:ya_recorder/theme/app_theme.dart';
 import 'dart:async';
@@ -223,6 +225,7 @@ void main() {
       await open(tester);
       for (final entry in {
         'appLanguage': ['chooseLanguage-zh', 'chooseLanguage-en'],
+        'themePalette': ['choosePalette-teal', 'choosePalette-duckYellow'],
         'themeMode': [
           'chooseTheme-system',
           'chooseTheme-light',
@@ -240,6 +243,144 @@ void main() {
         expect(find.byKey(const Key('settingsChoiceList')), findsNothing);
       }
       expect(store.writes, 0);
+    },
+  );
+
+  for (final language in AppLanguage.values) {
+    for (final brightness in Brightness.values) {
+      testWidgets(
+        'yellow palette selector fits 320px 2x $language $brightness',
+        (tester) async {
+          store.palette = AppPalette.duckYellow;
+          await tester.binding.setSurfaceSize(const Size(320, 640));
+          addTearDown(() => tester.binding.setSurfaceSize(null));
+          final semantics = tester.ensureSemantics();
+          await tester.pumpWidget(
+            MaterialApp(
+              locale: language.locale,
+              supportedLocales: AppLocalizations.supportedLocales,
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              theme: buildAppTheme(brightness, palette: store.palette),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(2)),
+                child: child!,
+              ),
+              home: RecordingSettingsPage(store: store, service: service),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final row = find.byKey(const Key('themePalette'));
+          await tester.scrollUntilVisible(row, 150);
+          await tester.ensureVisible(row);
+          await tester.pumpAndSettle();
+          await tester.tap(row);
+          await tester.pumpAndSettle();
+          final selected = find.byKey(const Key('choosePalette-duckYellow'));
+          expectEqualUnclippedRows(tester, [
+            find.byKey(const Key('choosePalette-teal')),
+            selected,
+          ]);
+          expect(
+            tester.getSemantics(selected).label,
+            lookupAppLocalizations(language.locale).duckYellowPalette,
+          );
+          expect(
+            tester.getSemantics(selected).flagsCollection.isSelected,
+            Tristate.isTrue,
+          );
+          expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+          expect(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is Container &&
+                  widget.decoration is BoxDecoration &&
+                  (widget.decoration! as BoxDecoration).color ==
+                      AppPalette.duckYellow.seedColor,
+            ),
+            findsOneWidget,
+          );
+          await tester.tap(selected);
+          await tester.pumpAndSettle();
+          expect(store.paletteWrites, 0);
+          expect(tester.takeException(), isNull);
+          semantics.dispose();
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'palette cancel, failed save and retry retain the applied value',
+    (tester) async {
+      await open(tester);
+      final strings = l10n(
+        tester.element(find.byKey(const Key('themePalette'))),
+      );
+      Future<void> menu() async {
+        await tester.ensureVisible(find.byKey(const Key('themePalette')));
+        await tester.tap(find.byKey(const Key('themePalette')));
+        await tester.pumpAndSettle();
+      }
+
+      await menu();
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(store.paletteWrites, 0);
+      store.failWrite = true;
+      await menu();
+      await tester.tap(find.byKey(const Key('choosePalette-duckYellow')));
+      await tester.pumpAndSettle();
+      expect(store.palette, AppPalette.teal);
+      expect(find.text(strings.paletteSaveFailed), findsOneWidget);
+      store.failWrite = false;
+      await menu();
+      await tester.tap(find.byKey(const Key('choosePalette-duckYellow')));
+      await tester.pumpAndSettle();
+      expect(store.palette, AppPalette.duckYellow);
+      expect(find.text(strings.paletteSaveFailed), findsNothing);
+      expect(store.themeMode, ThemeMode.system);
+      expect(store.language, AppLanguage.simplifiedChinese);
+    },
+  );
+
+  testWidgets(
+    'palette read retries; pending save blocks repeat writes and back',
+    (tester) async {
+      store.failPaletteRead = true;
+      await open(tester);
+      final row = find.byKey(const Key('themePalette'));
+      final strings = l10n(tester.element(row));
+      expect(find.text(strings.paletteReadFailed), findsOneWidget);
+      store.failPaletteRead = false;
+      await tester.ensureVisible(find.text(strings.retryPalette));
+      await tester.tap(find.text(strings.retryPalette));
+      await tester.pumpAndSettle();
+      expect(find.text(strings.paletteReadFailed), findsNothing);
+      final gate = Completer<void>();
+      store.writeGate = gate.future;
+      await tester.ensureVisible(row);
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('choosePalette-duckYellow')));
+      await tester.pump();
+      expect(tester.widget<ListTile>(row).onTap, isNull);
+      expect(
+        tester.widget<ListTile>(find.byKey(const Key('themeMode'))).onTap,
+        isNull,
+      );
+      expect(
+        tester.widget<ListTile>(find.byKey(const Key('appLanguage'))).onTap,
+        isNull,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      expect(find.byType(RecordingSettingsPage), findsOneWidget);
+      expect(store.paletteWrites, 1);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(store.palette, AppPalette.duckYellow);
     },
   );
 
@@ -564,6 +705,23 @@ void main() {
 
 class _Store extends RecordingStore {
   _Store() : super(databasePath: 'unused', databaseFactory: databaseFactoryFfi);
+  AppPalette palette = AppPalette.teal;
+  bool failPaletteRead = false;
+  int paletteWrites = 0;
+  @override
+  Future<AppPalette> getAppPalette() async {
+    if (failPaletteRead) throw StateError('read failed');
+    return palette;
+  }
+
+  @override
+  Future<void> setAppPalette(AppPalette value) async {
+    paletteWrites++;
+    if (writeGate != null) await writeGate;
+    if (failWrite) throw StateError('write failed');
+    palette = value;
+  }
+
   ThemeMode themeMode = ThemeMode.system;
   AppLanguage language = AppLanguage.simplifiedChinese;
   bool failLanguageRead = false;

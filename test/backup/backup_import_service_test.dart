@@ -432,7 +432,7 @@ void main() {
   );
 
   test(
-    'v7 upgrade only adds commit table and preserves audio, rows and preferences',
+    'v7 upgrade adds commit table and palette while preserving audio, rows and preferences',
     () async {
       await run();
       await store.setDefaultRecordingFormat(RecordingFormat.mp3);
@@ -445,6 +445,7 @@ void main() {
       await store.close();
       final db = await databaseFactoryFfi.openDatabase(paths.databasePath);
       await db.execute('DROP TABLE backup_import_commits');
+      await db.execute('ALTER TABLE app_preferences DROP COLUMN theme_palette');
       await db.execute('PRAGMA user_version = 7');
       await db.close();
       await store.open();

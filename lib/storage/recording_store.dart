@@ -7,6 +7,7 @@ import 'package:path/path.dart' as path;
 import '../backup/library_coordinator.dart';
 import '../recording/recording_format.dart';
 import '../settings/app_language.dart';
+import '../theme/app_palette.dart';
 import 'models/recording.dart';
 import 'models/recording_folder.dart';
 
@@ -127,7 +128,7 @@ class RecordingStore {
     );
   }
 
-  static const _schemaVersion = 8;
+  static const _schemaVersion = 9;
 
   final String databasePath;
   final sqflite.DatabaseFactory _databaseFactory;
@@ -160,6 +161,21 @@ class RecordingStore {
     final database = await _openDatabase();
     final rows = await database.query('app_preferences', where: 'id = 1');
     return AppLanguage.fromCode(rows.isEmpty ? null : rows.single['language']);
+  }
+
+  Future<AppPalette> getAppPalette() async {
+    final database = await _openDatabase();
+    final rows = await database.query('app_preferences', where: 'id = 1');
+    final value = rows.isEmpty ? null : rows.single['theme_palette'];
+    return AppPalette.values.firstWhere(
+      (palette) => palette.name == value,
+      orElse: () => AppPalette.teal,
+    );
+  }
+
+  Future<void> setAppPalette(AppPalette palette) async {
+    final database = await _openDatabase();
+    await _setAppPreference(database, 'theme_palette', palette.name);
   }
 
   Future<void> setAppLanguage(AppLanguage language) async {
@@ -675,6 +691,7 @@ class RecordingStore {
             await _migrateAacFormats(database);
           }
           if (oldVersion < 8) await _createImportCommitSchema(database);
+          if (oldVersion < 9) await _addPalettePreference(database);
         },
       ),
     );
@@ -693,6 +710,7 @@ class RecordingStore {
   static Future<void> _createSchema(sqflite.Database database) async {
     await _createPreferencesSchema(database);
     await _createAppPreferencesSchema(database);
+    await _addPalettePreference(database);
     await database.execute('''
       CREATE TABLE folders (
         id TEXT PRIMARY KEY NOT NULL,
@@ -750,6 +768,12 @@ class RecordingStore {
       language TEXT NOT NULL DEFAULT 'zh' CHECK(language IN ('zh', 'en'))
     )
   ''');
+
+  static Future<void> _addPalettePreference(
+    sqflite.Database database,
+  ) => database.execute(
+    "ALTER TABLE app_preferences ADD COLUMN theme_palette TEXT NOT NULL DEFAULT 'teal' CHECK(theme_palette IN ('teal', 'duckYellow'))",
+  );
 
   static Future<void> _createPreferencesSchema(
     sqflite.Database database, {

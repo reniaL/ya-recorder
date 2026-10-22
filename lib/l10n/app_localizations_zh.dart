@@ -27,7 +27,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dataSettingsGroup => '数据管理';
 
   @override
-  String get theme => '主题';
+  String get theme => '外观模式';
+
+  @override
+  String get themePalette => '主题配色';
+
+  @override
+  String get tealPalette => '青绿色';
+
+  @override
+  String get duckYellowPalette => '小黄鸭黄';
+
+  @override
+  String get retryPalette => '重试读取主题配色';
+
+  @override
+  String get paletteReadFailed => '无法读取主题配色，请重试。';
+
+  @override
+  String get paletteSaveFailed => '无法保存主题配色，请重试。';
 
   @override
   String get systemTheme => '跟随系统';

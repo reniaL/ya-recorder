@@ -1,4 +1,5 @@
 import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
 import 'dart:math' as math;
 
 import '../l10n/localization.dart';
@@ -16,6 +17,7 @@ class RecordingSettingsPage extends StatefulWidget {
     required this.store,
     required this.service,
     this.onThemeChanged,
+    this.onPaletteChanged,
     this.onLanguageChanged,
     this.backupController,
     this.onOpenBackup,
@@ -26,6 +28,7 @@ class RecordingSettingsPage extends StatefulWidget {
   final RecordingStore store;
   final RecordingService service;
   final ValueChanged<ThemeMode>? onThemeChanged;
+  final ValueChanged<AppPalette>? onPaletteChanged;
   final ValueChanged<AppLanguage>? onLanguageChanged;
   final BackupController? backupController;
   final VoidCallback? onOpenBackup;
@@ -39,6 +42,7 @@ class RecordingSettingsPage extends StatefulWidget {
 class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   final _languageAnchorKey = GlobalKey();
   final _themeAnchorKey = GlobalKey();
+  final _paletteAnchorKey = GlobalKey();
   final _formatAnchorKey = GlobalKey();
   RecordingFormat? _format;
   List<RecordingFormat> _available = [];
@@ -52,6 +56,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     super.initState();
     _load();
     _loadTheme();
+    _loadPalette();
     _loadLanguage();
   }
 
@@ -75,7 +80,12 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   }
 
   Future<void> _chooseLanguage() async {
-    if (_savingLanguage || _savingTheme || _language == null) return;
+    if (_savingLanguage ||
+        _savingTheme ||
+        _savingPalette ||
+        _language == null) {
+      return;
+    }
     final selected = await _showChoiceMenu<AppLanguage>(
       anchorKey: _languageAnchorKey,
       selected: _language!,
@@ -92,7 +102,12 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   }
 
   Future<void> _selectLanguage(AppLanguage selected) async {
-    if (_savingLanguage || _savingTheme || selected == _language) return;
+    if (_savingLanguage ||
+        _savingTheme ||
+        _savingPalette ||
+        selected == _language) {
+      return;
+    }
     final previous = _language!;
     setState(() {
       _savingLanguage = true;
@@ -118,6 +133,63 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
     }
   }
 
+  AppPalette? _palette;
+  bool _savingPalette = false;
+  String? _paletteError;
+
+  String _paletteLabel(AppPalette palette) => switch (palette) {
+    AppPalette.teal => l10n(context).tealPalette,
+    AppPalette.duckYellow => l10n(context).duckYellowPalette,
+  };
+
+  Future<void> _loadPalette() async {
+    try {
+      final palette = await widget.store.getAppPalette();
+      if (!mounted) return;
+      setState(() {
+        _palette = palette;
+        _paletteError = null;
+      });
+      widget.onPaletteChanged?.call(palette);
+    } catch (_) {
+      if (mounted) setState(() => _paletteError = 'paletteReadFailed');
+    }
+  }
+
+  Future<void> _choosePalette() async {
+    if (_savingPalette || _savingTheme || _savingLanguage || _palette == null) {
+      return;
+    }
+    final selected = await _showChoiceMenu<AppPalette>(
+      anchorKey: _paletteAnchorKey,
+      selected: _palette!,
+      choices: [
+        for (final palette in AppPalette.values)
+          _PopupChoice(
+            palette,
+            _paletteLabel(palette),
+            key: Key('choosePalette-${palette.name}'),
+            swatch: palette.seedColor,
+          ),
+      ],
+    );
+    if (selected == null || !mounted || selected == _palette) return;
+    setState(() {
+      _savingPalette = true;
+      _paletteError = null;
+    });
+    try {
+      await widget.store.setAppPalette(selected);
+      if (!mounted) return;
+      setState(() => _palette = selected);
+      widget.onPaletteChanged?.call(selected);
+    } catch (_) {
+      if (mounted) setState(() => _paletteError = 'paletteSaveFailed');
+    } finally {
+      if (mounted) setState(() => _savingPalette = false);
+    }
+  }
+
   ThemeMode? _themeMode;
   bool _savingTheme = false;
   String? _themeError;
@@ -137,7 +209,12 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   }
 
   Future<void> _chooseTheme() async {
-    if (_savingTheme || _savingLanguage || _themeMode == null) return;
+    if (_savingTheme ||
+        _savingPalette ||
+        _savingLanguage ||
+        _themeMode == null) {
+      return;
+    }
     final selected = await _showChoiceMenu<ThemeMode>(
       anchorKey: _themeAnchorKey,
       selected: _themeMode!,
@@ -154,7 +231,12 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   }
 
   Future<void> _selectTheme(ThemeMode selected) async {
-    if (_savingTheme || _savingLanguage || selected == _themeMode) return;
+    if (_savingTheme ||
+        _savingPalette ||
+        _savingLanguage ||
+        selected == _themeMode) {
+      return;
+    }
     setState(() {
       _savingTheme = true;
       _themeError = null;
@@ -289,7 +371,11 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
           const verticalPadding = 6.0;
           // Reserve the checkmark column in every row and use the tallest
           // choice for all rows, including wrapped descriptions and large text.
-          final textWidth = width - AppMenuStyle.horizontalPadding * 2 - 36;
+          final swatchWidth = choices.any((choice) => choice.swatch != null)
+              ? 36
+              : 0;
+          final textWidth =
+              width - AppMenuStyle.horizontalPadding * 2 - 36 - swatchWidth;
           final theme = Theme.of(context);
           double textHeight(String text, TextStyle style) {
             final painter = TextPainter(
@@ -449,7 +535,11 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_savingTheme && !_savingLanguage && !_savingFormat,
+      canPop:
+          !_savingTheme &&
+          !_savingPalette &&
+          !_savingLanguage &&
+          !_savingFormat,
       child: Scaffold(
         appBar: AppBar(title: Text(l10n(context).settings)),
         body: SafeArea(
@@ -524,6 +614,7 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                         onTap:
                             _themeMode == null ||
                                 _savingTheme ||
+                                _savingPalette ||
                                 _savingLanguage
                             ? null
                             : _chooseTheme,
@@ -541,6 +632,42 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                         ),
                     ],
                     Semantics(
+                      key: _paletteAnchorKey,
+                      value: _palette == null ? null : _paletteLabel(_palette!),
+                      child: _preferenceTile(
+                        tileKey: const Key('themePalette'),
+                        label: l10n(context).themePalette,
+                        value: _palette == null
+                            ? l10n(context).reading
+                            : _paletteLabel(_palette!),
+                        trailing: _savingPalette
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(),
+                              )
+                            : const Icon(Icons.arrow_drop_down_rounded),
+                        onTap:
+                            _palette == null ||
+                                _savingPalette ||
+                                _savingTheme ||
+                                _savingLanguage
+                            ? null
+                            : _choosePalette,
+                      ),
+                    ),
+                    if (_paletteError != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(localizedMessage(context, _paletteError!)),
+                      ),
+                      if (_palette == null)
+                        TextButton(
+                          onPressed: _loadPalette,
+                          child: Text(l10n(context).retryPalette),
+                        ),
+                    ],
+                    Semantics(
                       key: _languageAnchorKey,
                       value: _language?.nativeName,
                       child: _preferenceTile(
@@ -555,7 +682,10 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                               )
                             : Icon(Icons.arrow_drop_down_rounded),
                         onTap:
-                            _language == null || _savingLanguage || _savingTheme
+                            _language == null ||
+                                _savingLanguage ||
+                                _savingTheme ||
+                                _savingPalette
                             ? null
                             : _chooseLanguage,
                       ),
@@ -579,7 +709,11 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                       key: const Key('manageFoldersSettings'),
                       title: Text(l10n(context).manageFolders),
                       trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: _savingTheme || _savingLanguage || _savingFormat
+                      onTap:
+                          _savingTheme ||
+                              _savingPalette ||
+                              _savingLanguage ||
+                              _savingFormat
                           ? null
                           : widget.onOpenFolders,
                     ),
@@ -587,7 +721,11 @@ class _RecordingSettingsPageState extends State<RecordingSettingsPage> {
                       key: const Key('recentlyDeletedSettings'),
                       title: Text(l10n(context).recentlyDeleted),
                       trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: _savingTheme || _savingLanguage || _savingFormat
+                      onTap:
+                          _savingTheme ||
+                              _savingPalette ||
+                              _savingLanguage ||
+                              _savingFormat
                           ? null
                           : widget.onOpenRecentlyDeleted,
                     ),
@@ -627,6 +765,7 @@ class _PopupChoice<T> {
     this.label, {
     required this.key,
     this.subtitle,
+    this.swatch,
     this.enabled = true,
   });
 
@@ -634,6 +773,7 @@ class _PopupChoice<T> {
   final Key key;
   final String label;
   final String? subtitle;
+  final Color? swatch;
   final bool enabled;
 }
 
@@ -671,6 +811,18 @@ class _PopupChoiceTile<T> extends StatelessWidget {
           color: selected ? AppMenuStyle.selectedColor(colors) : null,
           child: Row(
             children: [
+              if (choice.swatch != null) ...[
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: choice.swatch,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colors.outline),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,

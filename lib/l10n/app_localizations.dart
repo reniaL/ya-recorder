@@ -137,8 +137,44 @@ abstract class AppLocalizations {
   /// No description provided for @theme.
   ///
   /// In en, this message translates to:
-  /// **'Theme'**
+  /// **'Appearance mode'**
   String get theme;
+
+  /// No description provided for @themePalette.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme color'**
+  String get themePalette;
+
+  /// No description provided for @tealPalette.
+  ///
+  /// In en, this message translates to:
+  /// **'Teal'**
+  String get tealPalette;
+
+  /// No description provided for @duckYellowPalette.
+  ///
+  /// In en, this message translates to:
+  /// **'Duck yellow'**
+  String get duckYellowPalette;
+
+  /// No description provided for @retryPalette.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry loading theme color'**
+  String get retryPalette;
+
+  /// No description provided for @paletteReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load theme color. Please try again.'**
+  String get paletteReadFailed;
+
+  /// No description provided for @paletteSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save theme color. Please try again.'**
+  String get paletteSaveFailed;
 
   /// No description provided for @systemTheme.
   ///

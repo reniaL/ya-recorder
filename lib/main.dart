@@ -1,4 +1,5 @@
 import 'theme/app_theme.dart';
+import 'theme/app_palette.dart';
 import 'l10n/localization.dart';
 import 'dart:async';
 
@@ -118,11 +119,16 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   AppLanguage _language = AppLanguage.simplifiedChinese;
   ThemeMode _themeMode = ThemeMode.system;
+  AppPalette _palette = AppPalette.teal;
   late final RecordingService _recordingService =
       widget.recordingService ?? RecordingService();
 
   void _setThemeMode(ThemeMode mode) {
     if (mounted) setState(() => _themeMode = mode);
+  }
+
+  void _setPalette(AppPalette palette) {
+    if (mounted) setState(() => _palette = palette);
   }
 
   void _setLanguage(AppLanguage language) {
@@ -136,8 +142,8 @@ class _MyAppState extends State<MyApp> {
       locale: _language.locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
-      theme: buildAppTheme(Brightness.light),
-      darkTheme: buildAppTheme(Brightness.dark),
+      theme: buildAppTheme(Brightness.light, palette: _palette),
+      darkTheme: buildAppTheme(Brightness.dark, palette: _palette),
       themeMode: _themeMode,
       home: RecordingHomePage(
         recordingService: _recordingService,
@@ -145,6 +151,7 @@ class _MyAppState extends State<MyApp> {
         playbackService: widget.playbackService,
         audioShareService: widget.audioShareService,
         onThemeChanged: _setThemeMode,
+        onPaletteChanged: _setPalette,
         onLanguageChanged: _setLanguage,
       ),
     );
@@ -156,6 +163,7 @@ class RecordingHomePage extends StatefulWidget {
     super.key,
     required this.recordingService,
     this.onThemeChanged,
+    this.onPaletteChanged,
     this.onLanguageChanged,
     this.recordingStore,
     this.playbackService,
@@ -164,6 +172,7 @@ class RecordingHomePage extends StatefulWidget {
 
   final RecordingService recordingService;
   final ValueChanged<ThemeMode>? onThemeChanged;
+  final ValueChanged<AppPalette>? onPaletteChanged;
   final ValueChanged<AppLanguage>? onLanguageChanged;
   final RecordingStore? recordingStore;
   final AudioPlaybackService? playbackService;
@@ -273,6 +282,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     _loadCurrentStatus();
     _initializeLibrary();
     unawaited(_loadTheme());
+    unawaited(_loadPalette());
   }
 
   @override
@@ -312,6 +322,16 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       if (mounted) widget.onThemeChanged?.call(mode);
     } catch (_) {
       // Settings offers a retry; keep the system theme while storage is unavailable.
+    }
+  }
+
+  Future<void> _loadPalette() async {
+    if (widget.onPaletteChanged == null) return;
+    try {
+      final palette = await (await _getRecordingStore()).getAppPalette();
+      if (mounted) widget.onPaletteChanged?.call(palette);
+    } catch (_) {
+      // Settings offers a retry; keep teal while storage is unavailable.
     }
   }
 
@@ -402,6 +422,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             store: store,
             service: widget.recordingService,
             onThemeChanged: widget.onThemeChanged,
+            onPaletteChanged: widget.onPaletteChanged,
             onLanguageChanged: _languageChanged,
             backupController: _backupController,
             onOpenBackup: _openBackup,

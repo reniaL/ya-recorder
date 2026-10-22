@@ -1,3 +1,4 @@
+import 'package:ya_recorder/theme/app_palette.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -37,9 +38,11 @@ void main() {
       await store.setDefaultRecordingFormat(RecordingFormat.mp3);
       await Future.wait([
         store.setThemeMode(ThemeMode.dark),
+        store.setAppPalette(AppPalette.duckYellow),
         store.setAppLanguage(AppLanguage.english),
       ]);
       await store.close();
+      expect(await store.getAppPalette(), AppPalette.duckYellow);
       expect(await store.getAppLanguage(), AppLanguage.english);
       expect(await store.getThemeMode(), ThemeMode.dark);
       expect(await store.getDefaultRecordingFormat(), RecordingFormat.mp3);
@@ -61,6 +64,7 @@ void main() {
       );
       var db = await database();
       await db.execute('ALTER TABLE app_preferences DROP COLUMN language');
+      await db.execute('ALTER TABLE app_preferences DROP COLUMN theme_palette');
       await db.execute('DROP TABLE backup_import_commits');
       await db.setVersion(5);
       await store.close();
@@ -85,6 +89,71 @@ void main() {
       await store.setAppLanguage(AppLanguage.english);
       await store.close();
       expect(await store.getAppLanguage(), AppLanguage.english);
+    },
+  );
+
+  test(
+    'palette defaults to teal, persists, and failed writes retain it',
+    () async {
+      expect(await store.getAppPalette(), AppPalette.teal);
+      await store.setAppPalette(AppPalette.duckYellow);
+      await store.close();
+      expect(await store.getAppPalette(), AppPalette.duckYellow);
+      final db = await database();
+      await db.execute(
+        "CREATE TRIGGER fail_palette BEFORE UPDATE OF theme_palette ON app_preferences BEGIN SELECT RAISE(ABORT, 'write failed'); END",
+      );
+      await expectLater(
+        store.setAppPalette(AppPalette.teal),
+        throwsA(isA<DatabaseException>()),
+      );
+      expect(await store.getAppPalette(), AppPalette.duckYellow);
+      await db.execute('DROP TRIGGER fail_palette');
+      await store.setAppPalette(AppPalette.teal);
+      await store.close();
+      expect(await store.getAppPalette(), AppPalette.teal);
+    },
+  );
+
+  test(
+    'v8 upgrade adds teal and preserves preferences, recording and audio',
+    () async {
+      await store.setThemeMode(ThemeMode.dark);
+      await store.setAppLanguage(AppLanguage.english);
+      await store.setDefaultRecordingFormat(RecordingFormat.mp3);
+      final folder = await store.createFolder(id: 'keep-palette', name: 'Keep');
+      final file = File(path.join(directory.path, 'old.aac'));
+      await file.writeAsBytes([1, 2, 3]);
+      await store.saveRecording(
+        Recording(
+          id: 'keep-palette',
+          title: 'Original',
+          filePath: file.path,
+          format: RecordingFormat.aac,
+          createdAt: DateTime.utc(2026, 10, 22),
+          duration: const Duration(seconds: 3),
+          fileSizeBytes: 3,
+          folderId: folder.id,
+        ),
+      );
+      final before = (await store.listRecordings()).single.toDatabaseMap();
+      final db = await database();
+      await db.execute('ALTER TABLE app_preferences DROP COLUMN theme_palette');
+      await db.setVersion(8);
+      await store.close();
+      expect(await store.getAppPalette(), AppPalette.teal);
+      expect(await store.getThemeMode(), ThemeMode.dark);
+      expect(await store.getAppLanguage(), AppLanguage.english);
+      expect(await store.getDefaultRecordingFormat(), RecordingFormat.mp3);
+      expect(
+        (await store.listFolders()).single.toDatabaseMap(),
+        folder.toDatabaseMap(),
+      );
+      expect((await store.listRecordings()).single.toDatabaseMap(), before);
+      expect(await file.readAsBytes(), [1, 2, 3]);
+      await store.setAppPalette(AppPalette.duckYellow);
+      await store.close();
+      expect(await store.getAppPalette(), AppPalette.duckYellow);
     },
   );
 
@@ -220,7 +289,7 @@ void main() {
           [1, 2, 3],
         );
       }
-      expect(await (await database()).getVersion(), 8);
+      expect(await (await database()).getVersion(), 9);
     },
   );
 

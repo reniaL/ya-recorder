@@ -27,7 +27,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dataSettingsGroup => 'Data management';
 
   @override
-  String get theme => 'Theme';
+  String get theme => 'Appearance mode';
+
+  @override
+  String get themePalette => 'Theme color';
+
+  @override
+  String get tealPalette => 'Teal';
+
+  @override
+  String get duckYellowPalette => 'Duck yellow';
+
+  @override
+  String get retryPalette => 'Retry loading theme color';
+
+  @override
+  String get paletteReadFailed =>
+      'Could not load theme color. Please try again.';
+
+  @override
+  String get paletteSaveFailed =>
+      'Could not save theme color. Please try again.';
 
   @override
   String get systemTheme => 'System default';
