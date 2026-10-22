@@ -27,6 +27,7 @@ import 'storage/models/recording_folder.dart';
 import 'storage/recently_deleted_page.dart';
 import 'storage/recording_store.dart';
 import 'widgets/destructive_confirmation_dialog.dart';
+import 'widgets/rename_recording_dialog.dart';
 
 typedef _FolderScopeChoice = ({String? folderId, bool manage});
 typedef _FolderListing = ({
@@ -670,10 +671,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     Recording recording, [
     ValueChanged<Recording>? onUpdated,
   ]) async {
+    final recentRecordings = _getRecordingStore().then(
+      (store) => store.listRecordings(),
+    );
     final title = await showDialog<String>(
       context: context,
-      builder: (context) =>
-          _RenameRecordingDialog(initialTitle: recording.title),
+      builder: (context) => RenameRecordingDialog(
+        recording: recording,
+        recentRecordings: recentRecordings,
+      ),
     );
 
     final normalizedTitle = title?.trim();
@@ -2587,52 +2593,6 @@ class _MessagePanel extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _RenameRecordingDialog extends StatefulWidget {
-  const _RenameRecordingDialog({required this.initialTitle});
-
-  final String initialTitle;
-
-  @override
-  State<_RenameRecordingDialog> createState() => _RenameRecordingDialogState();
-}
-
-class _RenameRecordingDialogState extends State<_RenameRecordingDialog> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initialTitle,
-  );
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(l10n(context).renameRecording),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        maxLength: 120,
-        textInputAction: TextInputAction.done,
-        onSubmitted: (value) => Navigator.pop(context, value),
-        decoration: InputDecoration(labelText: l10n(context).recordingTitle),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n(context).cancel),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, _controller.text),
-          child: Text(l10n(context).save),
-        ),
-      ],
     );
   }
 }

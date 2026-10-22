@@ -934,7 +934,8 @@ void main() {
   ) async {
     final events = StreamController<RecordingEvent>.broadcast();
     addTearDown(events.close);
-    final store = _RecordingStoreSpy();
+    final store = _RecordingStoreSpy()
+      ..recordings = [_recording('previous')];
     await tester.pumpWidget(
       MyApp(
         recordingStore: store,
@@ -954,6 +955,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 5));
     expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, '播放进度测试'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      '播放进度测试',
+    );
     await tester.enterText(find.byType(TextField), 'Interview notes');
     await tester.tap(find.widgetWithText(FilledButton, strings.save));
     await tester.pumpAndSettle();

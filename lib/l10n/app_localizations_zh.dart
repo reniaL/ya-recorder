@@ -253,6 +253,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingTitle => '录音标题';
 
   @override
+  String get reuseRecentTitle => '使用最近录音的标题';
+
+  @override
   String get save => '保存';
 
   @override

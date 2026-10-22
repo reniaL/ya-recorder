@@ -88,6 +88,7 @@
   "dismissMessage": "关闭提示",
   "renameRecording": "重命名录音",
   "recordingTitle": "录音标题",
+  "reuseRecentTitle": "使用最近录音的标题",
   "save": "保存",
   "moveUp": "上移",
   "moveDown": "下移",

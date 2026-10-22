@@ -578,6 +578,12 @@ abstract class AppLocalizations {
   /// **'Recording title'**
   String get recordingTitle;
 
+  /// No description provided for @reuseRecentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a recent recording title'**
+  String get reuseRecentTitle;
+
   /// No description provided for @save.
   ///
   /// In en, this message translates to:

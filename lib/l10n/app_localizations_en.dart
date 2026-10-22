@@ -266,6 +266,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordingTitle => 'Recording title';
 
   @override
+  String get reuseRecentTitle => 'Use a recent recording title';
+
+  @override
   String get save => 'Save';
 
   @override
