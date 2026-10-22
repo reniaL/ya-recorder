@@ -30,7 +30,8 @@ ios/Runner.xcworkspace/xcuserdata/
 *.iml
 *.ipr
 *.iws
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 
 # Generated files and logs
 **/doc/api/

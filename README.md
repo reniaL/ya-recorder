@@ -40,6 +40,23 @@
 - 自动语音转写、AI 分析和复杂音频剪辑。
 - MP3、M4A 之外的录音格式、已有录音的格式转换与用户可调的高级编码参数。
 
+## 快速安装到 Android 手机（Windows / VS Code）
+
+手机通过 USB 连接电脑，开启“USB 调试”并允许电脑授权。在 VS Code 打开本项目后：
+
+- 按 **Ctrl+Shift+B**，执行默认任务“Android: 构建并覆盖安装（USB，无调试）”。
+- 也可按 **Ctrl+Shift+P**，选择“任务: 运行任务”（Tasks: Run Task），再选择上述任务。
+
+任务会先构建当前源码的 debug APK，成功后使用 `adb -d install -r` 覆盖安装到唯一的 USB Android 设备；正常覆盖保留已有录音和设置。安装完成后在手机上手动打开应用，不启动调试或日志会话。构建失败不会安装旧 APK；安装失败会在任务终端显示原因，不自动卸载应用。首次构建耗时较长，后续会复用构建缓存。
+
+也可以在项目终端直接运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\install-android.ps1
+```
+
+脚本从 Flutter 生成的 `android/local.properties` 读取 Android SDK 路径，无需将 ADB 加入 PATH 或写死本机路径。
+
 ## 设计文档
 
 - [MVP 功能列表](docs/product/feature-list.md)
