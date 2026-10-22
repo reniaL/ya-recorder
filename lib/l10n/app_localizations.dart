@@ -749,7 +749,7 @@ abstract class AppLocalizations {
   /// No description provided for @skipForward.
   ///
   /// In en, this message translates to:
-  /// **'Skip forward 5 seconds'**
+  /// **'Skip forward 10 seconds'**
   String get skipForward;
 
   /// No description provided for @playbackSpeed.

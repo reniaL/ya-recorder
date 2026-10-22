@@ -55,7 +55,7 @@ void main() {
       await service.skipBackward();
       expect(service.displayPosition, Duration.zero);
       await service.skipForward();
-      expect(service.displayPosition.inSeconds, 5);
+      expect(service.displayPosition.inSeconds, 10);
       await service.seek(const Duration(seconds: 2));
       expect(service.displayPosition.inSeconds, 2);
       backend.emitPosition(const Duration(milliseconds: 1900));
@@ -288,15 +288,15 @@ void main() {
         await service.setSpeed(speed);
         await service.seek(const Duration(seconds: 20));
         await service.skipForward();
-        expect(service.status.position.inSeconds, 25);
+        expect(service.status.position.inSeconds, 30);
         expect(service.status.speed, speed);
         expect(service.status.state, PlaybackState.playing);
         await service.skipBackward();
-        expect(service.status.position.inSeconds, 20);
+        expect(service.status.position.inSeconds, 25);
       }
       await service.pause();
       await service.skipBackward();
-      expect(service.status.position.inSeconds, 15);
+      expect(service.status.position.inSeconds, 20);
       expect(service.status.state, PlaybackState.paused);
       expect(backend.playCalls, 1);
     },
@@ -367,16 +367,16 @@ void main() {
         service.skipBackward(),
       ];
       await Future<void>.delayed(Duration.zero);
-      expect(backend.seekPositions, [const Duration(seconds: 5)]);
+      expect(backend.seekPositions, [const Duration(seconds: 10)]);
       backend.seekGate = null;
       gate.complete();
       await Future.wait(commands);
       expect(backend.seekPositions, [
-        const Duration(seconds: 5),
         const Duration(seconds: 10),
-        const Duration(seconds: 5),
+        const Duration(seconds: 20),
+        const Duration(seconds: 15),
       ]);
-      expect(service.status.position.inSeconds, 5);
+      expect(service.status.position.inSeconds, 15);
     },
   );
 

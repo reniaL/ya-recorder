@@ -298,7 +298,7 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                                       total > Duration.zero
                                   ? widget.playbackService.skipForward
                                   : null,
-                              icon: const Icon(Icons.forward_5_rounded),
+                              icon: const Icon(Icons.forward_10_rounded),
                             ),
                           ],
                         ),

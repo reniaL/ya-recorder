@@ -337,7 +337,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get skipBackward => '快退 5 秒';
 
   @override
-  String get skipForward => '快进 5 秒';
+  String get skipForward => '快进 10 秒';
 
   @override
   String get playbackSpeed => '播放倍速';

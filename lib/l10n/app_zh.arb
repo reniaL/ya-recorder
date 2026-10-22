@@ -116,7 +116,7 @@
   "notPlaying": "未播放",
   "retryPlayback": "重试播放",
   "skipBackward": "快退 5 秒",
-  "skipForward": "快进 5 秒",
+  "skipForward": "快进 10 秒",
   "playbackSpeed": "播放倍速",
   "playbackProgress": "播放进度",
   "permanentDeleteTitle": "永久删除录音？",

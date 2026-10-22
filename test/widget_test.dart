@@ -1320,7 +1320,7 @@ void main() {
             expect(playback.status.position.inSeconds, 15);
             await tester.tapAt(forward.topLeft + const Offset(3, 3));
             await tester.pumpAndSettle();
-            expect(playback.status.position.inSeconds, 20);
+            expect(playback.status.position.inSeconds, 25);
             await tester.tap(speedFinder);
             await tester.pumpAndSettle();
             expect(find.byType(CheckedPopupMenuItem<double>), findsNWidgets(5));
@@ -1902,20 +1902,22 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('播放录音'));
       await tester.pumpAndSettle();
-      expect(find.byTooltip('快进 5 秒'), findsNothing);
+      expect(find.byTooltip('快进 10 秒'), findsNothing);
       await tester.tap(find.byKey(const Key('libraryPlaybackTitle')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.tap(find.byTooltip('快进 10 秒'));
       await tester.pumpAndSettle();
-      expect(playback.status.position.inSeconds, 5);
+      expect(playback.status.position.inSeconds, 10);
+      expect(find.byIcon(Icons.forward_10_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.replay_5_rounded), findsOneWidget);
       await tester.tap(find.byTooltip('快退 5 秒'));
       await tester.pumpAndSettle();
-      expect(playback.status.position, Duration.zero);
+      expect(playback.status.position.inSeconds, 5);
       await tester.tap(find.byKey(const Key('recordingDetailPlayButton')));
       await tester.pumpAndSettle();
       await playback.seek(const Duration(seconds: 58));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.tap(find.byTooltip('快进 10 秒'));
       await tester.pumpAndSettle();
       expect(playback.status.position.inSeconds, 60);
       expect(find.text('已暂停'), findsOneWidget);
@@ -1924,7 +1926,7 @@ void main() {
       expect(playback.status.position, Duration.zero);
       await playback.seek(const Duration(seconds: 58));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.tap(find.byTooltip('快进 10 秒'));
       await tester.pumpAndSettle();
       expect(find.text('未播放'), findsOneWidget);
       expect(playback.status.position, Duration.zero);
@@ -2005,12 +2007,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('recordingRow-one')));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.byTooltip('快进 5 秒'));
-      await tester.tap(find.byTooltip('快进 5 秒'));
+      await tester.ensureVisible(find.byTooltip('快进 10 秒'));
+      await tester.tap(find.byTooltip('快进 10 秒'));
       await tester.pumpAndSettle();
-      expect(playback.status.position.inSeconds, 5);
+      expect(playback.status.position.inSeconds, 10);
       final backward = tester.getRect(find.byTooltip('快退 5 秒'));
-      final forward = tester.getRect(find.byTooltip('快进 5 秒'));
+      final forward = tester.getRect(find.byTooltip('快进 10 秒'));
       final play = tester.getRect(
         find.byKey(const Key('recordingDetailPlayButton')),
       );

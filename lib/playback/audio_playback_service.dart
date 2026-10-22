@@ -333,7 +333,7 @@ class AudioPlaybackService {
     });
   }
 
-  Future<void> skipForward() => _skip(const Duration(seconds: 5));
+  Future<void> skipForward() => _skip(const Duration(seconds: 10));
 
   Future<void> skipBackward() => _skip(const Duration(seconds: -5));
 

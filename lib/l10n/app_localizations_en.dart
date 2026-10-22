@@ -351,7 +351,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get skipBackward => 'Skip back 5 seconds';
 
   @override
-  String get skipForward => 'Skip forward 5 seconds';
+  String get skipForward => 'Skip forward 10 seconds';
 
   @override
   String get playbackSpeed => 'Playback speed';
