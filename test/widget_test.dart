@@ -1035,6 +1035,51 @@ void main() {
     expect(find.text(strings.recordingSaved), findsNothing);
   });
 
+  testWidgets('saved notice only takes its content height from the list', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final events = StreamController<RecordingEvent>.broadcast();
+    addTearDown(events.close);
+    final store = _RecordingStoreSpy()
+      ..recordings = List.generate(20, (index) => _recording('notice-$index'));
+
+    await tester.pumpWidget(
+      MyApp(
+        recordingStore: store,
+        recordingService: RecordingService(
+          commands: commandChannel,
+          eventStream: events.stream,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final list = find.byType(ListView).first;
+    final listHeightWithoutNotice = tester.getSize(list).height;
+
+    events.add(_savedRecordingEvent('saved-notice'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        l10n(tester.element(find.byType(Scaffold).first)).recordingSaved,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester.getSize(list).height,
+      greaterThan(listHeightWithoutNotice * 0.75),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('recordingRow-notice-19')),
+      200,
+      scrollable: find.descendant(of: list, matching: find.byType(Scrollable)),
+    );
+    expect(find.byKey(const Key('recordingRow-notice-19')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('saved recordings are shown in the all recordings list', (
     WidgetTester tester,
   ) async {

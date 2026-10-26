@@ -1862,8 +1862,10 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                   _serviceError != null ||
                   _successMessage != null ||
                   _playbackError != null)
-                Flexible(
-                  fit: FlexFit.loose,
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.5,
+                  ),
                   child: SingleChildScrollView(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
