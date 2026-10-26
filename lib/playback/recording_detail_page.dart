@@ -278,6 +278,12 @@ class _RecordingDetailPageState extends State<RecordingDetailPage> {
                               iconSize: 48,
                               style: IconButton.styleFrom(
                                 minimumSize: const Size(64, 64),
+                                backgroundColor: Theme.of(
+                                  context,
+                                ).extension<AppPlaybackColors>()?.accent,
+                                foregroundColor: Theme.of(
+                                  context,
+                                ).extension<AppPlaybackColors>()?.onAccent,
                               ),
                               onPressed: loading || failed || scrubbing
                                   ? null

@@ -5,6 +5,29 @@ import 'package:flutter/services.dart';
 
 import 'app_palette.dart';
 
+/// Player accents are brighter than text accents, especially for yellow.
+class AppPlaybackColors extends ThemeExtension<AppPlaybackColors> {
+  const AppPlaybackColors({required this.accent, required this.onAccent});
+
+  final Color accent;
+  final Color onAccent;
+
+  @override
+  AppPlaybackColors copyWith({Color? accent, Color? onAccent}) =>
+      AppPlaybackColors(
+        accent: accent ?? this.accent,
+        onAccent: onAccent ?? this.onAccent,
+      );
+
+  @override
+  AppPlaybackColors lerp(AppPlaybackColors? other, double t) => other == null
+      ? this
+      : AppPlaybackColors(
+          accent: Color.lerp(accent, other.accent, t)!,
+          onAccent: Color.lerp(onAccent, other.onAccent, t)!,
+        );
+}
+
 /// Shared visual rules for action menus and preference choices.
 abstract final class AppMenuStyle {
   static const radius = 16.0;
@@ -70,7 +93,25 @@ ThemeData buildAppTheme(
   // semantic roles for text; use duck yellow only for solid primary actions.
   final actionBackground = dark ? const Color(0xffe4c451) : palette.seedColor;
   const actionForeground = Color(0xff282100);
+  final playbackAccent = dark
+      ? const Color(0xffffda57)
+      : const Color(0xffffd43b);
   return theme.copyWith(
+    extensions: [
+      if (duckYellow)
+        AppPlaybackColors(accent: playbackAccent, onAccent: actionForeground),
+    ],
+    sliderTheme: duckYellow
+        ? SliderThemeData(
+            activeTrackColor: playbackAccent,
+            thumbColor: playbackAccent,
+            inactiveTrackColor: dark
+                ? const Color(0xff494944)
+                : const Color(0xffe4e4de),
+            overlayColor: playbackAccent.withValues(alpha: 0.16),
+            thumbShape: const RoundSliderThumbShape(elevation: 3),
+          )
+        : null,
     filledButtonTheme: duckYellow
         ? FilledButtonThemeData(
             style: FilledButton.styleFrom(

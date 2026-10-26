@@ -1236,6 +1236,78 @@ void main() {
     });
   }
 
+  for (final dark in [false, true]) {
+    for (final palette in AppPalette.values) {
+      testWidgets('player accents $palette dark=$dark preserve controls', (
+        tester,
+      ) async {
+        final store = _ThemeStore()
+          ..mode = dark ? ThemeMode.dark : ThemeMode.light
+          ..palette = palette
+          ..recordings = [_recording('one')];
+        final backend = _FakePlaybackBackend();
+        final playback = AudioPlaybackService(backend: backend);
+        addTearDown(playback.dispose);
+        await tester.pumpWidget(
+          MyApp(recordingStore: store, playbackService: playback),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('播放录音'));
+        await tester.pumpAndSettle();
+        final bottomSlider = find.byKey(const Key('libraryPlaybackProgress'));
+        final bottomTheme = SliderTheme.of(tester.element(bottomSlider));
+        final expected = dark
+            ? const Color(0xffffda57)
+            : const Color(0xffffd43b);
+        if (palette == AppPalette.duckYellow) {
+          expect(bottomTheme.activeTrackColor, expected);
+          expect(bottomTheme.thumbColor, expected);
+          expect(
+            bottomTheme.inactiveTrackColor,
+            dark ? const Color(0xff494944) : const Color(0xffe4e4de),
+          );
+        }
+        await tester.tap(find.byKey(const Key('libraryPlaybackTitle')));
+        await tester.pumpAndSettle();
+        final slider = find.byKey(const Key('recordingDetailProgress'));
+        final buttonFinder = find.byKey(const Key('recordingDetailPlayButton'));
+        final button = tester.widget<IconButton>(buttonFinder);
+        final theme = Theme.of(tester.element(slider));
+        if (palette == AppPalette.duckYellow) {
+          expect(
+            SliderTheme.of(tester.element(slider)).activeTrackColor,
+            expected,
+          );
+          expect(button.style!.backgroundColor!.resolve({}), expected);
+          expect(
+            button.style!.foregroundColor!.resolve({}),
+            const Color(0xff282100),
+          );
+          expect(
+            button.style!.backgroundColor!.resolve({WidgetState.disabled}),
+            isNull,
+          );
+          expect(
+            theme.colorScheme.primary,
+            dark ? const Color(0xffe4c451) : const Color(0xff705d00),
+          );
+        } else {
+          expect(theme.extension<AppPlaybackColors>(), isNull);
+          expect(button.style!.backgroundColor, isNull);
+          expect(theme.sliderTheme.activeTrackColor, isNull);
+        }
+        await tester.tap(buttonFinder);
+        await tester.pumpAndSettle();
+        expect(playback.status.state, PlaybackState.paused);
+        await tester.tap(slider);
+        await tester.pumpAndSettle();
+        expect(backend.seekPositions, isNotEmpty);
+        expect(playback.status.state, PlaybackState.paused);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets(
     'row opens detail with autoplay and toolbar return stops playback',
     (tester) async {

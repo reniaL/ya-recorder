@@ -43,6 +43,13 @@ void main() {
           expect(colors.error, teal.error);
           expect(colors.onError, teal.onError);
           if (palette == AppPalette.duckYellow) {
+            final player = theme.extension<AppPlaybackColors>()!;
+            expect(
+              contrast(player.onAccent, player.accent),
+              greaterThanOrEqualTo(4.5),
+            );
+            expect(player.accent, theme.sliderTheme.activeTrackColor);
+            expect(player.accent, theme.sliderTheme.thumbColor);
             final style = theme.filledButtonTheme.style!;
             final background = style.backgroundColor!.resolve({})!;
             final foreground = style.foregroundColor!.resolve({})!;
