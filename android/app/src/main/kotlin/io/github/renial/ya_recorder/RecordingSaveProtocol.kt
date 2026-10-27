@@ -15,6 +15,8 @@ internal data class RecordingDraft(
     val durationMs: Long = 0,
     val fileSizeBytes: Long = 0,
     val wasInterrupted: Boolean = false,
+    val folderId: String? = null,
+    val folderName: String? = null,
 ) {
     init {
         format.completedFileName(id)
@@ -51,7 +53,7 @@ internal class RecordingDraftStore(private val directory: File, private val io: 
             RecordingFormat.fromWireValue(properties.getProperty("format")),
             DraftPhase.valueOf(properties.getProperty("phase")),
             properties.getProperty("durationMs").toLong(), properties.getProperty("fileSizeBytes").toLong(),
-            interrupted.toBoolean())
+            interrupted.toBoolean(), properties.getProperty("folderId"), properties.getProperty("folderName"))
     }
 
     fun write(draft: RecordingDraft) {
@@ -62,6 +64,8 @@ internal class RecordingDraftStore(private val directory: File, private val io: 
             setProperty("phase", draft.phase.name); setProperty("durationMs", draft.durationMs.toString())
             setProperty("fileSizeBytes", draft.fileSizeBytes.toString())
             setProperty("wasInterrupted", draft.wasInterrupted.toString())
+            draft.folderId?.let { setProperty("folderId", it) }
+            draft.folderName?.let { setProperty("folderName", it) }
         }
         val bytes = ByteArrayOutputStream().apply { properties.store(this, null) }.toByteArray()
         io.write(file(draft.id), bytes)
@@ -75,10 +79,10 @@ internal class RecordingDraftStore(private val directory: File, private val io: 
 }
 
 internal data class ReadyRecording(val draft: RecordingDraft, val file: File) {
-    fun toMap(): Map<String, Any> = mapOf("id" to draft.id, "createdAtMs" to draft.createdAtMs,
+    fun toMap(): Map<String, Any?> = mapOf("id" to draft.id, "createdAtMs" to draft.createdAtMs,
         "format" to draft.format.wireName, "durationMs" to draft.durationMs,
         "fileSizeBytes" to draft.fileSizeBytes, "wasInterrupted" to draft.wasInterrupted,
-        "filePath" to file.absolutePath)
+        "filePath" to file.absolutePath, "folderId" to draft.folderId)
 }
 
 internal data class RecoveryBatch(val recordings: List<ReadyRecording>, val unresolvedIds: List<String>)
@@ -100,11 +104,12 @@ internal class RecordingSaveProtocol(
     @Volatile private var activeWriterCount = 0
     fun hasActiveWriters(): Boolean = activeWriterCount != 0
 
-    @Synchronized fun begin(id: String, createdAtMs: Long, format: RecordingFormat): RecordingDraft {
+    @Synchronized fun begin(id: String, createdAtMs: Long, format: RecordingFormat,
+        folderId: String? = null, folderName: String? = null): RecordingDraft {
         check(File(root, "recordings").mkdirs() || File(root, "recordings").isDirectory)
         check(File(root, "recovery").mkdirs() || File(root, "recovery").isDirectory)
         check(id !in drafts.ids() && !completed(id, format).exists() && !temporary(id, format).exists())
-        val draft = RecordingDraft(id, createdAtMs, format)
+        val draft = RecordingDraft(id, createdAtMs, format, folderId = folderId, folderName = folderName)
         drafts.write(draft) // Must precede encoder allocation and audio writes.
         leases.add(id)
         activeWriterCount = leases.size

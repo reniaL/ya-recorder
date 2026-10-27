@@ -1082,6 +1082,30 @@ abstract class AppLocalizations {
   /// **'Recording saved'**
   String get recordingSaved;
 
+  /// No description provided for @recordingSaveDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to: {folder}'**
+  String recordingSaveDestination(String folder);
+
+  /// No description provided for @recordingSavedTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to “{folder}”'**
+  String recordingSavedTo(String folder);
+
+  /// No description provided for @recordingFolderMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The original folder no longer exists. The recording was saved as Unfiled and can be found in All recordings.'**
+  String get recordingFolderMissing;
+
+  /// No description provided for @interruptedFolderMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording interrupted. The recorded portion was saved as Unfiled because the original folder no longer exists. Find it in All recordings.'**
+  String get interruptedFolderMissing;
+
   /// No description provided for @saveIndexFailed.
   ///
   /// In en, this message translates to:

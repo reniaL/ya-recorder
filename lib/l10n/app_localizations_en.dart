@@ -539,6 +539,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordingSaved => 'Recording saved';
 
   @override
+  String recordingSaveDestination(String folder) {
+    return 'Save to: $folder';
+  }
+
+  @override
+  String recordingSavedTo(String folder) {
+    return 'Saved to “$folder”';
+  }
+
+  @override
+  String get recordingFolderMissing =>
+      'The original folder no longer exists. The recording was saved as Unfiled and can be found in All recordings.';
+
+  @override
+  String get interruptedFolderMissing =>
+      'Recording interrupted. The recorded portion was saved as Unfiled because the original folder no longer exists. Find it in All recordings.';
+
+  @override
   String get saveIndexFailed =>
       'Couldn\'t add the recording to your library. Its audio file has been kept. You can try recovering it again later.';
 

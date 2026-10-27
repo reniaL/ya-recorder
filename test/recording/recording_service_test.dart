@@ -209,6 +209,71 @@ void main() {
     expect(calls[2].arguments, {'id': 'two'});
   });
 
+  test(
+    'destination travels through start, status and recovery with legacy defaults',
+    () async {
+      const channel = MethodChannel('recording-folder-test');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      MethodCall? start;
+      final ready = {
+        'id': 'session-1',
+        'filePath': '/data/session-1.aac',
+        'format': 'aac',
+        'createdAtMs': 1727568000000,
+        'durationMs': 3000,
+        'fileSizeBytes': 1024,
+        'wasInterrupted': true,
+        'folderId': 'work',
+      };
+      messenger.setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'start') {
+          start = call;
+          return null;
+        }
+        if (call.method == 'recoverRecordings') {
+          return {
+            'recordings': [ready],
+            'unresolvedCount': 0,
+          };
+        }
+        return {
+          'state': 'paused',
+          'elapsedMs': 1000,
+          'canResume': true,
+          'sessionId': 'session-1',
+          'format': 'aac',
+          'folderId': 'work',
+          'folderName': '工作',
+        };
+      });
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final service = RecordingService(commands: channel);
+      await service.start(
+        format: RecordingFormat.aac,
+        folderId: 'work',
+        folderName: '工作',
+      );
+      expect(start!.arguments, {
+        'format': 'aac',
+        'folderId': 'work',
+        'folderName': '工作',
+      });
+      final status = await service.getStatus();
+      expect(status.folderId, 'work');
+      expect(status.folderName, '工作');
+      expect(
+        (await service.recoverRecordings()).recordings.single.folderId,
+        'work',
+      );
+      ready.remove('folderId');
+      expect(
+        (await service.recoverRecordings()).recordings.single.folderId,
+        isNull,
+      );
+    },
+  );
+
   test('start sends format and preserves native unavailable errors', () async {
     const channel = MethodChannel('recording-format-test');
     final messenger =

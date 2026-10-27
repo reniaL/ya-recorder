@@ -37,7 +37,8 @@ class RecordingSaveCoordinator {
           prior.createdAt != ready.createdAt ||
           prior.duration != ready.duration ||
           prior.fileSizeBytes != ready.fileSizeBytes ||
-          prior.wasInterrupted != ready.wasInterrupted) {
+          prior.wasInterrupted != ready.wasInterrupted ||
+          prior.folderId != ready.folderId) {
         return Future.error(StateError('Conflicting recording replay.'));
       }
       return existing;
@@ -89,6 +90,7 @@ class RecordingSaveCoordinator {
         fileSizeBytes: ready.fileSizeBytes,
         format: ready.format,
         wasInterrupted: ready.wasInterrupted,
+        folderId: ready.folderId,
       ),
     );
     try {

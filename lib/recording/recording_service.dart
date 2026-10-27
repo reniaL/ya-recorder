@@ -24,6 +24,8 @@ class RecordingSessionStatus {
     this.sessionId,
     this.format,
     this.backupBlocked = false,
+    this.folderId,
+    this.folderName,
   });
 
   final RecordingLifecycleState state;
@@ -31,6 +33,8 @@ class RecordingSessionStatus {
   final bool canResume;
   final String? sessionId;
   final RecordingFormat? format;
+  final String? folderId;
+  final String? folderName;
 
   /// Native writer leases may outlive an idle/failed UI state after a timeout.
   final bool backupBlocked;
@@ -51,6 +55,8 @@ class RecordingSessionStatus {
       canResume: _readBool(map, 'canResume'),
       sessionId: sessionId,
       format: format,
+      folderId: map['folderId'] as String?,
+      folderName: map['folderName'] as String?,
       backupBlocked: map.containsKey('backupBlocked')
           ? _readBool(map, 'backupBlocked')
           : false,
@@ -68,6 +74,7 @@ class SavedNativeRecording {
     required this.fileSizeBytes,
     required this.wasInterrupted,
     required this.format,
+    this.folderId,
   });
 
   final String id;
@@ -77,6 +84,7 @@ class SavedNativeRecording {
   final int fileSizeBytes;
   final bool wasInterrupted;
   final RecordingFormat format;
+  final String? folderId;
 
   factory SavedNativeRecording.fromMap(Map<Object?, Object?> map) {
     final format = RecordingFormat.fromWireValue(map['format']);
@@ -100,6 +108,7 @@ class SavedNativeRecording {
       duration: Duration(milliseconds: durationMs),
       fileSizeBytes: fileSizeBytes,
       wasInterrupted: _readBool(map, 'wasInterrupted'),
+      folderId: map['folderId'] as String?,
     );
   }
 }
@@ -250,11 +259,17 @@ class RecordingService {
     return RecordingSessionStatus.fromMap(Map<Object?, Object?>.from(response));
   }
 
-  Future<void> start({required RecordingFormat format}) => coordinator.mutate(
-    () async {
-      await _commands.invokeMethod<void>('start', {'format': format.wireName});
-    },
-  );
+  Future<void> start({
+    required RecordingFormat format,
+    String? folderId,
+    String? folderName,
+  }) => coordinator.mutate(() async {
+    await _commands.invokeMethod<void>('start', {
+      'format': format.wireName,
+      'folderId': ?folderId,
+      if (folderId != null && folderName != null) 'folderName': folderName,
+    });
+  });
 
   Future<List<RecordingFormat>> getAvailableFormats() async {
     final response = await _commands.invokeMethod<Object?>(

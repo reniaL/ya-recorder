@@ -45,6 +45,7 @@ void main() {
     String? filePath,
     RecordingFormat format = RecordingFormat.mp3,
     bool wasInterrupted = false,
+    String? folderId,
   }) => SavedNativeRecording(
     id: id,
     filePath: filePath ?? '/private/$id.${format.extension}',
@@ -53,6 +54,7 @@ void main() {
     fileSizeBytes: 128,
     wasInterrupted: wasInterrupted,
     format: format,
+    folderId: folderId,
   );
 
   test(
@@ -167,6 +169,27 @@ void main() {
       expect(replay.inserted, isFalse);
       expect(replay.acknowledgementPending, isFalse);
       expect(store.rows, hasLength(1));
+    },
+  );
+
+  test(
+    'recovery keeps the original folder and rejects conflicting in-flight destinations',
+    () async {
+      final gate = Completer<void>();
+      store.gate = gate.future;
+      final first = coordinator.commit(ready('one', folderId: 'work'));
+      await expectLater(
+        coordinator.commit(ready('one', folderId: 'other')),
+        throwsStateError,
+      );
+      gate.complete();
+      await first;
+      expect(store.rows.single.folderId, 'work');
+      expect(
+        (await coordinator.commit(ready('one', folderId: 'work'))).inserted,
+        isFalse,
+      );
+      expect(store.rows.single.folderId, 'work');
     },
   );
 

@@ -43,6 +43,41 @@ class RecordingSaveProtocolTest {
         assertEquals(listOf("one"), store().ids())
     }
 
+    @Test fun destinationSurvivesStopCrashAndReplayForEveryFormat() {
+        for (format in RecordingFormat.values()) {
+            val id = format.wireName
+            val p = protocol()
+            p.begin(id, 1234, format, "folder-work", "工作与会议")
+            assertEquals("folder-work", store().read(id).folderId)
+            assertEquals("工作与会议", store().read(id).folderName)
+            p.temporary(id, format).writeBytes(ByteArray(128) { 7 })
+            val recovered = protocol().recover().recordings.single { it.draft.id == id }
+            assertTrue(recovered.draft.wasInterrupted)
+            assertEquals("folder-work", recovered.toMap()["folderId"])
+            val replay = protocol().recover().recordings.single { it.draft.id == id }
+            assertEquals("folder-work", replay.draft.folderId)
+            protocol().acknowledge(id)
+        }
+    }
+
+    @Test fun legacyDraftWithoutDestinationRemainsUnfiled() {
+        val p = protocol(); audio(p)
+        assertNull(store().read("one").folderId)
+        assertNull(protocol().recover().recordings.single().toMap()["folderId"])
+    }
+
+    @Test fun normalFinishKeepsDestinationUntilAcknowledgement() {
+        val p = protocol()
+        p.begin("one", 1234, RecordingFormat.AAC, "folder-work", "工作")
+        p.temporary("one", RecordingFormat.AAC).writeBytes(ByteArray(128) { 7 })
+        val ready = p.finish("one", null)
+        assertEquals("folder-work", ready.toMap()["folderId"])
+        assertEquals("工作", store().read("one").folderName)
+        assertFalse(ready.draft.wasInterrupted)
+        p.releaseLease("one")
+        assertEquals("folder-work", protocol().recover().recordings.single().draft.folderId)
+    }
+
     @Test fun writerSummaryRetainsOtherAndTimedOutLeasesUntilExplicitRelease() {
         val p = protocol()
         assertFalse(p.hasActiveWriters())

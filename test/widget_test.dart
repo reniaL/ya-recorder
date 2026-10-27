@@ -28,6 +28,7 @@ Map<String, Object?> _nativeReadyMap(SavedNativeRecording ready) => {
   'fileSizeBytes': ready.fileSizeBytes,
   'wasInterrupted': ready.wasInterrupted,
   'format': ready.format.wireName,
+  'folderId': ready.folderId,
 };
 
 void main() {
@@ -49,11 +50,13 @@ void main() {
   late RecordingFormat expectedStartFormat;
   late bool mp3Available;
   late bool aacAvailable;
+  Map<Object?, Object?>? startArguments;
   Completer<void>? stopReply;
 
   setUpAll(sqfliteFfiInit);
 
   setUp(() {
+    startArguments = null;
     permissionGranted = false;
     permissionReply = null;
     initialState = 'idle';
@@ -83,7 +86,8 @@ void main() {
               ? permissionGranted
               : await permissionReply!.future;
         case 'start':
-          expect(call.arguments, {'format': expectedStartFormat.wireName});
+          startArguments = Map<Object?, Object?>.from(call.arguments as Map);
+          expect(startArguments!['format'], expectedStartFormat.wireName);
           if ((expectedStartFormat == RecordingFormat.aac && !aacAvailable) ||
               (expectedStartFormat == RecordingFormat.mp3 && !mp3Available)) {
             throw PlatformException(code: 'recording-format-unavailable');
@@ -3553,6 +3557,183 @@ void main() {
     expect(find.text('开始录音'), findsOneWidget);
   });
 
+  for (final inFolder in [true, false]) {
+    testWidgets('new recording captures browsing folder ($inFolder)', (
+      tester,
+    ) async {
+      permissionGranted = true;
+      final store = folderStore(1);
+      final events = StreamController<RecordingEvent>.broadcast();
+      addTearDown(events.close);
+      await tester.pumpWidget(
+        MyApp(
+          recordingStore: store,
+          recordingService: RecordingService(
+            commands: commandChannel,
+            eventStream: events.stream,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (inFolder) {
+        await tester.tap(find.byKey(const Key('folderScopeSelector')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('folderScope-folder-0')));
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('开始录音'));
+      await tester.pumpAndSettle();
+      expect(startArguments!['folderId'], inFolder ? 'folder-0' : null);
+      expect(startArguments!['folderName'], inFolder ? 'Folder 0' : null);
+      expect(find.text(inFolder ? '保存到：Folder 0' : '保存到：未分类'), findsOneWidget);
+      final folderId = startArguments!['folderId'] as String?;
+      events.add(_savedRecordingEvent('new-in-folder', folderId: folderId));
+      await tester.pumpAndSettle();
+      expect(store.savedRecording!.folderId, folderId);
+      expect(
+        find.byKey(const Key('recordingRow-new-in-folder')),
+        findsOneWidget,
+      );
+      expect(find.text(inFolder ? '已保存到「Folder 0」' : '录音已保存'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
+  }
+
+  for (final english in [false, true]) {
+    testWidgets(
+      'long session destination and deleted folder fallback fit large text ($english)',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        tester.platformDispatcher.textScaleFactorTestValue = 2;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+        permissionGranted = true;
+        final store = folderStore(1)
+          ..language = english
+              ? AppLanguage.english
+              : AppLanguage.simplifiedChinese;
+        const name = '工作会议与采访目录 Long meeting and interview recordings';
+        store.folders[0] = RecordingFolder(
+          id: 'folder-0',
+          name: name,
+          createdAt: DateTime.utc(2026),
+        );
+        final events = StreamController<RecordingEvent>.broadcast();
+        addTearDown(events.close);
+        await tester.pumpWidget(
+          MyApp(
+            recordingStore: store,
+            recordingService: RecordingService(
+              commands: commandChannel,
+              eventStream: events.stream,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('folderScopeSelector')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('folderScope-folder-0')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(english ? 'Start recording' : '开始录音'));
+        await tester.pumpAndSettle();
+        events.add(
+          const RecordingStateChanged(
+            RecordingSessionStatus(
+              state: RecordingLifecycleState.paused,
+              elapsed: Duration(seconds: 2),
+              canResume: true,
+              format: RecordingFormat.m4a,
+              sessionId: 'deleted-target',
+              folderId: 'folder-0',
+              folderName: name,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final strings = l10n(tester.element(find.byType(Scaffold).first));
+        expect(
+          find.text(strings.recordingSaveDestination(name)),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        // Simulate a folder removed while the native session survives.
+        store.folders.clear();
+        events.add(
+          _savedRecordingEvent('deleted-target', folderId: 'folder-0'),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(strings.recordingFolderMissing), findsOneWidget);
+        expect(
+          find.byKey(const Key('recordingRow-deleted-target')),
+          findsOneWidget,
+        );
+        expect(store.savedRecording!.folderId, isNull);
+        expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(seconds: 5));
+      },
+    );
+  }
+
+  for (final missing in [false, true]) {
+    for (final interrupted in [false, true]) {
+      testWidgets(
+        'startup recovery retains destination or reports fallback ($missing, $interrupted)',
+        (tester) async {
+          final store = folderStore(missing ? 0 : 1);
+          recoveryRows = [
+            _nativeReadyMap(
+              _savedRecordingEvent(
+                'recovered-folder',
+                folderId: 'folder-0',
+                wasInterrupted: interrupted,
+              ).recording,
+            ),
+          ];
+          await tester.pumpWidget(MyApp(recordingStore: store));
+          await tester.pumpAndSettle();
+          expect(store.savedRecording!.folderId, missing ? null : 'folder-0');
+          expect(
+            find.byKey(const Key('recordingRow-recovered-folder')),
+            findsOneWidget,
+          );
+          final strings = l10n(tester.element(find.byType(Scaffold).first));
+          if (missing) {
+            expect(
+              find.text(
+                interrupted
+                    ? strings.interruptedFolderMissing
+                    : strings.recordingFolderMissing,
+              ),
+              findsOneWidget,
+            );
+          } else {
+            expect(
+              find.text(
+                interrupted
+                    ? strings.interruptedSaved
+                    : strings.recordingSavedTo('Folder 0'),
+              ),
+              findsOneWidget,
+            );
+          }
+          await tester.pump(const Duration(seconds: 5));
+          if (missing) {
+            expect(
+              find.text(
+                interrupted
+                    ? strings.interruptedFolderMissing
+                    : strings.recordingFolderMissing,
+              ),
+              findsOneWidget,
+            );
+          }
+        },
+      );
+    }
+  }
+
   testWidgets(
     'success message can be dismissed without affecting errors or recordings',
     (tester) async {
@@ -4588,7 +4769,11 @@ class _RecordingStoreSpy extends RecordingStore {
     if (recordingCommitGate != null) await recordingCommitGate;
     if (failRecordingCommit) throw StateError('Index commit failed');
     if (recordings.any((r) => r.id == recording.id)) return false;
-    await saveRecording(recording);
+    final values = recording.toDatabaseMap();
+    if (!folders.any((f) => f.id == recording.folderId)) {
+      values['folder_id'] = null;
+    }
+    await saveRecording(Recording.fromDatabaseMap(values));
     return true;
   }
 
@@ -4665,6 +4850,7 @@ RecordingFileReady _savedRecordingEvent(
   String id, {
   bool wasInterrupted = false,
   RecordingFormat format = RecordingFormat.m4a,
+  String? folderId,
 }) {
   return RecordingFileReady(
     SavedNativeRecording(
@@ -4675,6 +4861,7 @@ RecordingFileReady _savedRecordingEvent(
       duration: const Duration(seconds: 12),
       fileSizeBytes: 1024,
       wasInterrupted: wasInterrupted,
+      folderId: folderId,
     ),
   );
 }

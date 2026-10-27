@@ -214,6 +214,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
   String? _permissionMessage;
   String? _serviceError;
   String? _successMessage;
+  String? _savedFolderName;
   String? _savedRecordingId;
   Timer? _successMessageTimer;
   String? _libraryError;
@@ -462,6 +463,7 @@ class _RecordingHomePageState extends State<RecordingHomePage>
     _successMessageTimer?.cancel();
     _successMessageTimer = null;
     _successMessage = message;
+    _savedFolderName = null;
     _savedRecordingId = recordingId;
     if (message != null) {
       _successMessageTimer = Timer(
@@ -1129,6 +1131,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
       return;
     }
 
+    final folderId = _selectedFolderId;
+    final folderName = _selectedFolderName;
     setState(() {
       _isSubmitting = true;
       _permissionMessage = null;
@@ -1167,9 +1171,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             format: format,
             elapsed: Duration.zero,
             canResume: false,
+            folderId: folderId,
+            folderName: folderName,
           );
         });
-        await widget.recordingService.start(format: format);
+        await widget.recordingService.start(
+          format: format,
+          folderId: folderId,
+          folderName: folderName,
+        );
       });
     } on PlatformException catch (error) {
       final unavailableMessage = _status.format == RecordingFormat.aac
@@ -1267,6 +1277,8 @@ class _RecordingHomePageState extends State<RecordingHomePage>
         canResume: false,
         sessionId: _status.sessionId,
         format: _status.format,
+        folderId: _status.folderId,
+        folderName: _status.folderName,
       );
     });
     try {
@@ -1478,6 +1490,28 @@ class _RecordingHomePageState extends State<RecordingHomePage>
 
     try {
       final result = await _recordingSaveCoordinator.commit(savedRecording);
+      String? savedFolderName;
+      var folderMissing = false;
+      if (result.inserted && savedRecording.folderId != null) {
+        try {
+          final store = await _getRecordingStore();
+          final rows = await store.listRecordings();
+          final saved = rows
+              .where((row) => row.id == savedRecording.id)
+              .firstOrNull;
+          if (saved != null) {
+            folderMissing = saved.folderId == null;
+            final folders = await store.listFolders();
+            savedFolderName = folders
+                .where((folder) => folder.id == saved.folderId)
+                .firstOrNull
+                ?.name;
+          }
+        } catch (_) {
+          // Presentation lookup must not turn an already committed save into
+          // a failure. The generic saved result remains accurate.
+        }
+      }
       if (!mounted) {
         return true;
       }
@@ -1486,15 +1520,23 @@ class _RecordingHomePageState extends State<RecordingHomePage>
             _status.sessionId == savedRecording.id) {
           _status = _idleStatus;
         }
+        if (folderMissing && _selectedFolderId == savedRecording.folderId) {
+          _selectedFolderId = null;
+          _selectedFolderName = null;
+        }
         if (result.acknowledgementPending) {
           _serviceError = 'savedCleanupPending';
         } else if (result.inserted && savedRecording.wasInterrupted) {
-          _serviceError = 'interruptedSaved';
+          _serviceError = folderMissing
+              ? 'interruptedFolderMissing'
+              : 'interruptedSaved';
         } else if (result.inserted) {
           _updateSuccessMessage(
             'recordingSaved',
             recordingId: savedRecording.id,
           );
+          _savedFolderName = savedFolderName;
+          if (folderMissing) _serviceError = 'recordingFolderMissing';
         }
       });
       await _loadRecordings();
@@ -1908,6 +1950,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                             _MessagePanel(
                               icon: Icons.check_circle_outline_rounded,
                               message: _successMessage!,
+                              text:
+                                  _successMessage == 'recordingSaved' &&
+                                      _savedFolderName != null
+                                  ? l10n(
+                                      context,
+                                    ).recordingSavedTo(_savedFolderName!)
+                                  : null,
                               onDismiss: _dismissSuccessMessage,
                               onAction:
                                   _savedRecordingId != null &&
@@ -2399,6 +2448,15 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(color: colorScheme.onSurfaceVariant),
                         ),
+                      Text(
+                        l10n(context).recordingSaveDestination(
+                          _status.folderName ?? l10n(context).unclassified,
+                        ),
+                        key: const Key('sessionRecordingFolder'),
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                       const Spacer(),
                       Center(
                         child: Column(
@@ -2484,6 +2542,13 @@ class _RecordingHomePageState extends State<RecordingHomePage>
                         _MessagePanel(
                           icon: Icons.check_circle_outline_rounded,
                           message: _successMessage!,
+                          text:
+                              _successMessage == 'recordingSaved' &&
+                                  _savedFolderName != null
+                              ? l10n(
+                                  context,
+                                ).recordingSavedTo(_savedFolderName!)
+                              : null,
                           onDismiss: _dismissSuccessMessage,
                           onAction:
                               _savedRecordingId != null &&
@@ -2665,10 +2730,12 @@ class _MessagePanel extends StatelessWidget {
     this.isError = false,
     this.onDismiss,
     this.onAction,
+    this.text,
   });
 
   final IconData icon;
   final String message;
+  final String? text;
   final bool isError;
   final VoidCallback? onDismiss;
   final VoidCallback? onAction;
@@ -2697,7 +2764,7 @@ class _MessagePanel extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    localizedMessage(context, message),
+                    text ?? localizedMessage(context, message),
                     style: TextStyle(color: foregroundColor),
                   ),
                   if (onAction != null)

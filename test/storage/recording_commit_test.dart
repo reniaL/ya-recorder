@@ -37,6 +37,44 @@ void main() {
     await root.delete(recursive: true);
   });
 
+  for (final format in RecordingFormat.values) {
+    for (final folderExists in [true, false]) {
+      test(
+        'native $format commit keeps destination or falls back atomically ($folderExists)',
+        () async {
+          await store.createFolder(id: 'work', name: 'Work');
+          if (!folderExists) await store.deleteFolder(folderId: 'work');
+          final file = File(
+            path.join(root.path, 'destination.${format.extension}'),
+          );
+          await file.writeAsBytes([1, 2]);
+          final candidate = Recording(
+            id: 'destination',
+            title: 'new',
+            filePath: file.path,
+            createdAt: recording.createdAt,
+            duration: const Duration(seconds: 1),
+            fileSizeBytes: 2,
+            format: format,
+            folderId: 'work',
+          );
+          expect(await store.commitNativeRecording(candidate), isTrue);
+          await store.close();
+          await store.open();
+          expect(
+            (await store.listRecordings()).single.folderId,
+            folderExists ? 'work' : null,
+          );
+          if (folderExists) {
+            await store.moveRecording(recordingId: 'destination');
+          }
+          expect(await store.commitNativeRecording(candidate), isFalse);
+          expect((await store.listRecordings()).single.folderId, isNull);
+        },
+      );
+    }
+  }
+
   test('validated MP3 and M4A files commit and survive restart', () async {
     expect(await store.commitNativeRecording(recording), isTrue);
     final m4a = File(path.join(root.path, 'two.m4a'));

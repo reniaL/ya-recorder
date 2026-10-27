@@ -400,8 +400,19 @@ class RecordingStore {
               recording.duration <= Duration.zero) {
             throw StateError('Validated recording file is missing or changed.');
           }
-          await _ensureFolderExists(txn, recording.folderId);
-          await txn.insert('recordings', recording.toDatabaseMap());
+          // A session may outlive its target folder. Resolve this in the same
+          // transaction as insertion so a missing folder never blocks saving.
+          final values = recording.toDatabaseMap();
+          if (recording.folderId != null) {
+            final folders = await txn.query(
+              'folders',
+              columns: ['id'],
+              where: 'id = ?',
+              whereArgs: [recording.folderId],
+            );
+            if (folders.isEmpty) values['folder_id'] = null;
+          }
+          await txn.insert('recordings', values);
           return true;
         });
       });

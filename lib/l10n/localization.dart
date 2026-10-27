@@ -70,6 +70,8 @@ String localizedMessage(BuildContext context, String identifier) {
     'savedCleanupPending' => strings.savedCleanupPending,
     'interruptedSaved' => strings.interruptedSaved,
     'recordingSaved' => strings.recordingSaved,
+    'recordingFolderMissing' => strings.recordingFolderMissing,
+    'interruptedFolderMissing' => strings.interruptedFolderMissing,
     'saveIndexFailed' => strings.saveIndexFailed,
     'folderOrderSaveFailed' => strings.folderOrderSaveFailed,
     'createFolderFailed' => strings.createFolderFailed,

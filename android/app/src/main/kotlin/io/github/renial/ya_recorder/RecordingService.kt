@@ -53,7 +53,8 @@ class RecordingService : Service() {
         commands.submit {
             when (intent?.action) {
                 ACTION_START -> try {
-                    startRecording(intent.getStringExtra(EXTRA_FORMAT))
+                    startRecording(intent.getStringExtra(EXTRA_FORMAT),
+                        intent.getStringExtra(EXTRA_FOLDER_ID), intent.getStringExtra(EXTRA_FOLDER_NAME))
                 } finally {
                     startReservations.complete(startToken)
                     if (startToken != null) acceptedStartTokens.remove(startToken)
@@ -95,7 +96,7 @@ class RecordingService : Service() {
         super.onDestroy()
     }
 
-    private fun startRecording(formatValue: String?) {
+    private fun startRecording(formatValue: String?, folderId: String?, folderName: String?) {
         if (state != State.IDLE && state != State.FAILED) {
             publishState()
             return
@@ -128,6 +129,8 @@ class RecordingService : Service() {
             id = recordingId,
             createdAtMs = System.currentTimeMillis(),
             format = format,
+            folderId = folderId,
+            folderName = folderName,
             temporaryFile = File(recoveryDirectory, format.temporaryFileName(recordingId)),
             completedFile = File(recordingsDirectory, format.completedFileName(recordingId)),
         )
@@ -139,7 +142,8 @@ class RecordingService : Service() {
         try {
             // Enter foreground promptly, before native initialization can wait.
             startForeground(NOTIFICATION_ID, createNotification())
-            persistence.begin(activeSession.id, activeSession.createdAtMs, activeSession.format)
+            persistence.begin(activeSession.id, activeSession.createdAtMs, activeSession.format,
+                activeSession.folderId, activeSession.folderName)
             val newBackend = backendFactory.create(activeSession.format)
             backend = newBackend
             writerQuiescent = false
@@ -324,6 +328,8 @@ class RecordingService : Service() {
             "canResume" to (state == State.PAUSED),
             "sessionId" to activeSession?.id,
             "format" to activeSession?.format?.wireName,
+            "folderId" to activeSession?.folderId,
+            "folderName" to activeSession?.folderName,
         )
         synchronized(statusLock) {
             if (latestStatusOwner !== statusOwner) return
@@ -337,6 +343,8 @@ class RecordingService : Service() {
                 putExtra(EXTRA_CAN_RESUME, status["canResume"] as Boolean)
                 putExtra(EXTRA_SESSION_ID, status["sessionId"] as String?)
                 putExtra(EXTRA_FORMAT, activeSession?.format?.wireName)
+                putExtra(EXTRA_FOLDER_ID, activeSession?.folderId)
+                putExtra(EXTRA_FOLDER_NAME, activeSession?.folderName)
             },
         )
     }
@@ -353,6 +361,7 @@ class RecordingService : Service() {
                 putExtra(EXTRA_FILE_SIZE_BYTES, draft.fileSizeBytes)
                 putExtra(EXTRA_WAS_INTERRUPTED, draft.wasInterrupted)
                 putExtra(EXTRA_FORMAT, draft.format.wireName)
+                putExtra(EXTRA_FOLDER_ID, draft.folderId)
             },
         )
     }
@@ -404,6 +413,8 @@ class RecordingService : Service() {
         val format: RecordingFormat,
         val temporaryFile: File,
         val completedFile: File,
+        val folderId: String? = null,
+        val folderName: String? = null,
         var accumulatedMs: Long = 0L,
         var segmentStartedAtMs: Long? = null,
     ) {
@@ -452,6 +463,8 @@ class RecordingService : Service() {
         const val EXTRA_CAN_RESUME = "canResume"
         const val EXTRA_SESSION_ID = "sessionId"
         const val EXTRA_FORMAT = "format"
+        const val EXTRA_FOLDER_ID = "folderId"
+        const val EXTRA_FOLDER_NAME = "folderName"
         const val EXTRA_ID = "id"
         const val EXTRA_FILE_PATH = "filePath"
         const val EXTRA_CREATED_AT_MS = "createdAtMs"

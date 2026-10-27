@@ -42,6 +42,8 @@ class RecordingPlatformBridge(
                     "canResume" to intent.getBooleanExtra(RecordingService.EXTRA_CAN_RESUME, false),
                     "sessionId" to intent.getStringExtra(RecordingService.EXTRA_SESSION_ID),
                     "format" to intent.getStringExtra(RecordingService.EXTRA_FORMAT),
+                    "folderId" to intent.getStringExtra(RecordingService.EXTRA_FOLDER_ID),
+                    "folderName" to intent.getStringExtra(RecordingService.EXTRA_FOLDER_NAME),
                 )
                 RecordingService.EVENT_FILE_READY -> mapOf(
                     "type" to "fileReady",
@@ -53,6 +55,7 @@ class RecordingPlatformBridge(
                         "fileSizeBytes" to intent.getLongExtra(RecordingService.EXTRA_FILE_SIZE_BYTES, 0L),
                         "wasInterrupted" to intent.getBooleanExtra(RecordingService.EXTRA_WAS_INTERRUPTED, false),
                         "format" to intent.getStringExtra(RecordingService.EXTRA_FORMAT),
+                        "folderId" to intent.getStringExtra(RecordingService.EXTRA_FOLDER_ID),
                     ),
                 )
                 RecordingService.EVENT_ERROR -> mapOf(
@@ -210,10 +213,12 @@ class RecordingPlatformBridge(
             result.error("recording-format-unavailable", error.message, null)
             return
         }
-        sendRecordingCommand(RecordingService.ACTION_START, result, format)
+        sendRecordingCommand(RecordingService.ACTION_START, result, format,
+            call.argument<String>("folderId"), call.argument<String>("folderName"))
     }
 
-    private fun sendRecordingCommand(action: String, result: MethodChannel.Result, format: RecordingFormat? = null) {
+    private fun sendRecordingCommand(action: String, result: MethodChannel.Result, format: RecordingFormat? = null,
+        folderId: String? = null, folderName: String? = null) {
         if (action == RecordingService.ACTION_START && !hasMicrophonePermission()) {
             result.error("microphone-permission-required", "Microphone permission is required to record.", null)
             return
@@ -222,6 +227,8 @@ class RecordingPlatformBridge(
         var startToken: String? = null
         try {
             val commandIntent = RecordingService.commandIntent(activity, action, format)
+            commandIntent.putExtra(RecordingService.EXTRA_FOLDER_ID, folderId)
+            commandIntent.putExtra(RecordingService.EXTRA_FOLDER_NAME, folderName)
             if (action == RecordingService.ACTION_START) {
                 startToken = RecordingService.startReservations.reserve(requireNotNull(format).wireName)
                 commandIntent.putExtra(RecordingService.EXTRA_START_TOKEN, startToken)

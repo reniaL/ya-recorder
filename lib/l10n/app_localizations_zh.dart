@@ -506,6 +506,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingSaved => '录音已保存';
 
   @override
+  String recordingSaveDestination(String folder) {
+    return '保存到：$folder';
+  }
+
+  @override
+  String recordingSavedTo(String folder) {
+    return '已保存到「$folder」';
+  }
+
+  @override
+  String get recordingFolderMissing => '原目录已不存在，录音已保存为未分类，可在全部录音中查看。';
+
+  @override
+  String get interruptedFolderMissing => '录音已中断，原目录已不存在，已录部分已保存为未分类，可在全部录音中查看。';
+
+  @override
   String get saveIndexFailed => '无法将录音保存到本地索引，文件已保留，稍后可重试恢复。';
 
   @override
